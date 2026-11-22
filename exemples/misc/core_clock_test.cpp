@@ -519,6 +519,9 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	uint32_t usElapsed;
 	uint32_t nsElapsed;
 	uint32_t nsPublicElapsed;
+	uint32_t nsRepeatElapsed;
+	uint32_t nsFactorBefore;
+	uint32_t nsFactorAfter;
 	bool valid;
 
 	cpuHz = SystemCoreClockGet();
@@ -567,17 +570,27 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	msDelay(100);
 	usElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
 
+	nsFactorBefore = SystemnsDelayFactor;
 	start = TimerGetMicrosecond(&s_RetainedTimer);
 	nsDelay(100000000U);
 	nsPublicElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
 
-	// Measure the raw nanosecond loop separately. Long public nsDelay()
-	// calls may delegate to the microsecond loop on non-DWT targets.
+	// Public and calibration paths use the same assembly algorithm,
+	// but inline placement can affect flash-fetch timing. Repeat to
+	// distinguish a transient from a persistent call-site difference.
+	start = TimerGetMicrosecond(&s_RetainedTimer);
+	nsDelay(100000000U);
+	nsRepeatElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+
 	start = TimerGetMicrosecond(&s_RetainedTimer);
 	DelayCalibrationProbeNs(100000000U);
 	nsElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+	nsFactorAfter = SystemnsDelayFactor;
 
 	TimerDisable(&s_RetainedTimer);
+	CoreClockTestPrint("nsDelay repeat %u us, raw %u us, factors before %u after %u\r\n",
+		(unsigned)nsRepeatElapsed, (unsigned)nsElapsed,
+		(unsigned)nsFactorBefore, (unsigned)nsFactorAfter);
 	CoreClockTestPrint("Delay timing HF Timer %u Hz: msDelay %u us, nsDelay %u us, raw ns loop %u us\r\n",
 		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsPublicElapsed,
 		(unsigned)nsElapsed);
