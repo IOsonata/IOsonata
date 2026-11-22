@@ -41,7 +41,12 @@ SOFTWARE.
 #include <stdbool.h>
 #include <stddef.h>
 #include "coredev/system_core_clock.h"
-#include "coredev/delay_calibration.h"
+typedef struct {
+	uint32_t CpuHz;
+	uint32_t UsLoopsPerSecond;
+	uint32_t NsLoopsPerSecond;
+	bool Measured;
+} DelayCalibrationPoint_t;
 
 // CPU-local delay backend is fixed when compiling for the target MCU.
 #if defined(DWT) && defined(CoreDebug) && \
