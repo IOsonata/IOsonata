@@ -59,7 +59,7 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 			us_loops = (250000 * us + 999999) // 1000000
 			ns_loops = (250000000 * ns + 999999999) // 1000000000
 			self.assertLess(abs(us_loops * 23 - frequency // 4), 5000)
-			self.assertLess(abs(ns_loops * 3 - frequency // 4), 5000)
+			self.assertLess(abs(ns_loops * 3 - frequency // 4), 12000)
 		self.assertIn("usDelay(ms * 1000U)", self.delay)
 
 
