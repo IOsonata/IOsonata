@@ -37,6 +37,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
+#include <string.h>
 
 #include "syslog.h"
 
@@ -164,8 +165,14 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 		return false;
 	}
 
-	hCFifo_t hFifo = CFifoInit(pCfg->pMem, pCfg->MemSize, recordLen,
-							   pCfg->bBlocking);
+	// Reserve one complete record outside the FIFO for in-progress TX.
+	if (pCfg->pMem == nullptr ||
+		pCfg->MemSize < sizeof(CFifo_t) + 2U * recordLen)
+	{
+		return false;
+	}
+	hCFifo_t hFifo = CFifoInit(pCfg->pMem, pCfg->MemSize - recordLen,
+							   recordLen, pCfg->bBlocking);
 	if (hFifo == 0)
 	{
 		return false;
@@ -177,8 +184,9 @@ bool SysLogInitNoTimer(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 	pLog->FormatTime = nullptr;
 	pLog->MinType = MinType & SYSSTATUS_TYPE_MASK;
 	pLog->hFifo = hFifo;
-	pLog->HeadIdx = hFifo->GetIdx;
-	pLog->HeadSent = 0U;
+	pLog->pTxBuffer = pCfg->pMem + pCfg->MemSize - recordLen;
+	pLog->TxLen = 0U;
+	pLog->TxSent = 0U;
 	pLog->bFlushing = false;
 	if (pLog == SysLogGet())
 	{
@@ -229,7 +237,7 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 	}
 	if (pSink != pLog->pSink || SinkAddr != pLog->SinkAddr)
 	{
-		pLog->HeadSent = 0U;
+		pLog->TxSent = 0U;
 	}
 	pLog->pSink = pSink;
 	pLog->SinkAddr = SinkAddr;
@@ -262,13 +270,12 @@ int SysLogDevIntrfEvent(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 	return SysLogFlush(pLog);
 }
 
-// Queue complete log records to the sink. The sink owns every byte accepted
-// by DeviceIntrfTx; SysLog retains only bytes it did not accept.
+// One consumer copies records out of CFifo into a separate transfer buffer.
+// DeviceIntrfTx owns every accepted byte; only the unaccepted suffix is kept.
 int SysLogFlush(SysLog_t * const pLog)
 {
 	uintptr_t state;
 	uint8_t *pBlock;
-	uint32_t head;
 	uint32_t len;
 	uint32_t sent;
 	uint32_t recordLen;
@@ -287,8 +294,7 @@ int SysLogFlush(SysLog_t * const pLog)
 	state = SysIrqLock();
 	if (pLog->bFlushing)
 	{
-		// An interrupt may signal available sink capacity while a
-		// foreground submission is in progress. The owner retries it.
+		// Defer TX_READY until the owner finishes this submission.
 		if (pLog == SysLogGet())
 		{
 			s_bSysLogReadyDuringFlush = true;
@@ -302,77 +308,67 @@ int SysLogFlush(SysLog_t * const pLog)
 	recordLen = CFifoBlockSize(pLog->hFifo);
 	total = 0;
 	err = 0;
-
 	while (true)
 	{
 		blocked = false;
 		while (true)
 		{
-			// Protect the SysLog FIFO head and partial-record cursor.
 			state = SysIrqLock();
-			head = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE);
-			pBlock = CFifoPeek(pLog->hFifo);
-			if (pBlock == nullptr)
+			if (pLog->TxLen == 0U)
 			{
-				SysIrqUnlock(state);
-				break;
-			}
-			if (head != pLog->HeadIdx)
-			{
-				pLog->HeadIdx = head;
-				pLog->HeadSent = 0U;
-			}
-			len = 0U;
-			while (len < recordLen && pBlock[len] != 0U)
-			{
-				len++;
-			}
-			sent = pLog->HeadSent;
-			SysIrqUnlock(state);
-
-			// A positive return is the number of bytes now owned by the
-			// sink. UART DMA completion is not SysLog's responsibility.
-			count = 0;
-			if (sent < len)
-			{
-				count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
-									   pBlock + sent, (int)(len - sent));
-				if (count > 0)
+				// Copy before consuming: CFifoGet makes this slot
+				// immediately reusable by a producer in any context.
+				pBlock = CFifoPeek(pLog->hFifo);
+				if (pBlock == nullptr)
 				{
-					sent += (uint32_t)count;
-					total += count;
+					SysIrqUnlock(state);
+					break;
+				}
+				memcpy(pLog->pTxBuffer, pBlock, recordLen);
+				(void)CFifoGet(pLog->hFifo);
+				len = 0U;
+				while (len < recordLen && pLog->pTxBuffer[len] != 0U)
+				{
+					len++;
+				}
+				pLog->TxLen = len;
+				pLog->TxSent = 0U;
+				if (len == 0U)
+				{
+					SysIrqUnlock(state);
+					continue;
 				}
 			}
+			len = pLog->TxLen;
+			sent = pLog->TxSent;
+			SysIrqUnlock(state);
+
+			// The sink copies/queues accepted bytes before returning.
+			// No UART completion or hardware FIFO state is tracked here.
+			count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+								   pLog->pTxBuffer + sent, (int)(len - sent));
 
 			state = SysIrqLock();
-			if (__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE) != head)
+			if (count > 0)
 			{
-				// A non-blocking store evicted this record. Start at the
-				// replacement record's first byte.
-				pLog->HeadIdx =
-					__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_RELAXED);
-				pLog->HeadSent = 0U;
-				SysIrqUnlock(state);
-				continue;
+				sent += (uint32_t)count;
+				total += count;
 			}
 			if (sent < len)
 			{
-				pLog->HeadSent = sent;
-				SysIrqUnlock(state);
+				pLog->TxSent = sent;
+				blocked = true;
 				if (count < 0 && total == 0)
 				{
 					err = count;
 				}
-				blocked = true;
+				SysIrqUnlock(state);
 				break;
 			}
 
-			// All bytes were accepted: retire this SysLog record,
-			// regardless of whether UART has physically sent them.
-			(void)CFifoGet(pLog->hFifo);
-			pLog->HeadSent = 0U;
-			pLog->HeadIdx =
-				__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_RELAXED);
+			// The entire transfer buffer has been accepted.
+			pLog->TxLen = 0U;
+			pLog->TxSent = 0U;
 			SysIrqUnlock(state);
 		}
 
@@ -382,9 +378,10 @@ int SysLogFlush(SysLog_t * const pLog)
 		{
 			s_bSysLogReadyDuringFlush = false;
 		}
-		// Never spin on a sink that accepted no more bytes. Retry only
-		// when a TX-ready event arrived during this submission.
-		if ((blocked && !ready) || CFifoPeek(pLog->hFifo) == nullptr)
+		// An in-progress record is retried only if TX_READY was
+		// observed during the active submission.
+		if ((blocked && !ready) ||
+			(pLog->TxLen == 0U && CFifoPeek(pLog->hFifo) == nullptr))
 		{
 			pLog->bFlushing = false;
 			SysIrqUnlock(state);
