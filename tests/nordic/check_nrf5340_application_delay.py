@@ -19,9 +19,10 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 	def test_default_factors_are_preserved_at_default_frequency(self):
 		self.assertIn("25U, 3U", self.system)
 		self.assertIn("28U, 3U", self.system)
-		self.assertIn("cpuHz != __SYSTEM_CLOCK_DEFAULT", self.system)
+		self.assertIn("s_DelayCalibration.CpuHz != cpuHz", self.system)
 		self.assertIn("cpuHz == __SYSTEM_CLOCK_DEFAULT", self.system)
-		self.assertEqual(self.system.count("ArmDelayCalibrate("), 1)
+		self.assertNotIn("ArmDelayCalibrate(", self.system)
+		self.assertIn("NRF_APP_CLOCK->HFCLKCTRL & ~CLOCK_HFCLKCTRL_HCLK_Msk", self.system)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.system)
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 25U, 3U)", self.system)
 
