@@ -4,8 +4,8 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-CAL = ROOT / "ARM/include/idelay.h"
-CLOCK = ROOT / "ARM/include/idelay.h"
+CAL = ROOT / "ARM/include/system_core_clock_calibration.h"
+CLOCK = ROOT / "ARM/include/system_core_clock_calibration.h"
 DELAY = ROOT / "ARM/include/idelay.h"
 NET = ROOT / "ARM/Nordic/nRF53/nRF5340_Net/lib/src/system_nrf5340_network.c"
 APP = ROOT / "ARM/Nordic/nRF53/nRF5340_App/lib/src/system_nrf5340_application.c"
@@ -22,14 +22,14 @@ class Nrf53DelayCalibration(unittest.TestCase):
 
 	def test_uses_real_cpu_cycle_measurements(self):
 		self.assertIn("DWT->CYCCNT - start", self.cal)
-		self.assertIn("#define ARM_DELAY_CAL_DWT_AVAILABLE 1", self.delay)
+		self.assertIn("#define ARM_DELAY_CAL_DWT_AVAILABLE 1", self.cal)
 		self.assertNotIn("ArmDelayDwtWait(", self.delay)
 		self.assertIn("CoreDebug->DEMCR = prevTrace;", self.cal)
 		self.assertIn("DWT->CTRL = prevCtrl;", self.cal)
 		self.assertIn("CoreDebug_DEMCR_TRCENA_Msk", self.cal)
 		self.assertIn("DWT_CTRL_CYCCNTENA_Msk", self.cal)
-		self.assertIn("ArmDelayUsLoop(ARM_DELAY_CAL_LOOPS)", self.cal)
-		self.assertIn("ArmDelayNsLoop(ARM_DELAY_CAL_NS)", self.cal)
+		self.assertIn("usDelay(ARM_DELAY_CAL_LOOPS)", self.cal)
+		self.assertIn("nsDelay(ARM_DELAY_CAL_NS)", self.cal)
 		self.assertIn("((uint64_t)CpuHz * ARM_DELAY_CAL_LOOPS) / pCal->UsCycles", self.clock)
 		self.assertIn("((uint64_t)CpuHz * ARM_DELAY_CAL_LOOPS) / pCal->NsCycles", self.clock)
 		self.assertIn("SystemMicroSecLoopCnt = prevUsFactor;", self.cal)
@@ -39,8 +39,8 @@ class Nrf53DelayCalibration(unittest.TestCase):
 	def test_app_frequency_update_uses_calibrated_loop_factors(self):
 		self.assertIn('#include "idelay.h"', self.app)
 		self.assertIn('#include "idelay.h"', self.net)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 25U, 3U)", self.app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", self.app)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U)", self.app)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 22U, 3U)", self.app)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.app)
 		self.assertNotIn("ArmDelayCalibrate(", self.app)
 		self.assertNotIn("ArmDelayCalibrate(", self.net)
@@ -49,11 +49,11 @@ class Nrf53DelayCalibration(unittest.TestCase):
 
 
 	def test_measurement_is_only_explicit_in_delay_interface(self):
-		self.assertIn("static inline bool DelayCalibrationMeasure(", self.delay)
-		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", self.delay)
+		self.assertIn("static inline bool DelayCalibrationMeasure(", self.cal)
+		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", self.cal)
 		self.assertIn("SystemMicroSecLoopCnt = oldUs;", self.delay)
 		self.assertIn("SystemnsDelayFactor = oldNs;", self.delay)
-		self.assertIn("DWT->CYCCNT - start", self.delay)
+		self.assertIn("DWT->CYCCNT - start", self.cal)
 
 
 	def test_delay_implementation_is_not_replaced(self):
