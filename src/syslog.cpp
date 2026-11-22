@@ -276,19 +276,20 @@ int SysLogDevIntrfEvent(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 
 // One consumer copies records out of CFifo into a separate transfer buffer.
 // DeviceIntrfTx owns every accepted byte; only the unaccepted suffix is kept.
+// Submit no more than one SysLog record per call. The next invocation,
+// usually a sink TX_READY event, continues a partial record or takes the
+// next FIFO record. Nothing from separate printf calls is combined here.
 int SysLogFlush(SysLog_t * const pLog)
 {
 	uintptr_t state;
 	uint8_t *pBlock;
+	uint32_t recordLen;
 	uint32_t len;
 	uint32_t sent;
-	uint32_t recordLen;
 	int count;
 	int total;
 	int err;
-	bool blocked;
-	bool empty;
-	bool ready;
+	bool retry;
 
 	if (pLog == nullptr || pLog->Marker != SYSLOG_INIT_MARKER ||
 		pLog->pSink == nullptr)
@@ -299,7 +300,8 @@ int SysLogFlush(SysLog_t * const pLog)
 	state = SysIrqLock();
 	if (pLog->bFlushing)
 	{
-		// Defer TX_READY until the owner finishes this submission.
+		// The active owner handles any TX_READY notification that
+		// arrives during its current DeviceIntrfTx submission.
 		if (pLog == SysLogGet())
 		{
 			s_bSysLogReadyDuringFlush = true;
@@ -313,91 +315,67 @@ int SysLogFlush(SysLog_t * const pLog)
 	recordLen = CFifoBlockSize(pLog->hFifo) - SYSLOG_RECORD_META_SIZE;
 	total = 0;
 	err = 0;
-	while (true)
+	state = SysIrqLock();
+	if (pLog->TxLen == 0U)
 	{
-		blocked = false;
-		empty = false;
-		while (true)
+		pBlock = CFifoGet(pLog->hFifo);
+		if (pBlock == nullptr)
 		{
-			state = SysIrqLock();
-			if (pLog->TxLen == 0U)
-			{
-				// Take one record and copy it while interrupts are masked.
-				// The released FIFO slot cannot be reused by an ISR
-				// until this copy finishes.
-				pBlock = CFifoGet(pLog->hFifo);
-				if (pBlock == nullptr)
-				{
-					empty = true;
-					SysIrqUnlock(state);
-					break;
-				}
-				// The producer recorded the formatted length before
-				// publishing this block. Never infer it by scanning text.
-				memcpy(&len, pBlock, SYSLOG_RECORD_META_SIZE);
-				if (len >= recordLen)
-				{
-					len = recordLen - 1U;
-				}
-				memcpy(pLog->pTxBuffer,
-					pBlock + SYSLOG_RECORD_META_SIZE, recordLen);
-				pLog->TxLen = len;
-				pLog->TxSent = 0U;
-				if (len == 0U)
-				{
-					SysIrqUnlock(state);
-					continue;
-				}
-			}
-			len = pLog->TxLen;
-			sent = pLog->TxSent;
+			pLog->bFlushing = false;
 			SysIrqUnlock(state);
+			return 0;
+		}
+		memcpy(&len, pBlock, SYSLOG_RECORD_META_SIZE);
+		if (len >= recordLen)
+		{
+			len = recordLen - 1U;
+		}
+		memcpy(pLog->pTxBuffer,
+			pBlock + SYSLOG_RECORD_META_SIZE, recordLen);
+		pLog->TxLen = len;
+		pLog->TxSent = 0U;
+	}
+	len = pLog->TxLen;
+	sent = pLog->TxSent;
+	SysIrqUnlock(state);
 
-			// The sink copies/queues accepted bytes before returning.
-			// No UART completion or hardware FIFO state is tracked here.
-			count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
-								   pLog->pTxBuffer + sent, (int)(len - sent));
-
-			state = SysIrqLock();
-			if (count > 0)
-			{
-				sent += (uint32_t)count;
-				total += count;
-			}
-			if (sent < len)
-			{
-				pLog->TxSent = sent;
-				blocked = true;
-				if (count < 0 && total == 0)
-				{
-					err = count;
-				}
-				SysIrqUnlock(state);
-				break;
-			}
-
-			// The entire transfer buffer has been accepted.
-			pLog->TxLen = 0U;
-			pLog->TxSent = 0U;
-			SysIrqUnlock(state);
+	while (sent < len)
+	{
+		count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+			pLog->pTxBuffer + sent, (int)(len - sent));
+		if (count > 0)
+		{
+			sent += (uint32_t)count;
+			total += count;
 		}
 
 		state = SysIrqLock();
-		ready = pLog == SysLogGet() && s_bSysLogReadyDuringFlush;
+		pLog->TxSent = sent;
+		retry = pLog == SysLogGet() && s_bSysLogReadyDuringFlush;
 		if (pLog == SysLogGet())
 		{
 			s_bSysLogReadyDuringFlush = false;
 		}
-		// An in-progress record is retried only if TX_READY was
-		// observed during the active submission.
-		if ((blocked || empty) && !ready)
+		SysIrqUnlock(state);
+
+		if (sent < len && !retry)
 		{
-			pLog->bFlushing = false;
-			SysIrqUnlock(state);
+			if (count < 0 && total == 0)
+			{
+				err = count;
+			}
 			break;
 		}
-		SysIrqUnlock(state);
 	}
+
+	state = SysIrqLock();
+	if (sent >= len)
+	{
+		pLog->TxLen = 0U;
+		pLog->TxSent = 0U;
+	}
+	pLog->bFlushing = false;
+	SysIrqUnlock(state);
 
 	return err < 0 ? err : total;
 }
