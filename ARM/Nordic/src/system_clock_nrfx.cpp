@@ -196,6 +196,11 @@ static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
+#if defined(NRF5340_XXAA_APPLICATION)
+// Time spent in calibrated LFCLK startup polling, for the next sDelay
+// request. This is internal to the Nordic clock/delay implementation.
+static uint32_t s_nRFxLfclkStartWaitUs;
+#endif
 #if defined(NRF52_SERIES) && defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 // A direct LFCLK owner may release while the SoftDevice controls CLOCK.
 // Its physical STOP is deferred until the SoftDevice has shut down.
@@ -844,6 +849,9 @@ static bool nRFxLfclkFinishStart(uint32_t Src)
 			}
 			usDelay(NRFX_LFCLK_START_POLL_US);
 			elapsed += NRFX_LFCLK_START_POLL_US;
+#if defined(NRF5340_XXAA_APPLICATION)
+			s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
+#endif
 		}
 		return false;
 	}
@@ -875,6 +883,9 @@ static bool nRFxLfclkStart(uint32_t Src)
 {
 	uint32_t elapsed;
 
+#if defined(NRF5340_XXAA_APPLICATION)
+	s_nRFxLfclkStartWaitUs = 0U;
+#endif
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
 #if NRF52_ERRATA_132_ENABLE_WORKAROUND
@@ -899,6 +910,9 @@ static bool nRFxLfclkStart(uint32_t Src)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
+#if defined(NRF5340_XXAA_APPLICATION)
+		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
+#endif
 	}
 	if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
 	{
@@ -933,6 +947,13 @@ static bool nRFxLfclkWaitStopped(void)
 // Snapshot actual LFCLK hardware state before sDelay requests an RTC.
 // A running oscillator avoids the cold LFXO startup penalty. No ownership
 // change or oscillator start takes place in this query.
+#if defined(NRF5340_XXAA_APPLICATION)
+extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void)
+{
+	return s_nRFxLfclkStartWaitUs;
+}
+#endif
+
 extern "C" bool nRFxSleepLfClockRunning(void)
 {
 	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
