@@ -461,7 +461,6 @@ static void CoreClockTestSleepDelayMeasure(const char *pMode)
 	uint32_t started;
 	uint32_t elapsed;
 	uint32_t difference;
-	uint32_t correction;
 	bool ok;
 
 	cfg = s_TimerCfg;
@@ -486,13 +485,13 @@ static void CoreClockTestSleepDelayMeasure(const char *pMode)
 	}
 	difference = elapsed >= 1000000U ?
 		elapsed - 1000000U : 1000000U - elapsed;
-	correction = (uint32_t)(((uint64_t)difference * 32768U + 500000U) /
-		1000000U);
 	CoreClockTestPrint("sDelay %s end-to-end %u us (target 1000000 us)\r\n",
 		pMode, (unsigned)elapsed);
-	CoreClockTestPrint("sDelay %s overhead: %s %u LF ticks\r\n",
+	// Report independent time error in us; the LF timer may be a 1-MHz
+	// GRTC rather than a 32,768-Hz RTC on a different MCU.
+	CoreClockTestPrint("sDelay %s overhead: %s %u us\r\n",
 		pMode, elapsed >= 1000000U ? "subtract" : "add",
-		(unsigned)correction);
+		(unsigned)difference);
 	CoreClockTestResult("sDelay end-to-end within 2 percent",
 		difference <= 20000U);
 }

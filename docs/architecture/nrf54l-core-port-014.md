@@ -141,6 +141,34 @@ selection, and must verify bare-metal and separate BLE/MPSL startup.
 Do not assume this change resolves the remaining timing discrepancy
 until actual hardware output confirms it.
 
+## nRF54L15 GRTC cold-start delay (November 23, 2026)
+
+The subsequent two-run nRF54L15 CoreClockTest log showed a 1,434,775-us
+cold sDelay on the second execution, followed by 1,000,047-us warm/reuse
+calls. Nordic specifies a typical 430-ms LFXO oscillator startup, which
+closely matches the 434,775-us startup excess. The first execution's
+990,486-us cold call suggests the crystal was still warm after the test's
+earlier system LFCLK lifecycle.
+
+The shared Nordic sDelay previously assumed nRF54L GRTC always warm.
+It now checks whether GRTC SYSCOUNTER is already started or the system
+LFXO is running before the first GRTC TimerInit. This read-only check
+does not start clocks or modify GRTC ownership. nRF54L15 alone gets the
+provisional measured 434,775-tick cold compensation at its 1-MHz GRTC
+frequency; warm calls and RC-configured boards use zero. nRF54LM20x
+retains its existing zero-compensation defaults until measured.
+
+The generic CoreClockTest now reports sDelay's measured overhead in
+microseconds instead of incorrectly converting all MCU timer sources
+using 32,768 Hz. It remains generic and does not infer clock hardware
+or update any production delay factors.
+
+**Hardware follow-up required:** test true cold power-on versus reset,
+LFCLK recently released versus actively retained, RC board configuration,
+and BLE/MPSL-owned GRTC. Startup time can vary with crystal, temperature
+and load. The provisional constant must not be treated as validated for
+production until these checks pass.
+
 ## Managed clean-build commands
 
 The shared Nordic headless Eclipse/CDT build script now includes both nRF54L
