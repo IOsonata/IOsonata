@@ -791,3 +791,48 @@ microsecond factor.
 After the corrected 64-MHz run, restore the Debug configurations and
 clean-rebuild at default 128 MHz to avoid linking stale 64-MHz
 objects into later tests.
+
+## nRF54LM20A 64-MHz validation and LM20A/B linker-path correction
+
+The maintainer identified that the newly split LM20A/B Eclipse managed
+example projects had Release linker search paths pointing at
+`../../../../lib/ioc/Debug`, so Release applications could link Debug
+library archives. The mismatch explains the inconsistent earlier
+startup-clock experiments and is independent of the calibration API.
+
+Both LM20A and LM20B example project sets (40 each) were audited and
+mismatched **Release** library search paths were changed to
+`../../../../lib/ioc/Release`. Debug paths remain Debug. The
+CoreClockTest and CorePowerTest managed projects were fixed along with
+BLE, UART and other affected examples. The source regression
+`tests/nordic/check_nrf54l_core_port.py` now checks all 80 example
+project configurations for cross-configuration linking.
+
+The supplied nRF54LM20A 64-MHz capture contains **two complete
+CoreClockTest runs with zero failures**. PLL requested and actual values
+both read 3, startup CPU clock reads 64,000,000 Hz, and the corrected
+busy-loop calibration measures `msDelay(100)=99,989 us` and
+`nsDelay(100 ms)=99,999 us`. All 11 timers, trigger callbacks,
+HF/LF clock lifecycle, and timer ownership tests pass. Cold
+`sDelay(1)` measured 1,000,031 / 1,001,265 us, with warm and
+reuse near 1,000,013 us. This validates the 64-MHz endpoint
+against the established 2% timing acceptance threshold.
+
+After validation, the temporary LM20A Debug
+`NRF_CONFIG_CPU_FREQ_MHZ=64` flags, temporary SystemInit
+64-MHz default override, startup trace globals, board trace,
+and optional generic CoreClockTest trace hook were removed.
+The standard nRF54LM20A startup default is again 128 MHz.
+The measured 64- and 128-MHz calibration endpoints remain in
+the System Core implementation.
+
+The temporary trace snapshot printed zeros despite the PLL
+registers reporting the correct 64-MHz selection. It was diagnostic-only
+and is not used as evidence of startup success; hardware PLL readback,
+timer timing and successful test results establish the 64-MHz endpoint.
+
+No local Eclipse build or Python regression test was executed by the
+assistant. Before merge, clean-build Debug and Release configurations
+of both LM20A and LM20B library and Core test managed projects and
+verify each linker line uses the matching library archive. LM20B
+hardware remains unvalidated.
