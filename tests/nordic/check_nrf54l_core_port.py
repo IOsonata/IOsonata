@@ -255,6 +255,34 @@ class Nrf54lCorePort(unittest.TestCase):
             self.assertEqual(library.count(own), 8)
         self.assertFalse((ROOT / "ARM/Nordic/nRF54/nRF54LM20x").exists())
 
+    def test_nrf54l15_managed_example_library_paths_match_configuration(self):
+        import re
+
+        root = ROOT / "ARM/Nordic/nRF54/nRF54L15/exemples"
+        projects = sorted(root.glob("*/ioc/.cproject"))
+        self.assertGreaterEqual(len(projects), 2)
+        for path in projects:
+            with self.subTest(project=str(path.relative_to(ROOT))):
+                source = path.read_text()
+                sections = list(re.finditer(
+                    r'<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.'
+                    r'core.configurationDataProvider"[^>]*name="([^"]+)"',
+                    source))
+                self.assertGreaterEqual(len(sections), 2)
+                for i, match in enumerate(sections):
+                    config = match.group(1)
+                    end = sections[i + 1].start() if i + 1 < len(sections) else len(source)
+                    section = source[match.start():end]
+                    paths = re.findall(
+                        r'lib/ioc/(Debug(?:_SDC)?|Release(?:_SDC)?)',
+                        section)
+                    expected = "Release" if config.startswith("Release") else "Debug"
+                    for linked in paths:
+                        self.assertTrue(linked.startswith(expected),
+                            str(path) + " " + config + " links " + linked)
+                    if paths:
+                        self.assertIn("IOsonata_nRF54L15", section)
+
     def test_lm20_managed_example_library_paths_match_configuration(self):
         # Every example must link its own target's corresponding library
         # build: Debug -> Debug, Release -> Release. The original LM20
