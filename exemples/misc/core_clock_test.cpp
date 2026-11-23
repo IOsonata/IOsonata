@@ -211,65 +211,114 @@ static int CoreClockTestUartEvent(DevIntrf_t *pDev, DEVINTRF_EVT Event,
 	return 0;
 }
 
-// This test prints only strings and unsigned decimal values, keeping
-// the formatting path small on targets without interrupt/DMA support.
-static void CoreClockTestPut(const char *pText)
-{
-	uint8_t value;
+// Print through bounded multi-byte submissions rather than one EasyDMA
+// transaction per character. The UART driver copies accepted bytes into
+// its own FIFO; it does not retain this stack buffer. This remains generic
+// for MCUs without DMA and requires no full printf/heap implementation.
+#define CORE_CLOCK_TEST_TX_BLOCK_SIZE	64U
+#define CORE_CLOCK_TEST_TX_RETRY_LIMIT	5000U
 
-	while (*pText != 0)
+static void CoreClockTestWrite(const char *pText, unsigned Length)
+{
+	unsigned offset;
+	unsigned retries;
+	int accepted;
+
+	offset = 0U;
+	retries = 0U;
+	while (offset < Length)
 	{
-		value = (uint8_t)*pText;
+		// Completion belongs to the last accepted byte, not a prior DMA.
 		s_UartTxEmpty = false;
-		if (UARTTx(&s_Uart, &value, 1) == 1)
+		accepted = UARTTx(&s_Uart, (uint8_t *)(pText + offset),
+			(int)(Length - offset));
+		if (accepted > 0)
 		{
-			pText++;
+			offset += (unsigned)accepted;
+			retries = 0U;
+		}
+		else
+		{
+			if (++retries >= CORE_CLOCK_TEST_TX_RETRY_LIMIT)
+			{
+				s_Failures++;
+				return;
+			}
+			usDelay(100U);
 		}
 	}
+}
+
+static void CoreClockTestAppend(char *pBuffer, unsigned *pUsed, char Value)
+{
+	if (*pUsed == CORE_CLOCK_TEST_TX_BLOCK_SIZE)
+	{
+		CoreClockTestWrite(pBuffer, *pUsed);
+		*pUsed = 0U;
+	}
+	pBuffer[*pUsed] = Value;
+	(*pUsed)++;
 }
 
 static void CoreClockTestPrint(const char *pFormat, ...)
 {
 	va_list args;
-	char text[11];
+	const char *pString;
+	char block[CORE_CLOCK_TEST_TX_BLOCK_SIZE];
+	char digits[11];
+	unsigned used;
+	unsigned digitCount;
 	unsigned value;
-	unsigned pos;
 
+	used = 0U;
 	va_start(args, pFormat);
 	while (*pFormat != 0)
 	{
 		if (*pFormat != '%')
 		{
-			text[0] = *pFormat++;
-			text[1] = 0;
-			CoreClockTestPut(text);
+			CoreClockTestAppend(block, &used, *pFormat);
+			pFormat++;
+			continue;
 		}
-		else
+		pFormat++;
+		if (*pFormat == 's')
+		{
+			pString = va_arg(args, const char *);
+			if (pString != nullptr)
+			{
+				while (*pString != 0)
+				{
+					CoreClockTestAppend(block, &used, *pString);
+					pString++;
+				}
+			}
+		}
+		else if (*pFormat == 'u')
+		{
+			value = va_arg(args, unsigned);
+			digitCount = 0U;
+			do
+			{
+				digits[digitCount] = '0' + value % 10U;
+				digitCount++;
+				value /= 10U;
+			} while (value != 0U);
+			while (digitCount != 0U)
+			{
+				digitCount--;
+				CoreClockTestAppend(block, &used, digits[digitCount]);
+			}
+		}
+		if (*pFormat != 0)
 		{
 			pFormat++;
-			if (*pFormat == 's')
-			{
-				CoreClockTestPut(va_arg(args, const char *));
-			}
-			else if (*pFormat == 'u')
-			{
-				value = va_arg(args, unsigned);
-				pos = sizeof(text) - 1U;
-				text[pos] = 0;
-				do
-				{
-					text[--pos] = '0' + value % 10U;
-					value /= 10U;
-				} while (value != 0U);
-				CoreClockTestPut(text + pos);
-			}
-			if (*pFormat != 0)
-			{
-				pFormat++;
-			}
 		}
 	}
 	va_end(args);
+	if (used != 0U)
+	{
+		CoreClockTestWrite(block, used);
+	}
 }
 
 static void CoreClockTestResult(const char *pName, bool Passed)
