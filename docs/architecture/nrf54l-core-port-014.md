@@ -271,11 +271,13 @@ remain independent acceptance tasks.
 
 ## nRF54LM20x next hardware validation target
 
-The checked-in Eclipse/CDT `nRF54LM20x` managed library,
-`CoreClockTest` and `CorePowerTest` currently build for
-`NRF54LM20A_XXAA`. They reuse the common nRF54L system, GRTC, power
-and oscillator files and both examples have Debug and Release
-configurations. The pin map agrees with Nordic's nRF54LM20 DK:
+The checked-in Eclipse/CDT `nRF54LM20x` managed library currently
+uses `NRF54LM20B_XXAA` in Debug and Release. The `CoreClockTest`
+and `CorePowerTest` managed examples still use
+`NRF54LM20A_XXAA` in Debug and Release. This is an existing
+build-variant mismatch that should be corrected to match the physical
+DK's SoC before final hardware acceptance. Both examples reuse the
+common nRF54L system, GRTC, power and oscillator implementations. The pin map agrees with Nordic's nRF54LM20 DK:
 UARTE20 on P1.16 TX / P1.17 RX, and active-low Button 0 on P1.26.
 
 **Check the DK revision and SoC first.** Nordic states that DK
@@ -287,7 +289,7 @@ if that is the physical device, without replacing the A support.
 Nordic development hardware compatibility:
 https://docs.nordicsemi.com/r/bundle/comp_matrix_nrf54lm20a/page/comp/nrf54lm20a/nrf54lm20a_ic_rev_comp_with_dev_hw.html
 
-The first nRF54LM20A 128-MHz `CoreClockTest` log reported
+The first nRF54LM20x 128-MHz `CoreClockTest` log reported
 `CoreClockTest complete: 30 failures`. Its generic 128-MHz delay
 divisor ran `msDelay(100)` for about 50,004 us, while `nsDelay`
 was about 100,004 us and cold/warm/reuse `sDelay(1)` was accurate.
@@ -299,21 +301,23 @@ checks passed. No timer, UART or GRTC timing change is warranted by
 these failures.
 
 The HF Timer measured 15,998,720 us-loop iterations per second and
-42,664,532 ns-loop iterations per second at 128 MHz. nRF54LM20A
-now uses its independently measured `ArmDelayClockSetDivisors`
-values **8,000,640 (us)** and **3,000,150 (ns)** at 128 MHz.
-This matches the measured loop rates to within one iteration per
-second. The independently calibrated nRF54L15 remains unchanged.
-The 64-MHz LM20A factors and LM20B factors have not been measured;
-both retain the existing uncalibrated fallback as applicable.
-Do not copy another target's numbers without a hardware measurement.
+42,664,532 ns-loop iterations per second at 128 MHz. The
+nRF54LM20A and nRF54LM20B share the same 128-MHz Cortex-M33 CPU,
+and both now use `ArmDelayClockSetDivisors` values
+**8,000,640 (us)** and **3,000,150 (ns)** at 128 MHz.
+The nRF54LM20B adds the Axon NPU, but this does not alter the CPU
+delay-loop implementation. This matches the measured loop rates to
+within one iteration per second. The separately calibrated nRF54L15
+remains unchanged. Neither LM20 variant has a calibrated 64-MHz
+fallback yet. Do not use these factors for unrelated MCU families.
 
 The corrected firmware still requires a managed Release clean build
 and full hardware rerun with `CoreClockTest complete: 0 failures`.
 Also verify that the board's `g_McuOsc` crystal load capacitances
 match its hardware before signing off the power/clock implementation.
 
-For a verified nRF54LM20A board, clean-build the managed Release
+For a verified nRF54LM20 DK, align the managed MCU definitions and
+linker scripts to the physical A/B variant, then clean-build the Release
 library and both Core tests:
 
 ```sh

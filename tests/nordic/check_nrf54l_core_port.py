@@ -182,10 +182,10 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("8000400UL, 3000150UL", source)
         self.assertIn("16000000UL, 3000000UL", source)
 
-    def test_lm20a_measured_128mhz_delay_factors(self):
+    def test_lm20_shared_128mhz_delay_factors(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
-        self.assertIn("#elif defined(NRF54LM20A_XXAA)", source)
-        start = source.index("#elif defined(NRF54LM20A_XXAA)")
+        self.assertIn("#elif defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)", source)
+        start = source.index("#elif defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)")
         end = source.index("\n#else\n", start)
         lm20 = source[start:end]
         self.assertIn("if (SystemCoreClock == 128000000UL)", lm20)
@@ -193,7 +193,8 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("16000000UL, 3000000UL", lm20)
         self.assertIn("42,664,532 ns loops/s", lm20)
         # Both calibrated factor divisors are derived from the
-        # independent 128-MHz HF Timer measurements on the LM20A.
+        # 128-MHz HF Timer measurements. The Cortex-M33 implementation
+        # is shared by the A and B variants; NPU support is separate.
         cpu_hz = 128000000
         us_factor = cpu_hz * 1000000 // 8000640
         ns_factor = cpu_hz * 1000000 // 3000150
