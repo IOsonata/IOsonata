@@ -39,20 +39,6 @@ typedef void(*VECTOR_TABLE_Type)(void);
 */
 extern uint32_t SystemCoreClock;
 
-// TEMPORARY LM20A startup trace. Remove after 64-MHz validation.
-// 0: marker; 1: compiled frequency request; 2/3: PLL before;
-// 4: PLL requested after write; 5: PLL actual after start;
-// 6: SystemCoreClock after update.
-#if defined(NRF54LM20A_XXAA)
-// Optional startup trace. An old library must not break the test link.
-// The board diagnostic tests for a missing weak symbol before reading it.
-#if defined(__cplusplus) && defined(__GNUC__)
-extern volatile uint32_t g_nRF54LM20AClockTrace[7] __attribute__((weak));
-#else
-extern volatile uint32_t g_nRF54LM20AClockTrace[7];
-#endif
-#endif
-
 /**
   \brief Setup the microcontroller system.
    Initialize the System and update the SystemCoreClock variable.
