@@ -426,7 +426,7 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 //	NRF_GRTC_Type *reg = s_nRfxGrtcData[pTimer->DevNo].pReg;
 
 	rtc.pInt = &NRF_GRTC->INTEN0 + devno * 4;
-	rtc.pSysCnt = &NRF_GRTC->SYSCOUNTER[pCfg->DevNo];
+	rtc.pSysCnt = &NRF_GRTC->SYSCOUNTER[devno];
     memset(rtc.Trigger, 0, sizeof(rtc.Trigger));
 
     rtc.pTimer = pTimer;
