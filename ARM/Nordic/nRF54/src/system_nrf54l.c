@@ -111,8 +111,24 @@ void SystemCoreClockUpdate(void)
             break;
     }
 #endif
+#if defined(NRF54L15_XXAA)
+	// CoreClockTest, nRF54L15 at 128 MHz: 15,998,720 us loops/s and
+	// 42,664,959 ns loops/s. The former 16,000,000 divisor made
+	// msDelay run twice too fast. Keep 64 MHz pending measurement.
+	if (SystemCoreClock == 128000000UL)
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			8000640UL, 3000120UL);
+	}
+	else
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			16000000UL, 3000000UL);
+	}
+#else
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		16000000UL, 3000000UL);
+#endif
 }
 
 void SystemInit(void)
