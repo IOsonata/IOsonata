@@ -124,10 +124,23 @@ void SystemCoreClockUpdate(void)
 		(void)ArmDelayClockSetDivisors(SystemCoreClock,
 			16000000UL, 3000000UL);
 	}
-#elif defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
-	// nRF54LM20A and nRF54LM20B share the 128-MHz Cortex-M33 core.
-	// CoreClockTest measured 15,998,720 us and 42,664,532 ns loops/s.
-	// The 64-MHz factors remain unmeasured on both variants.
+#elif defined(NRF54LM20A_XXAA)
+	// LM20A at 128 MHz: the previous 8,000,640-us divisor caused a
+	// 250-ms msDelay request to complete in approximately 125 ms.
+	// Leave the independently validated nanosecond factor unchanged.
+	if (SystemCoreClock == 128000000UL)
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			4000320UL, 3000150UL);
+	}
+	else
+	{
+		// 64 MHz has not yet been measured on hardware.
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			16000000UL, 3000000UL);
+	}
+#elif defined(NRF54LM20B_XXAA)
+	// LM20B still awaits separate hardware calibration.
 	if (SystemCoreClock == 128000000UL)
 	{
 		(void)ArmDelayClockSetDivisors(SystemCoreClock,
