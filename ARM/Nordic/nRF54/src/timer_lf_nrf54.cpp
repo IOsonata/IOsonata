@@ -399,6 +399,14 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		}
 	}
 	devno = selected.DevNo;
+	// One Timer handle may own only one GRTC group at a time.
+	for (candidate = 0; candidate < TIMER_NRFX_RTC_MAX; candidate++)
+	{
+		if (candidate != devno && s_nRfxGrtcData[candidate].pTimer == pTimer)
+		{
+			return false;
+		}
+	}
 	if (s_nRfxGrtcData[devno].pTimer != nullptr &&
 		s_nRfxGrtcData[devno].pTimer != pTimer)
 	{
