@@ -35,6 +35,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/pei.h"
 #include "coredev/interrupt.h"
+#include "idelay.h"
 
 // PEI is an optional Timer feature. Weak references let ordinary RTC
 // applications link without the PEI matrix or nRF52 PPI implementation.
@@ -114,6 +115,9 @@ static TimerTrig_t s_nRfxRtc2Trig[RTC2_CC_NUM];
 
 // Timer device of each timer, set by nRFxRtcInit
 static TimerDev_t *s_pnRfxRtcDev[TIMER_NRFX_RTC_MAX];
+// A timer initialized with DevNo=-1 is returned to the pool by Disable.
+// Explicitly indexed timers retain their handles across Disable/Enable.
+static bool s_bRtcAutoSelected[TIMER_NRFX_RTC_MAX];
 
 // What does not change is constant, so it stays in flash. Only the trigger
 // state above and the device pointers are in RAM.
@@ -484,6 +488,9 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 
 static void nRFxRtcDisable(TimerDev_t * const pTimer)
 {
+	uint32_t irqState;
+	int devno;
+
 	if (!s_bRtcEnabled[pTimer->DevNo])
 	{
 		return;
@@ -510,7 +517,24 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 #endif
 	}
 
+	// nRF52 RTC STOP is synchronized into LFCLK and takes 15-46 us.
+	// Complete that task while this RTC still owns LFCLK; otherwise the
+	// final reference can stop the oscillator before STOP has taken effect.
+#if defined(NRF52_SERIES)
+	usDelay(50U);
+#endif
 	SystemLowFreqClockDisable();
+	if (s_bRtcAutoSelected[pTimer->DevNo] &&
+		s_pnRfxRtcDev[pTimer->DevNo] == pTimer)
+	{
+		irqState = DisableInterrupt();
+		devno = pTimer->DevNo;
+		s_nRfxRtcData[devno].pReg->INTENCLR = 0xFFFFFFFFU;
+		s_nRfxRtcData[devno].pReg->EVTENCLR = 0xFFFFFFFFU;
+		s_pnRfxRtcDev[devno] = nullptr;
+		s_bRtcAutoSelected[devno] = false;
+		EnableInterrupt(irqState);
+	}
 }
 
 // CLEAR task, returns once COUNTER reads lower than before it, bounded:
@@ -1108,10 +1132,16 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	const nRFRtcData_t *pRtc;
 	NRF_RTC_Type *reg;
 	TimerDev_t *pOldTimer;
+	TimerCfg_t selected;
+	const TimerCfg_t *pSelectedCfg;
+	bool automatic;
+	int first;
+	int candidate;
 	int i;
+	uint32_t ccmask;
 
 	// Any frequency, SetFrequency takes the closest one
-	if (pTimer == nullptr || pCfg == nullptr || pCfg->DevNo < 0 ||
+	if (pTimer == nullptr || pCfg == nullptr || pCfg->DevNo < -1 ||
 		pCfg->DevNo >= TIMER_NRFX_RTC_MAX)
 	{
 		return false;
@@ -1127,9 +1157,42 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
-	pRtc = &s_nRfxRtcData[pCfg->DevNo];
+	// DevNo=-1 requests an available LF timer through the normal TimerInit
+	// interface. Keep the radio/stack RTCs out of the candidate set.
+	automatic = pCfg->DevNo == -1;
+	selected = *pCfg;
+	if (automatic)
+	{
+		first = 1;
+#if (defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT) || \
+	defined(NRF_SDC_ENABLED)
+		first = 2;
+#endif
+		selected.DevNo = -1;
+		for (candidate = TIMER_NRFX_RTC_MAX - 1; candidate >= first;
+			candidate--)
+		{
+			if (s_pnRfxRtcDev[candidate] == nullptr &&
+				!s_bRtcEnabled[candidate])
+			{
+				selected.DevNo = candidate;
+				break;
+			}
+		}
+		if (selected.DevNo < 0)
+		{
+			return false;
+		}
+	}
+	pSelectedCfg = &selected;
+	pRtc = &s_nRfxRtcData[pSelectedCfg->DevNo];
 	reg = pRtc->pReg;
-	pOldTimer = s_pnRfxRtcDev[pCfg->DevNo];
+	pOldTimer = s_pnRfxRtcDev[pSelectedCfg->DevNo];
+	// Never replace another initialized handle, even if disabled.
+	if (pOldTimer != nullptr && pOldTimer != pTimer)
+	{
+		return false;
+	}
 
 	// Do not replace a Timer object with live PEI bindings.
 	if (pOldTimer != nullptr)
@@ -1140,7 +1203,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		{
 			for (i = 0; i < 2; i++)
 			{
-				if (s_nRfxRtcRaw[pCfg->DevNo][i].pPei != nullptr)
+				if (s_nRfxRtcRaw[pSelectedCfg->DevNo][i].pPei != nullptr)
 				{
 					return false;
 				}
@@ -1156,11 +1219,11 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		}
 	}
 
-	pTimer->DevNo = pCfg->DevNo;
-	pTimer->EvtHandler = pCfg->EvtHandler;
+	pTimer->DevNo = pSelectedCfg->DevNo;
+	pTimer->EvtHandler = pSelectedCfg->EvtHandler;
 	s_pnRfxRtcData = s_nRfxRtcData;
-	s_pnRfxRtcDev[pCfg->DevNo] = pTimer;
-	s_bRtcHwClear[pCfg->DevNo] = false;
+	s_pnRfxRtcDev[pSelectedCfg->DevNo] = pTimer;
+	s_bRtcHwClear[pSelectedCfg->DevNo] = false;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	memset(pRtc->pTrigger, 0, pRtc->MaxNbTrigEvt * sizeof(TimerTrig_t));
@@ -1184,28 +1247,28 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     reg->EVENTS_OVRFLW = 0;
 
 	// No compare of an earlier use, the triggers are cleared above
-	uint32_t ccmask = ((1U << pRtc->MaxNbTrigEvt) - 1U);
+	ccmask = ((1U << pRtc->MaxNbTrigEvt) - 1U);
 
 	reg->INTENCLR = ccmask << RTC_INTENSET_COMPARE0_Pos;
 	reg->EVTENCLR = ccmask << RTC_EVTEN_COMPARE0_Pos;
 
 	// Init interrupt for RTC
-	switch (pCfg->DevNo)
+	switch (pSelectedCfg->DevNo)
 	{
 		case 0:
 			NVIC_ClearPendingIRQ(RTC0_IRQn);
-			NVIC_SetPriority(RTC0_IRQn, pCfg->IntPrio);
+			NVIC_SetPriority(RTC0_IRQn, pSelectedCfg->IntPrio);
 			NVIC_EnableIRQ(RTC0_IRQn);
 			break;
 		case 1:
 			NVIC_ClearPendingIRQ(RTC1_IRQn);
-			NVIC_SetPriority(RTC1_IRQn, pCfg->IntPrio);
+			NVIC_SetPriority(RTC1_IRQn, pSelectedCfg->IntPrio);
 			NVIC_EnableIRQ(RTC1_IRQn);
 			break;
 #if TIMER_NRFX_RTC_MAX > 2
 		case 2:
 			NVIC_ClearPendingIRQ(RTC2_IRQn);
-			NVIC_SetPriority(RTC2_IRQn, pCfg->IntPrio);
+			NVIC_SetPriority(RTC2_IRQn, pSelectedCfg->IntPrio);
 			NVIC_EnableIRQ(RTC2_IRQn);
 			break;
 #endif
@@ -1215,21 +1278,45 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	reg->INTENSET = RTC_INTENSET_OVRFLW_Msk;
     reg->EVTENSET = RTC_EVTEN_OVRFLW_Msk;
 
-    if (pCfg->EvtHandler && pCfg->bTickInt)
+    if (pSelectedCfg->EvtHandler && pSelectedCfg->bTickInt)
 	{
     	reg->INTENSET = RTC_INTENSET_TICK_Msk;
         reg->EVTENSET = RTC_EVTEN_TICK_Msk;
 	}
 
-    nRFxRtcSetFrequency(pTimer, pCfg->Freq);
+    nRFxRtcSetFrequency(pTimer, pSelectedCfg->Freq);
 
 	// Enable LFCLK before clearing the RTC, so the CLEAR task
 	// completes on the selected clock. Init continues to enable the timer.
 	if (!nRFxRtcEnable(pTimer))
 	{
+		// Initialization failed after attaching the handle: undo it.
+		reg->INTENCLR = 0xFFFFFFFFU;
+		reg->EVTENCLR = 0xFFFFFFFFU;
+		reg->TASKS_STOP = 1U;
+		switch (pSelectedCfg->DevNo)
+		{
+			case 0:
+				NVIC_DisableIRQ(RTC0_IRQn);
+				NVIC_ClearPendingIRQ(RTC0_IRQn);
+				break;
+			case 1:
+				NVIC_DisableIRQ(RTC1_IRQn);
+				NVIC_ClearPendingIRQ(RTC1_IRQn);
+				break;
+#if TIMER_NRFX_RTC_MAX > 2
+			case 2:
+				NVIC_DisableIRQ(RTC2_IRQn);
+				NVIC_ClearPendingIRQ(RTC2_IRQn);
+				break;
+#endif
+		}
+		s_pnRfxRtcDev[pSelectedCfg->DevNo] = nullptr;
 		return false;
 	}
+	s_bRtcAutoSelected[pSelectedCfg->DevNo] = automatic;
 	nRFxRtcClear(reg);
 	return true;
 }
+
 

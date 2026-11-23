@@ -19,7 +19,7 @@ from an interrupt context, or cannot preserve the core's required clocks.
 Unsupported low-power requests must not silently change state.
 
 Applications should not need MCU-specific clock register writes, UART baud
-reconfiguration, or manual peripheral clock coordination. Each MCU backend
+reconfiguration, or manual peripheral clock coordination. Each MCU port
 must honor the requirements of its peripherals before supporting a new mode.
 Each MCU port retains its own maximum-frequency default calibration.
 When CPU frequency changes, `SystemCoreClockUpdate()` updates delay factors.

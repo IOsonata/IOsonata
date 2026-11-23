@@ -25,12 +25,9 @@ class NordicDelayArchitecture(unittest.TestCase):
 					"ArmDelayClockSetDivisors(" in source or
 					"ArmDelayClockInit(" in source
 				)
-				if "nRF5340_App/" in path:
-					self.assertEqual(source.count("ArmDelayCalibrate("), 1)
-					self.assertIn("cpuHz != __SYSTEM_CLOCK_DEFAULT", source)
-					self.assertIn("cpuHz == __SYSTEM_CLOCK_DEFAULT", source)
-				else:
-					self.assertNotIn("ArmDelayCalibrate(", source)
+				# All production clock-update paths only update loop factors.
+				# DWT calibration runs explicitly in the diagnostic.
+				self.assertNotIn("ArmDelayCalibrate(", source)
 
 	def test_nrf5340_frequency_switch_uses_cached_cost(self):
 		app = (ROOT / NRF[1]).read_text(encoding="utf-8")
@@ -38,14 +35,15 @@ class NordicDelayArchitecture(unittest.TestCase):
 		self.assertIn("NRF_CLOCK_S->HFCLKCTRL", app)
 		self.assertIn("s_DelayCalibration.CpuHz != cpuHz", app)
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 25U, 3U)", app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 28U, 3U)", app)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U)", app)
+		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 22U, 3U)", app)
 		net = (ROOT / NRF[2]).read_text(encoding="utf-8")
 		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", net)
-\t\tself.assertNotIn("ArmDelayCalibrate(", net)
+		self.assertIn("SystemnsDelayFactor = 21321178U;", net)
+		self.assertNotIn("ArmDelayCalibrate(", net)
 
 	def test_dwt_calibration_uses_only_cpu_local_hardware(self):
-		delay = (ROOT / "ARM/include/idelay.h").read_text(encoding="utf-8")
+		delay = (ROOT / "ARM/include/system_core_clock_calibration.h").read_text(encoding="utf-8")
 		test = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
 		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", delay)
 		start = delay.index("static inline bool ArmDelayCalibrate(")

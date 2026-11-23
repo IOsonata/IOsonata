@@ -37,7 +37,8 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 #define __SYSTEM_CLOCK_DEFAULT      (64000000UL)     /*!< NRF5340 network core uses a fixed System Clock Frequency of 64MHz */
 
-// Calibrated loop iterations per second.
+// Runtime delays use CPU-local assembly loops only. The 64 MHz Network
+// Core keeps fixed, port-calibrated loop factors without enabling DWT.
 extern uint32_t SystemMicroSecLoopCnt;
 uint32_t SystemnsDelayFactor = 1000000UL;
 
@@ -67,8 +68,14 @@ void SystemCoreClockUpdate(void)
 
 	if (s_DelayCalibration.UsCycles == 0U)
 	{
-		// Fixed-speed network core: use the port's calibrated defaults.
-		(void)ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U);
+		// The 32-byte-aligned countdown runs at approximately 3 CPU
+		// cycles per iteration. Two HF Timer measurements at 64 MHz
+		// gave 30,012 us for 100 ms using the former 6,398,912 factor.
+		// Preserve the measured 21,321,178 iterations/s correction.
+		if (ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U))
+		{
+			SystemnsDelayFactor = 21321178U;
+		}
 	}
 }
 

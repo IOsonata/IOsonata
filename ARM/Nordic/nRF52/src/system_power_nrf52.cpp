@@ -77,6 +77,38 @@ SOFTWARE.
 static bool s_bSysPwrResetRead = false;
 static uint32_t s_SysPwrResetReason = 0;
 
+// System OFF wake pins are independent of temporary GPIOTE IRQ ownership.
+// Interrupt cleanup may clear PIN_CNF.SENSE; rearm these selections on entry.
+static uint32_t s_SysPwrWakeMask[GPIO_COUNT];
+static uint32_t s_SysPwrWakeHigh[GPIO_COUNT];
+
+static void SysPwrWakePinsRearm(void)
+{
+	uint32_t state;
+	int port;
+	int pin;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	for (port = 0; port < GPIO_COUNT; port++)
+	{
+		uint32_t mask = s_SysPwrWakeMask[port];
+		uint32_t high = s_SysPwrWakeHigh[port];
+
+		for (pin = 0; pin < 32; pin++)
+		{
+			uint32_t bit = 1UL << pin;
+
+			if ((mask & bit) != 0U)
+			{
+				IOPinSetSense(port, pin, (high & bit) != 0U ?
+					IOPINSENSE_HIGH_TRANSITION : IOPINSENSE_LOW_TRANSITION);
+			}
+		}
+	}
+	__set_PRIMASK(state);
+}
+
 // sd_softdevice_is_enabled is an SVC that only a programmed SoftDevice
 // implements, so the image is looked for first: its magic number follows the
 // MBR.
@@ -181,8 +213,40 @@ uint32_t SystemResetReason(void)
 	return s_SysPwrResetReason;
 }
 
+// Resumable System ON sleep. Existing peripherals and NVIC interrupt sources
+// remain configured, including LFCLK users and GPIO SENSE wake sources.
+void SystemSleep(void)
+{
+	uint32_t state;
+	uint32_t scr;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	scr = SCB->SCR;
+	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+	__DSB();
+	__WFI();
+	SCB->SCR = scr;
+	__ISB();
+	__set_PRIMASK(state);
+}
+
+uint32_t SystemPowerCapabilitiesGet(void)
+{
+	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_SYSTEM_OFF |
+		SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE |
+		SYSTEM_POWER_CAP_RAM_RETENTION | SYSTEM_POWER_CAP_RET_REG;
+}
+
 void SystemPowerOff(void)
 {
+	SysPwrWakePinsRearm();
+
 	if (SysPwrSdEnabled())
 	{
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
@@ -204,6 +268,9 @@ void SystemPowerOff(void)
 
 bool SystemWakePin(int PortNo, int PinNo, int Sense)
 {
+	uint32_t state;
+	uint32_t bit;
+
 	if (PinNo < 0 || PinNo >= 32 || nRFGpioGetReg(PortNo) == NULL)
 	{
 		return false;
@@ -214,8 +281,31 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 		return false;
 	}
 
-	// SENSE of the pin, its DETECT signal wakes the MCU from System OFF
+	// Keep the explicit wake setting separate from temporary GPIOTE IRQ
+	// allocation. A later IRQ cleanup must not lose the System OFF source.
+	state = __get_PRIMASK();
+	bit = 1UL << PinNo;
+
+	__disable_irq();
+	if (Sense == IOPINSENSE_DISABLE)
+	{
+		s_SysPwrWakeMask[PortNo] &= ~bit;
+		s_SysPwrWakeHigh[PortNo] &= ~bit;
+	}
+	else
+	{
+		s_SysPwrWakeMask[PortNo] |= bit;
+		if (Sense == IOPINSENSE_HIGH_TRANSITION)
+		{
+			s_SysPwrWakeHigh[PortNo] |= bit;
+		}
+		else
+		{
+			s_SysPwrWakeHigh[PortNo] &= ~bit;
+		}
+	}
 	IOPinSetSense(PortNo, PinNo, (IOPINSENSE)Sense);
+	__set_PRIMASK(state);
 
 	return true;
 }

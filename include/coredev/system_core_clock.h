@@ -385,7 +385,7 @@ void *SystemRamStart(void);
  * @return	SYSTEM_RESET_xxx reasons, ORed
  */
 /**
- * @brief Capabilities supported by the target's power-management backend.
+ * @brief Capabilities supported by the target's power-management implementation.
  *
  * Availability is a property of the MCU/core, not a compile-time selection
  * of which CorePowerTest phase to run. Applications normally use these APIs
@@ -435,6 +435,20 @@ void SystemPowerOff(void);
  * state. It is optional on MCUs without a supported resumable sleep mode.
  */
 void SystemSleep(void);
+
+/**
+ * @brief Sleep for a number of seconds using a temporary low-frequency timer.
+ *
+ * The entire elapsed call (timer setup, sleeping, wake and release) is the
+ * requested duration. No CPU busy-wait loop, DWT or SysTick is used.
+ * Unsupported targets, interrupt context, masked interrupts or unavailable
+ * timers return false. Zero seconds succeeds immediately.
+ *
+ * Implemented initially for the Nordic nRF52 and both nRF5340 cores.
+ * CoreClockTest can measure an MCU-specific overhead correction; normal
+ * operation never performs calibration.
+ */
+bool sDelay(uint32_t Seconds);
 
 /**
  * @brief	Low-power wakeup pin

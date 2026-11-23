@@ -67,6 +67,7 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "nrf.h"
+#include "nrf_erratas.h"
 
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 #include "nrf_sdh.h"
@@ -108,6 +109,12 @@ SOFTWARE.
 // Bound the wait in time rather than compiler-dependent loop iterations.
 #define NRFX_LFCLK_START_TIMEOUT_US	1500000U
 #define NRFX_LFCLK_START_POLL_US	100U
+
+// nRF52832 anomaly 132: the LFRC oscillator might not start, with no
+// LFCLKSTARTED event, when it is started in a window after it stopped.
+// The errata gives 66 to 138 us, a later vendor note 230 to 330 us.
+// Wait past both before every direct start on an affected part.
+#define NRFX_LFCLK_ERRATA132_DELAY_US	400U
 
 // LFCLK registers and source values
 #if defined(CLOCK_LFCLK_SRC_SRC_Msk)
@@ -189,6 +196,16 @@ static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
+#if defined(NRF5340_XXAA_APPLICATION)
+// Time spent in calibrated LFCLK startup polling, for the next sDelay
+// request. This is internal to the Nordic clock/delay implementation.
+static uint32_t s_nRFxLfclkStartWaitUs;
+#endif
+#if defined(NRF52_SERIES) && defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+// A direct LFCLK owner may release while the SoftDevice controls CLOCK.
+// Its physical STOP is deferred until the SoftDevice has shut down.
+static bool s_bNRFxSdLfclkStopPending;
+#endif
 #if defined(NRF5340_XXAA_NETWORK)
 // XTAL remains the board-selected source. RC is an effective-clock fallback.
 static bool s_bNRFxNetLfclkRcFallback;
@@ -209,7 +226,7 @@ static inline OSC_TYPE nRFxLowOscSelected(void)
 {
 	return s_bNRFxLowOscSelected ? s_nRFxLowOscSelected : g_McuOsc.LowPwrOsc.Type;
 }
-#if defined(NRF53_SERIES)
+#if defined(NRF53_SERIES) || defined(NRF52_SERIES)
 static bool s_bNRFxLfclkCalibrating;
 #endif
 
@@ -410,6 +427,23 @@ static void nRFxClockSdhStateHandler(nrf_sdh_state_evt_t Event, void *pContext)
 		s_nRFxHfxoOwner = NRFX_HFXO_OWNER_DIRECT;
 		s_bNRFxSdDirectStopPending = false;
 	}
+#if defined(NRF52_SERIES)
+	if (s_bNRFxSdLfclkStopPending && !s_bNRFxLfclkTransition)
+	{
+		if (s_nRFxLfclkReqCnt != 0U)
+		{
+			// A new application user inherited the original direct clock.
+			s_bNRFxLfclkOwned = true;
+			s_bNRFxSdLfclkStopPending = false;
+		}
+		else if (!nRFxMpslActive() && s_nRFxMpslLfclkReqCnt == 0U)
+		{
+			NRF_CLOCK->TASKS_LFCLKSTOP = 1U;
+			s_bNRFxLfclkStopPending = true;
+			s_bNRFxSdLfclkStopPending = false;
+		}
+	}
+#endif
 	EnableInterrupt(state);
 }
 
@@ -646,12 +680,29 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 	}
 }
 
-#if defined(NRF53_SERIES)
-// The nRF5340 CAL task temporarily requests HFXO through the hardware
-// clock controller. Wait for DONE outside the interrupt mask. A new LFRC
-// activation must be calibrated before its RTC consumers start counting.
+#if defined(NRF53_SERIES) || defined(NRF52_SERIES)
+// The LFRC CAL task uses HFXO as a reference. nRF52 callers must
+// request HFXO explicitly; nRF53 CLOCK owns that calibration request.
+// Wait for DONE outside the interrupt mask.
 #define NRFX_LFRC_CAL_TIMEOUT_US	250000U
 #define NRFX_LFRC_CAL_RETRY_US		1000U
+
+// nRF52 anomaly 192: LFRC frequency offset after calibration. The errata
+// workaround writes 2 to this register before the CAL task; the vendor
+// driver writes 0 again when calibration is done.
+#define NRFX_LFRC_ERRATA192_REG		(*(volatile uint32_t *)0x40000C34UL)
+
+static inline void nRFxLfrcCalErrata192(bool bStart)
+{
+#if NRF52_ERRATA_192_ENABLE_WORKAROUND
+	if (nrf52_errata_192())
+	{
+		NRFX_LFRC_ERRATA192_REG = bStart ? 2U : 0U;
+	}
+#else
+	(void)bStart;
+#endif
+}
 
 static bool nRFxLfclkCalibrate(void)
 {
@@ -659,6 +710,7 @@ static bool nRFxLfclkCalibrate(void)
 	uint32_t nextRetry;
 
 	NRF_CLOCK->EVENTS_DONE = 0U;
+	nRFxLfrcCalErrata192(true);
 	NRF_CLOCK->TASKS_CAL = 1U;
 	elapsed = 0U;
 	nextRetry = NRFX_LFRC_CAL_RETRY_US;
@@ -667,6 +719,7 @@ static bool nRFxLfclkCalibrate(void)
 		if (NRF_CLOCK->EVENTS_DONE != 0U)
 		{
 			NRF_CLOCK->EVENTS_DONE = 0U;
+			nRFxLfrcCalErrata192(false);
 			return true;
 		}
 		// nRF5340 revision 1 anomaly 137: a higher priority LFCLK
@@ -684,8 +737,10 @@ static bool nRFxLfclkCalibrate(void)
 	if (NRF_CLOCK->EVENTS_DONE != 0U)
 	{
 		NRF_CLOCK->EVENTS_DONE = 0U;
+		nRFxLfrcCalErrata192(false);
 		return true;
 	}
+	nRFxLfrcCalErrata192(false);
 	return false;
 }
 #endif
@@ -699,10 +754,13 @@ bool SystemHighFreqClockCalibrate(void)
 
 bool SystemLowFreqClockCalibrate(void)
 {
-#if defined(NRF53_SERIES)
+#if defined(NRF53_SERIES) || defined(NRF52_SERIES)
 	uint32_t state;
 	bool active;
 	bool success;
+#if defined(NRF52_SERIES)
+	bool hfxo;
+#endif
 
 	// Calibration waits for hardware DONE. Timer ISR callbacks should
 	// dispatch foreground work rather than wait here.
@@ -740,7 +798,22 @@ bool SystemLowFreqClockCalibrate(void)
 
 	// Hold an additional shared LFCLK reference during calibration.
 	// A separate user's Disable cannot stop LFCLK before DONE.
+#if defined(NRF52_SERIES)
+	// nRF52 CAL requires crystal-sourced HFCLK. Use the shared owner,
+	// not direct CLOCK tasks, so existing radio requests remain intact.
+	hfxo = SystemHighFreqClockEnable();
+	if (hfxo)
+	{
+		success = nRFxLfclkCalibrate();
+		SystemHighFreqClockDisable();
+	}
+	else
+	{
+		success = false;
+	}
+#else
 	success = nRFxLfclkCalibrate();
+#endif
 	SystemLowFreqClockDisable();
 
 	state = DisableInterrupt();
@@ -776,6 +849,9 @@ static bool nRFxLfclkFinishStart(uint32_t Src)
 			}
 			usDelay(NRFX_LFCLK_START_POLL_US);
 			elapsed += NRFX_LFCLK_START_POLL_US;
+#if defined(NRF5340_XXAA_APPLICATION)
+			s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
+#endif
 		}
 		return false;
 	}
@@ -785,7 +861,7 @@ static bool nRFxLfclkFinishStart(uint32_t Src)
 		// A higher-priority LFXO request from the other core can supply
 		// this LFCLK even though this controller requested LFRC.
 		// On nRF5340, such an override prevents LFRC calibration DONE
-		// (anomaly 137); calibration must not gate LFCLK availability.
+		// (anomaly 137); calibration must not block LFCLK availability.
 		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
 		{
 			return false;
@@ -807,8 +883,17 @@ static bool nRFxLfclkStart(uint32_t Src)
 {
 	uint32_t elapsed;
 
+#if defined(NRF5340_XXAA_APPLICATION)
+	s_nRFxLfclkStartWaitUs = 0U;
+#endif
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
+#if NRF52_ERRATA_132_ENABLE_WORKAROUND
+	if (nrf52_errata_132())
+	{
+		usDelay(NRFX_LFCLK_ERRATA132_DELAY_US);
+	}
+#endif
 	NRF_CLOCK->TASKS_LFCLKSTART = 1U;
 	elapsed = 0U;
 	while (elapsed < NRFX_LFCLK_START_TIMEOUT_US)
@@ -825,6 +910,9 @@ static bool nRFxLfclkStart(uint32_t Src)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
+#if defined(NRF5340_XXAA_APPLICATION)
+		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
+#endif
 	}
 	if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
 	{
@@ -856,6 +944,46 @@ static bool nRFxLfclkWaitStopped(void)
 	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U;
 }
 
+// Snapshot actual LFCLK hardware state before sDelay requests an RTC.
+// A running oscillator avoids the cold LFXO startup penalty. No ownership
+// change or oscillator start takes place in this query.
+#if defined(NRF5340_XXAA_APPLICATION)
+extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void)
+{
+	return s_nRFxLfclkStartWaitUs;
+}
+#endif
+
+extern "C" bool nRFxSleepLfClockRunning(void)
+{
+	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
+}
+
+// A STOP issued here is settled once LFCLKSTAT reports the clock stopped,
+// or once a BLE stack that drives CLOCK itself runs LFCLK. Without this
+// the flag would stay set after the last release until the next direct
+// enable, and refuse a later MPSL request or a timer enable under the
+// SoftDevice. With the MPSL external clock driver, LFCLK is still driven
+// here, so only LFCLKSTAT settles the stop. Call with interrupts masked.
+static void nRFxLfclkStopSettle(void)
+{
+	bool stackClock;
+
+	stackClock = nRFxClockSdEnabled();
+#if defined(NRF52_SERIES)
+	stackClock = stackClock ||
+		(nRFxMpslActive() && !s_bNRFxMpslExternalClock);
+#else
+	stackClock = stackClock || nRFxMpslActive();
+#endif
+	if (s_bNRFxLfclkStopPending &&
+		((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U ||
+		stackClock))
+	{
+		s_bNRFxLfclkStopPending = false;
+	}
+}
+
 bool SystemLowFreqClockEnable(void)
 {
 	uint32_t src;
@@ -877,6 +1005,7 @@ bool SystemLowFreqClockEnable(void)
 	}
 #endif
 	state = DisableInterrupt();
+	nRFxLfclkStopSettle();
 	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt == UINT32_MAX)
 	{
 		EnableInterrupt(state);
@@ -997,6 +1126,14 @@ void SystemLowFreqClockDisable(void)
 				s_bNRFxMpslLfclkOwned = false;
 #endif
 			}
+			#if defined(NRF52_SERIES) && defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+			// Preserve the direct oscillator's last physical STOP until
+			// SoftDevice shutdown; it must not be issued under stack ownership.
+			if (s_bNRFxLfclkOwned && nRFxClockSdEnabled())
+			{
+				s_bNRFxSdLfclkStopPending = true;
+			}
+			#endif
 			s_bNRFxLfclkOwned = false;
 		}
 	}
@@ -1084,6 +1221,7 @@ static void nRFxMpslCalibrationBegin(void)
 		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0U;
 		NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_HFCLKSTARTED_Msk;
 		NRF_CLOCK->EVENTS_DONE = 0U;
+		nRFxLfrcCalErrata192(true);
 		NRF_CLOCK->TASKS_CAL = 1U;
 		s_bNRFxMpslCalibrationRunning = true;
 	}
@@ -1140,6 +1278,7 @@ void nRFxMpslClockIrq(void)
 			NRF_CLOCK->EVENTS_DONE != 0U)
 		{
 			NRF_CLOCK->EVENTS_DONE = 0U;
+			nRFxLfrcCalErrata192(false);
 			NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_DONE_Msk;
 			s_bNRFxMpslCalibrationRunning = false;
 			s_bNRFxMpslCalibrationPending = false;
@@ -1235,6 +1374,7 @@ int32_t nRFxMpslLfclkRequest(void)
 		return -1;
 	}
 	state = DisableInterrupt();
+	nRFxLfclkStopSettle();
 	if (s_nRFxMpslLfclkReqCnt == UINT32_MAX ||
 		s_bNRFxLfclkTransition || s_bNRFxLfclkStopPending)
 	{

@@ -49,7 +49,12 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "coredev/system_core_clock.h"
-#include "coredev/delay_calibration.h"
+typedef struct {
+	uint32_t CpuHz;
+	uint32_t UsLoopsPerSecond;
+	uint32_t NsLoopsPerSecond;
+	bool Measured;
+} DelayCalibrationPoint_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -137,6 +142,12 @@ static inline __attribute__((always_inline)) void msDelay(uint32_t ms)
 	IOsonataRiscvDelayCycles(cycles);
 }
 
+
+// No independently calibrated nanosecond assembly loop on RISC-V.
+static inline void DelayCalibrationProbeNs(uint32_t Nanoseconds)
+{
+	nsDelay(Nanoseconds);
+}
 
 // RISC-V delay uses CPU cycles, not ARM loop-iteration factors.
 // Counter-based delays require no loop-factor calibration. Without a counter,

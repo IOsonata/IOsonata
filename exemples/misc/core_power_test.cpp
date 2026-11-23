@@ -80,13 +80,20 @@ static const TimerCfg_t s_TimerCfg = {
 	.IntPrio = 6,
 };
 
-// Keep the complete test transcript queued during backpressure from async UART DMA.
-// This is test storage, not a change to the generic SysLog implementation.
-alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(64, 128)];
+// Use a bounded default suitable for MCUs with only a few KB of SRAM.
+// Larger boards may increase the queue without changing the shared test.
+// Blocking SysLog keeps a record pending until the sink accepts it.
+#ifndef CORE_POWER_TEST_LOG_RECORDS
+#define CORE_POWER_TEST_LOG_RECORDS	4
+#endif
+#define CORE_POWER_TEST_LOG_RECORD_LEN	128
+
+alignas(4) static uint8_t s_LogMem[
+	SYSLOG_MEMSIZE(CORE_POWER_TEST_LOG_RECORDS, CORE_POWER_TEST_LOG_RECORD_LEN)];
 static const SysLogCfg_t s_LogCfg = {
 	.pMem = s_LogMem,
 	.MemSize = sizeof(s_LogMem),
-	.RecordLen = 128,
+	.RecordLen = CORE_POWER_TEST_LOG_RECORD_LEN,
 	.bBlocking = true,
 };
 

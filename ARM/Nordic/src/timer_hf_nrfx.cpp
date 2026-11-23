@@ -435,7 +435,7 @@ static void TimerIRQHandler(int DevNo)
 			}
 			else if (type == TIMER_TRIG_PEI_SINGLE)
 			{
-				// HF TIMER has no EVTEN gate; disable the logical PPI
+				// HF TIMER has no EVTEN register; disable the logical PPI
 				// event after its first compare, without stopping TIMER.
 				reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << i;
 				if (PeiDisableEvent != nullptr)

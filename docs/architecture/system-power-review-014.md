@@ -33,7 +33,7 @@ Microchip SAM4 Backup correctly for the current implementations. They
 are not a general description of the available lowest-power states of
 every MCU. SAM D11/D21 Standby uses SLEEPDEEP + WFI, keeps RAM in low
 power and wakes via asynchronous interrupt, normally resuming execution.
-The current contract prevents exposing that capability.
+The current API prevents exposing that capability.
 
 **Do not silently change the header or make existing `SystemPowerOff()`
 implementations return.** Decide and document the power operation
@@ -51,7 +51,7 @@ Reset reason is an optional diagnostic, not the objective of saving power.
 | SAM4E | Backup (supply off to SRAM) | Correct reset-exit mode; RTC/RTT wake paths and application peripheral shutdown still need hardware evidence | Host tests, hardware not confirmed |
 | SAM4L | Backup (SRAM off) | Correct reset-exit mode; alternate Retention sleep is not yet exposed by generic API | Host tests, hardware coverage incomplete |
 | SAM D11/D21 (PR #141 draft) | SystemSleep entry/resume, asynchronous EIC wake and PM RCAUSE reset diagnostics implemented on review branch | Standby source compiled on both targets; full link and wake validation pending; reset-only demo intentionally omitted | Reset-model 128/128 each, Arm source compilation PASS; power wake not tested |
-| LPC/RA/RE/ESP32 families | No generic port in main for most targets | Not reviewed as implemented generic power backends; should be scoped to available hardware | Pending |
+| LPC/RA/RE/ESP32 families | No generic port in main for most targets | Not reviewed as implemented generic power ports; should be scoped to available hardware | Pending |
 
 ## Specific implementation and test risks
 
@@ -85,8 +85,8 @@ supported sleep mode that resumes execution, after callers have configured
 the wake sources and stopped incompatible peripherals. It returns normally
 after wake and preserves the stack and SRAM. The state does **not** imply
 a reset or a new startup. `SystemPowerOff(void)` retains its existing
-reset-exit semantics for all current validated backends. No existing
-backend will be modified simply to satisfy the new declaration.
+reset-exit semantics for all current validated ports. No existing
+port will be modified simply to satisfy the new declaration.
 
 The `SystemSleep()` entry has now been implemented for SAM D11/D21 in
 `ARM/Microchip/SAMD/src/system_sleep_samd.c` and linked into both
