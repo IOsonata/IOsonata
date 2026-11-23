@@ -592,9 +592,15 @@ The four measured cold `sDelay(1)` values are 1,000,006, 1,011,782,
 1.1782%). Warm and reuse results remain within 3 us of 1 second. The
 128-MHz busy-loop timing is consistent: `msDelay(100)=99,996 us`, and
 `nsDelay(100 ms)=100,000 us`, with independently reported divisor
-recommendations of 8,000,320 and 3,000,150. The production LM20A 128-MHz
-fallback divisors remain 8,000,640 and 3,000,150; no further correction is
-warranted by this data.
+recommendations of 8,000,320 and 3,000,150. These runs used the
+8,000,640 microsecond divisor.
+
+**Follow-up:** the nRF54LM20A 128-MHz microsecond divisor in
+`system_nrf54l.c` is now the measured 8,000,320 (15,999,360 loops/s),
+which removes the 40 ppm shortfall of `msDelay`. The nanosecond divisor
+stays 3,000,150. The nRF54LM20B branch keeps 8,000,640 until it is
+measured on a B chip. Rerun CoreClockTest on nRF54LM20A to confirm
+`msDelay(100)` at 100,000 us.
 
 Cold LFXO/GRTC startup compensation of 433,611 ticks is **accepted at the
 existing 2% tolerance on this LM20A board**, rather than claimed as an

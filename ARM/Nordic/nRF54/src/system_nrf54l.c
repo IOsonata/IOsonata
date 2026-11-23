@@ -125,13 +125,13 @@ void SystemCoreClockUpdate(void)
 			16000000UL, 3000000UL);
 	}
 #elif defined(NRF54LM20A_XXAA)
-	// LM20A at 128 MHz: two CoreClockTest runs measured msDelay(100)
-	// at 99,996 us with 15,998,720 iterations/s. The 8,000,640
-	// divisor is confirmed; do not double the microsecond factor.
+	// CoreClockTest, nRF54LM20A at 128 MHz: 15,999,359 us loops/s and
+	// 42,664,533 ns loops/s. msDelay(100) measured 99,996 us with the
+	// earlier 8,000,640 us divisor.
 	if (SystemCoreClock == 128000000UL)
 	{
 		(void)ArmDelayClockSetDivisors(SystemCoreClock,
-			8000640UL, 3000150UL);
+			8000320UL, 3000150UL);
 	}
 	else
 	{

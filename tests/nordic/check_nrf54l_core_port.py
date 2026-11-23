@@ -187,10 +187,13 @@ class Nrf54lCorePort(unittest.TestCase):
         start = source.index("#elif defined(NRF54LM20A_XXAA)")
         end = source.index("#elif defined(NRF54LM20B_XXAA)", start)
         lm20a = source[start:end]
-        self.assertIn("8000640UL, 3000150UL", lm20a)
+        # Measured on hardware: msDelay(100) read 99,996 us with 8,000,640.
+        self.assertIn("8000320UL, 3000150UL", lm20a)
+        self.assertNotIn("8000640UL", lm20a)
         self.assertIn("16000000UL, 3000000UL", lm20a)
         self.assertNotIn("4000320UL, 3000150UL", lm20a)
-        self.assertEqual(128000000 * 1000000 // 8000640, 15998720)
+        self.assertEqual(128000000 * 1000000 // 8000320, 15999360)
+        self.assertEqual(15998720 * 100000 // 99996, 15999359)
 
     def test_lm20b_remains_unmeasured(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
