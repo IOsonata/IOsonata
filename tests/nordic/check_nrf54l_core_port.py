@@ -255,6 +255,48 @@ class Nrf54lCorePort(unittest.TestCase):
             self.assertEqual(library.count(own), 8)
         self.assertFalse((ROOT / "ARM/Nordic/nRF54/nRF54LM20x").exists())
 
+    def test_lm20_managed_example_library_paths_match_configuration(self):
+        # Every example must link its own target's corresponding library
+        # build: Debug -> Debug, Release -> Release. The original LM20
+        # split accidentally made Release link the Debug archive.
+        import re
+
+        for variant in ("A", "B"):
+            base = ROOT / ("ARM/Nordic/nRF54/nRF54LM20" + variant)
+            projects = sorted(base.glob("exemples/*/ioc/.cproject"))
+            self.assertEqual(len(projects), 40)
+            for path in projects:
+                source = path.read_text()
+                sections = list(re.finditer(
+                    r'<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.'
+                    r'core.configurationDataProvider"[^>]*name="([^"]+)"',
+                    source))
+                self.assertGreaterEqual(len(sections), 2, str(path))
+                for i, match in enumerate(sections):
+                    config = match.group(1)
+                    end = sections[i + 1].start() if i + 1 < len(sections) else len(source)
+                    section = source[match.start():end]
+                    library_paths = re.findall(
+                        r'lib/ioc/(Debug(?:_SDC)?|Release(?:_SDC)?)',
+                        section)
+                    expected = "Release" if config.startswith("Release") else "Debug"
+                    for linked in library_paths:
+                        with self.subTest(project=str(path.relative_to(ROOT)),
+                                          config=config, linked=linked):
+                            self.assertTrue(linked.startswith(expected))
+                    if library_paths:
+                        self.assertIn("IOsonata_nRF54LM20" + variant, section)
+
+    def test_lm20a_default_startup_restored_after_64mhz_validation(self):
+        source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
+        self.assertNotIn("TEMPORARY: force LM20A default startup", source)
+        self.assertNotIn("g_nRF54LM20AClockTrace", source)
+        self.assertIn("OSCILLATORS_PLL_FREQ_FREQ_CK128M;", source)
+        for relative in ("lib/ioc/.cproject",
+                         "exemples/CoreClockTest/ioc/.cproject"):
+            project = (ROOT / "ARM/Nordic/nRF54/nRF54LM20A" / relative).read_text()
+            self.assertNotIn("NRF_CONFIG_CPU_FREQ_MHZ=64", project)
+
     def test_both_managed_libraries_link_backends(self):
         for mcu in ("nRF54L15", "nRF54LM20A", "nRF54LM20B"):
             project = (ROOT / "ARM/Nordic/nRF54" / mcu /
