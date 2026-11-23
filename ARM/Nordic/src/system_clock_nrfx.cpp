@@ -939,15 +939,25 @@ extern "C" bool nRFxSleepLfClockRunning(void)
 }
 
 // A STOP issued here is settled once LFCLKSTAT reports the clock stopped,
-// or once a BLE stack controls CLOCK and runs LFCLK itself. Without this
+// or once a BLE stack that drives CLOCK itself runs LFCLK. Without this
 // the flag would stay set after the last release until the next direct
 // enable, and refuse a later MPSL request or a timer enable under the
-// SoftDevice. Call with interrupts masked.
+// SoftDevice. With the MPSL external clock driver, LFCLK is still driven
+// here, so only LFCLKSTAT settles the stop. Call with interrupts masked.
 static void nRFxLfclkStopSettle(void)
 {
+	bool stackClock;
+
+	stackClock = nRFxClockSdEnabled();
+#if defined(NRF52_SERIES)
+	stackClock = stackClock ||
+		(nRFxMpslActive() && !s_bNRFxMpslExternalClock);
+#else
+	stackClock = stackClock || nRFxMpslActive();
+#endif
 	if (s_bNRFxLfclkStopPending &&
 		((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U ||
-		nRFxMpslActive() || nRFxClockSdEnabled()))
+		stackClock))
 	{
 		s_bNRFxLfclkStopPending = false;
 	}
