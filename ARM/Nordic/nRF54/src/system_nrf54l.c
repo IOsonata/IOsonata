@@ -82,6 +82,11 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 extern uint32_t SystemMicroSecLoopCnt;
 uint32_t SystemnsDelayFactor = 1000000UL;
 
+#if defined(NRF54LM20A_XXAA)
+// TEMPORARY: capture the startup sequence before the UART is available.
+volatile uint32_t g_nRF54LM20AClockTrace[7];
+#endif
+
 #if defined ( __CC_ARM ) || defined ( __GNUC__ )
     uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_DEFAULT;
 #elif defined ( __ICCARM__ )
@@ -158,6 +163,18 @@ void SystemCoreClockUpdate(void)
 void SystemInit(void)
 {
     #ifdef __CORTEX_M
+#if defined(NRF54LM20A_XXAA)
+	g_nRF54LM20AClockTrace[0] = 0x54A64001UL;
+#if defined(NRF_SKIP_CLOCK_CONFIGURATION)
+	g_nRF54LM20AClockTrace[1] = 0U;
+#elif defined(NRF_CONFIG_CPU_FREQ_MHZ)
+	g_nRF54LM20AClockTrace[1] = NRF_CONFIG_CPU_FREQ_MHZ;
+#else
+	g_nRF54LM20AClockTrace[1] = 64U;
+#endif
+	g_nRF54LM20AClockTrace[2] = NRF_OSCILLATORS->PLL.FREQ;
+	g_nRF54LM20AClockTrace[3] = NRF_OSCILLATORS->PLL.CURRENTFREQ;
+#endif
         #ifndef NRF_SKIP_CLOCK_CONFIGURATION
             #if defined(NRF_CONFIG_CPU_FREQ_MHZ) && (NRF_CONFIG_CPU_FREQ_MHZ==64)
                 NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK64M;
@@ -175,6 +192,9 @@ void SystemInit(void)
                 #endif
             #endif
 
+#if defined(NRF54LM20A_XXAA)
+			g_nRF54LM20AClockTrace[4] = NRF_OSCILLATORS->PLL.FREQ;
+#endif
 			/* Start the selected PLL and wait for the clock to be ready. */
 			NRF_CLOCK_S->EVENTS_PLLSTARTED = 0UL;
 			NRF_CLOCK_S->TASKS_PLLSTART = 1UL;
@@ -183,6 +203,10 @@ void SystemInit(void)
 			}
 
 			SystemCoreClockUpdate();
+#if defined(NRF54LM20A_XXAA)
+			g_nRF54LM20AClockTrace[5] = NRF_OSCILLATORS->PLL.CURRENTFREQ;
+			g_nRF54LM20AClockTrace[6] = SystemCoreClock;
+#endif
 
 			/* Restore IOsonata instruction caching for RRAM execution. */
 			NRF_ICACHE->ENABLE = CACHE_ENABLE_ENABLE_Enabled;
