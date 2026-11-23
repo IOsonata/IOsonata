@@ -393,6 +393,7 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	TimerCfg_t selected;
 	int devno;
 	int candidate;
+	uint32_t state;
 	bool automatic;
 
 	if (pTimer == nullptr || pCfg == nullptr ||
@@ -402,7 +403,7 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	}
 	// Reserve the selected group atomically. Never assign MPSL's
 	// final group (CC7..11) on an automatic timer request.
-	uint32_t state = DisableInterrupt();
+	state = DisableInterrupt();
 	automatic = pCfg->DevNo == -1;
 	selected = *pCfg;
 	if (automatic)
