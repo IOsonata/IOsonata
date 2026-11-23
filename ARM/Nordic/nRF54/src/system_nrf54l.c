@@ -168,7 +168,13 @@ void SystemInit(void)
             #elif defined(NRF_CONFIG_CPU_FREQ_MHZ)
                 #error "Illegal CPU frequency set"
             #else
-                NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
+                // TEMPORARY: LM20A 64-MHz CoreClockTest endpoint calibration.
+                // Restore the LM20A 128-MHz default after measurement.
+                #if defined(NRF54LM20A_XXAA)
+                    NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK64M;
+                #else
+                    NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
+                #endif
             #endif
 
 			/* Start the selected PLL and wait for the clock to be ready. */
