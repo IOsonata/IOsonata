@@ -200,6 +200,9 @@ int TimerGetHighFreqDevNo()
 // TimerInit selects an unused LF timer for DevNo=-1; TimerDisable
 // returns only automatically selected timers to the timer driver.
 extern "C" bool nRFxSleepLfClockRunning(void);
+#if defined(NRF5340_XXAA_APPLICATION)
+extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);
+#endif
 
 // Signed end-to-end compensation in LF ticks. Positive values shorten
 // the programmed timer; negative values lengthen it. These are production
@@ -273,6 +276,9 @@ extern "C" bool sDelay(uint32_t Seconds)
 	uint64_t nanoseconds;
 	uint32_t frequency;
 	bool warmClock;
+#if defined(NRF5340_XXAA_APPLICATION)
+	uint32_t startupWaitUs;
+#endif
 	bool initialized;
 	bool success;
 
@@ -303,6 +309,13 @@ extern "C" bool sDelay(uint32_t Seconds)
 	cfg.EvtHandler = nullptr;
 	cfg.bTickInt = false;
 	initialized = TimerInit(&s_SleepTimer, &cfg);
+#if defined(NRF5340_XXAA_APPLICATION)
+	// LFCLK may start immediately after a STOP, or require hundreds of
+	// milliseconds for LFXO. Its pre-init running bit cannot distinguish
+	// these cases. Use the clock owner's actual startup wait this time.
+	startupWaitUs = initialized && !warmClock ?
+		nRFxSleepLfClockStartupWaitUs() : 0U;
+#endif
 	success = initialized;
 	if (initialized)
 	{
@@ -330,6 +343,17 @@ extern "C" bool sDelay(uint32_t Seconds)
 			compensation = Seconds == chunk ?
 				(warmClock ? NRF_SDELAY_WARM_OVERHEAD_TICKS :
 					NRF_SDELAY_COLD_OVERHEAD_TICKS) : 0U;
+#if defined(NRF5340_XXAA_APPLICATION)
+			// Startup wait is counted in calibrated 100-us polls by the
+			// Nordic clock owner. Compensate what actually happened, rather
+			// than assuming every stopped-LFCLK request takes 260 ms.
+			if (!warmClock && Seconds == chunk)
+			{
+				compensation = (int32_t)(((uint64_t)startupWaitUs *
+					frequency + 500000ULL) / 1000000ULL) +
+					NRF_SDELAY_WARM_OVERHEAD_TICKS;
+			}
+#endif
 			if (compensation > 0)
 			{
 				// Never program less than the RTC's two-tick compare lead.
