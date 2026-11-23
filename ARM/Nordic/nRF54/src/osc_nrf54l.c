@@ -45,9 +45,8 @@ __WEAK McuOsc_t g_McuOsc = {
 	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 10, 100},
 	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 70},
 #else
-	// Nordic DK
-	// 32MHz, 8pF
-	// 32.768kHz, 9pF
+	// Nordic nRF54L15 DK and IBK-NRF54L15: same crystal specifications.
+	// HFXO: 32 MHz, 8 pF; LFXO: 32.768 kHz, 9 pF.
 	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 80},
 	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 90},
 #endif

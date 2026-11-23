@@ -203,10 +203,12 @@ running before the application SystemInit retains its settings: the routine
 does not overwrite capacitance while HFXO, system LFXO, or a directly
 GRTC-owned LFXO is active.
 
-**Board requirement:** The weak g_McuOsc default in osc_nrf54l.c describes
-the Nordic DK. Production IBK-NRF54L15 and other boards must provide
-correct board-specific oscillator load capacitances. Do not assume the
-Nordic DK capacitor values apply to an IBK board.
+**Board oscillator configuration:** The Nordic nRF54L15 DK and
+IBK-NRF54L15 use the same crystal specifications: 32 MHz with an 8 pF
+HFXO load capacitance and 32.768 kHz with a 9 pF LFXO load capacitance.
+The existing weak `g_McuOsc` defaults in `osc_nrf54l.c` apply to both
+boards; no IBK-specific override is required. Other boards with different
+crystal specifications must override `g_McuOsc`.
 
 To diagnose remaining GRTC timing differences, capture these actual
 register values at the indicated checkpoints in a **separate debugger run**
