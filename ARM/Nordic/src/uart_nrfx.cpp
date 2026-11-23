@@ -179,6 +179,9 @@ typedef struct __nRF_UART_Dev {
 #if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 	uint32_t TxDmaLen;
 #endif
+#if defined(NRF54L_SERIES)
+	bool bTxStopPending;		// TX END -> STOP -> TXSTOPPED handoff
+#endif
 	uint8_t RxFifoMem[NRFX_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[NRFX_UART_CFIFO_SIZE];
 	uint8_t RxDmaMem[NRFX_UART_RXDMA_SIZE];
@@ -585,6 +588,91 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	}
 
 #ifdef UARTE_PRESENT
+#if defined(NRF54L_SERIES)
+	// nRF54L UARTE uses a STOP/STOPPED handshake between independent DMA
+	// blocks. ENDTX alone must not recycle the TX buffer or notify completion:
+	// a new STARTTX can otherwise overlap the previous hardware sequence.
+	// Nordic's non-linked nrfx UARTE path stops on ENDTX and retires TX only
+	// after TXSTOPPED. Interrupts remain enabled for both events.
+	txEnd = NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) != 0U;
+	if (txEnd)
+	{
+		NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0U;
+		if (dev->TxDmaLen != 0U && !dev->bTxStopPending)
+		{
+			sent = dev->pDmaReg->DMA.TX.AMOUNT;
+			if (sent > dev->TxDmaLen)
+			{
+				sent = dev->TxDmaLen;
+			}
+			if (sent < dev->TxDmaLen)
+			{
+				remaining = dev->TxDmaLen - sent;
+				memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);
+				dev->TxDmaLen = remaining;
+			}
+			else
+			{
+				dev->TxDmaLen = 0U;
+			}
+			dev->bTxStopPending = true;
+			NRFX_UARTE_TASKS_STOPTX(dev->pDmaReg) = 1U;
+		}
+	}
+
+	if (dev->pDmaReg->EVENTS_TXSTOPPED != 0U)
+	{
+		dev->pDmaReg->EVENTS_TXSTOPPED = 0U;
+		if (dev->bTxStopPending)
+		{
+			dev->bTxStopPending = false;
+			if (dev->TxDmaLen != 0U)
+			{
+				// STOP retired a partial DMA. Retry its unsent suffix;
+				// do not dequeue the next FIFO block or signal TX_EMPTY.
+				NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0U;
+				NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = dev->TxDmaLen;
+				NRFX_UARTE_TXD_PTR(dev->pDmaReg) =
+					(uint32_t)dev->TxDmaMem;
+				NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1U;
+			}
+			else
+			{
+				txLen = NRFX_UART_TXDMA_SIZE;
+				pTx = CFifoGetMultiple(dev->pUartDev->hTxFifo, &txLen);
+				if (pTx != nullptr)
+				{
+					dev->pUartDev->bTxReady = false;
+					memcpy(dev->TxDmaMem, pTx, txLen);
+					dev->TxDmaLen = (uint32_t)txLen;
+					NRFX_UARTE_EVENTS_ENDTX(dev->pDmaReg) = 0U;
+					NRFX_UARTE_TXD_MAXCNT(dev->pDmaReg) = txLen;
+					NRFX_UARTE_TXD_PTR(dev->pDmaReg) =
+						(uint32_t)dev->TxDmaMem;
+					NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1U;
+				}
+				else
+				{
+					dev->pUartDev->bTxReady = true;
+				}
+
+				// Only a fully stopped last block is physically complete.
+				// User callbacks may enqueue additional data.
+				if (pDev->EvtCB != nullptr)
+				{
+					(void)pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY,
+						nullptr, CFifoAvail(dev->pUartDev->hTxFifo));
+					if (dev->pUartDev->bTxReady &&
+						CFifoUsed(dev->pUartDev->hTxFifo) == 0)
+					{
+						(void)pDev->EvtCB(pDev,
+							DEVINTRF_EVT_TX_FIFO_EMPTY, nullptr, 0);
+					}
+				}
+			}
+		}
+	}
+#else
 	// TXSTOPPED is not a DMA completion event. In particular, anomaly
 	// workarounds at startup may leave it set after the first TX begins.
 	// Only ENDTX may retire a software FIFO block or start the next DMA.
@@ -672,6 +760,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 			}
 		}
 	}
+#endif
 #endif
 
 	// Handle errors
@@ -1605,6 +1694,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 #if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 	s_nRFxUARTDev[devno].TxDmaLen = 0U;
 #endif
+#if defined(NRF54L_SERIES)
+	s_nRFxUARTDev[devno].bTxStopPending = false;
+#endif
 
 
 	pDev->DevIntrf.bTxReady = true;
@@ -1706,6 +1798,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 							  (UARTE_INTENSET_NCTS_Set << UARTE_INTENSET_NCTS_Pos) |
 							  (UARTE_INTENSET_DMARXEND_Set << UARTE_INTENSET_DMARXEND_Pos) |
 							  (UARTE_INTENSET_DMATXEND_Set << UARTE_INTENSET_DMATXEND_Pos) |
+							  (UARTE_INTENSET_TXSTOPPED_Set << UARTE_INTENSET_TXSTOPPED_Pos) |
 							  (UARTE_INTEN_FRAMETIMEOUT_Enabled << UARTE_INTEN_FRAMETIMEOUT_Pos);
 #else
 			s_nRFxUARTDev[devno].pDmaReg->INTENSET = (UARTE_INTENSET_RXDRDY_Set << UARTE_INTENSET_RXDRDY_Pos) |
