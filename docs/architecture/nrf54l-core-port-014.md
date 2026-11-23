@@ -730,3 +730,39 @@ hardware behavior, not by an untested live PLL modification.
 Nordic references:
 - https://docs.nordicsemi.com/r/bundle/ps_nrf54lm20a/
 - https://docs.nordicsemi.com/r/bundle/ps_nrf54lm20a/page/clock.html-concept_rp5_fgp_bs
+
+## nRF54LM20A 64-MHz endpoint measurement and restore (November 23, 2026)
+
+The temporary 64-MHz startup test confirmed
+`Startup CPU 64000000 Hz` and the high-frequency hardware timer.
+The initial generic fallback divisor of 16,000,000 gave an incorrect
+`msDelay(100)` of approximately 50,010 us; all 11 timers then reported
+approximately 125 ms against a requested 250 ms, and the associated
+continuous-callback windows were too short. The independent
+`nsDelay(100 ms)` measured approximately 100,008 us; cold/warm/reuse
+`sDelay(1)` remained approximately 1,000,035/1,000,023/1,000,022 us.
+The 30 test failures are explained by the inadequate **microsecond**
+fallback factor, not evidence of 30 independent timer-driver faults.
+
+The HF-timer calibration reported **7,998,400 us loops/s** and
+**21,331,413 ns loops/s** at 64 MHz. Derived divisors are
+8,001,600 (us) and 3,000,270 (ns), respectively.
+At 128 MHz, previously validated values are **15,999,360 us loops/s**
+and **42,664,533 ns loops/s**. Both measured endpoint pairs now reside
+in the nRF54LM20A System Core and are used by
+`ArmDelayClockInterpolate()`, independently for microseconds and
+nanoseconds. Runtime factors select the matching endpoint or
+interpolate at intermediate CPU frequencies.
+
+The temporary `SystemInit()` 64-MHz default has been **reverted**.
+Normal nRF54LM20A boot again defaults to **128 MHz**, while explicit
+`NRF_CONFIG_CPU_FREQ_MHZ=64` continues to select 64 MHz for a dedicated
+calibration or verification build. No LM20B, L15, timer-driver or
+`g_McuOsc` setting was changed by this correction.
+
+**Validation outstanding:** clean-build both LM20A library and
+CoreClockTest at 64 MHz using the explicit startup selection and
+confirm 100-ms `msDelay`/`nsDelay`, all 11 timers and zero
+failures. Then verify normal default 128-MHz boot. The 64-MHz
+measurement run itself was expected to fail with the old fallback
+factor; do not count it as a passing 64-MHz full test.
