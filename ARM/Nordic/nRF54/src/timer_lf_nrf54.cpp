@@ -109,7 +109,26 @@ static inline uint32_t nRFxGrtcCCMask(const nRFGrtcData_t &Rtc)
 
 static bool nRFxGrtcEnable(TimerDev_t * const pTimer)
 {
-	nRFGrtcData_t &rtc = s_nRfxGrtcData[pTimer->DevNo];
+	nRFGrtcData_t *pRtc;
+	uint32_t state;
+	int devno;
+
+	if (pTimer == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	pRtc = &s_nRfxGrtcData[devno];
+	if (pRtc->pTimer != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 
 	if ((NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk) == 0)
 	{
@@ -117,17 +136,18 @@ static bool nRFxGrtcEnable(TimerDev_t * const pTimer)
 		NRF_GRTC->TASKS_START = 1;
 	}
 
-	s_bGrtcEnabled[pTimer->DevNo] = true;
+	s_bGrtcEnabled[devno] = true;
 
 	// Interrupt on while a trigger is armed, see nRFxGrtcEnableTrigger. Off
 	// otherwise: the SoftDevice owns GRTC_3_IRQn and wants it off when it
 	// starts, after the Init of timer 3 (bt_app_bm.cpp).
-	if (rtc.pInt[0] & nRFxGrtcCCMask(rtc))
+	if (pRtc->pInt[0] & nRFxGrtcCCMask(*pRtc))
 	{
-		NVIC_EnableIRQ(nRFxGrtcIrqNo(pTimer->DevNo));
+		NVIC_EnableIRQ(nRFxGrtcIrqNo(devno));
 	}
 
-    return true;
+	EnableInterrupt(state);
+	return true;
 }
 
 // The triggers are kept, their interrupt off until Enable. The SYSCOUNTER
