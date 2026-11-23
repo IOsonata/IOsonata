@@ -51,6 +51,20 @@ class DelayCalibrationDwt(unittest.TestCase):
 			"ArmDelayCalibrationDwtAllowed"):
 			self.assertNotIn(forbidden, src)
 
+	def test_optional_mcu_dwt_gate_is_restored(self):
+		src = self.cal
+		start = src.index("static inline bool DelayCalibrationMeasure(")
+		end = src.index("static inline bool DelayCalibrationFromTimer(", start)
+		function = src[start:end]
+		self.assertIn("SystemDelayDwtPrepare()", function)
+		self.assertIn("SystemDelayDwtRestore()", function)
+		self.assertLess(function.index("SystemDelayDwtPrepare()"),
+			function.index("ArmDelayCalibrate(&measured, cpuHz)"))
+		self.assertLess(function.index("ArmDelayCalibrate(&measured, cpuHz)"),
+			function.index("SystemDelayDwtRestore()"))
+		self.assertIn("SystemMicroSecLoopCnt = oldUs;", function)
+		self.assertIn("SystemnsDelayFactor = oldNs;", function)
+
 	def test_clock_changes_use_cached_factors(self):
 		app = APP.read_text(encoding="utf-8")
 		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", app)

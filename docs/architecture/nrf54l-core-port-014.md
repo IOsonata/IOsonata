@@ -140,6 +140,31 @@ tests, which contain only Debug and Release configurations. Build/validate
 BLE/MPSL coexistence separately. The command has not been executed in this
 session and does not replace the board tests.
 
+## DWT-based delay-factor calibration for nRF54L
+
+Nordic documents DWT debug support on nRF54L15, but the first on-board
+CoreClockTest runs reported DWT unavailable. `DelayCalibrationMeasure` now
+uses the optional MCU-owned `SystemDelayDwtPrepare`/`SystemDelayDwtRestore`
+hooks to enable the nRF54L TAD debug gate temporarily around the existing
+DWT/CYCCNT probe. The previous TAD enable state is restored, and no
+debug trace pins are configured. The DWT's previous CTRL/DEMCR state is
+already restored by the generic calibration helper.
+
+The diagnostic first attempts DWT and prints measured loop rates and
+derived divisors at the configured CPU frequency. If DWT remains inaccessible
+the independent HF Timer measurement still reports candidate factors.
+`SystemCoreClockUpdate()` continues to apply the last
+hardware-validated production constants. Do **not** replace these with an
+unverified cycle count: first obtain the on-board DWT result and independently
+check both 100 ms delay APIs against the HF Timer, then commit the validated
+divisors for each supported CPU speed. The runtime delay functions still
+never depend on DWT and clock updates never run a calibration loop.
+
+**Hardware DWT calibration has not yet been performed or confirmed in this
+session.** If CoreClockTest still reports the counter unavailable, inspect
+whether the build exposes DWT and whether the security/debug gate allows
+software access before assuming a numeric calibration result.
+
 ## Hardware acceptance - follow-up required
 
 For **each** nRF54L15 and nRF54LM20x target, run:

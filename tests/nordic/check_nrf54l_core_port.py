@@ -122,6 +122,18 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("s_nRFxUARTDev[devno].bTxStopPending = false;", uart)
         self.assertIn("#else\n\t// TXSTOPPED is not a DMA completion event.", uart)
 
+    def test_nrf54l_dwt_calibration_gate(self):
+        source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
+        begin = source.index("bool SystemDelayDwtPrepare(void)")
+        end = source.index("void SystemCoreClockUpdate(void)", begin)
+        hook = source[begin:end]
+        self.assertIn("NRF_TAD_S->ENABLE = s_DelayDwtTadPrevious | TAD_ENABLE_ENABLE_Msk;", hook)
+        self.assertIn("NRF_TAD_S->ENABLE = s_DelayDwtTadPrevious;", hook)
+        self.assertIn("s_bDelayDwtTadPrepared = false;", hook)
+        self.assertNotIn("TRACE_PORT->PIN_CNF", hook)
+        self.assertNotIn("ArmDelayCalibrate(", source)
+        self.assertNotIn("DWT->", source)
+
     def test_sdelay_uses_generic_timer_and_grtc(self):
         source = self.timer
         self.assertIn("defined(NRF54L_SERIES)", source)

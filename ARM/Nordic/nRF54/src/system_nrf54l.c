@@ -98,6 +98,40 @@ uint32_t SystemCoreClockGet(void)
 	return SystemCoreClock;
 }
 
+// Enable nRF54L trace/debug only for a foreground DWT calibration.
+// The test's delay helper restores both DWT state and the TAD gate.
+// No SWO/ETM pin mux is modified here; an existing debugger's state wins.
+#if defined(NRF54L_SERIES) && !defined(NRF_TRUSTZONE_NONSECURE) && \
+	defined(NRF_TAD_S) && defined(TAD_ENABLE_ENABLE_Msk)
+static uint32_t s_DelayDwtTadPrevious;
+static bool s_bDelayDwtTadPrepared;
+
+bool SystemDelayDwtPrepare(void)
+{
+	if (s_bDelayDwtTadPrepared)
+	{
+		return false;
+	}
+	s_DelayDwtTadPrevious = NRF_TAD_S->ENABLE;
+	NRF_TAD_S->ENABLE = s_DelayDwtTadPrevious | TAD_ENABLE_ENABLE_Msk;
+	__DSB();
+	__ISB();
+	s_bDelayDwtTadPrepared = true;
+	return true;
+}
+
+void SystemDelayDwtRestore(void)
+{
+	if (s_bDelayDwtTadPrepared)
+	{
+		NRF_TAD_S->ENABLE = s_DelayDwtTadPrevious;
+		__DSB();
+		__ISB();
+		s_bDelayDwtTadPrepared = false;
+	}
+}
+#endif
+
 void SystemCoreClockUpdate(void)
 {
 #if !defined(NRF_TRUSTZONE_NONSECURE)
