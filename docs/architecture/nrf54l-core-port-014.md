@@ -666,3 +666,21 @@ are confirmed at 128 MHz using the measured divisor. This is additional
 hardware evidence following the earlier four-run clock test and the
 five-boot CorePowerTest capture. It does not validate 64-MHz scaling,
 nRF54LM20B, BLE/MPSL coexistence or the managed build matrix.
+
+## nRF54LM20A CorePowerTest two-boot follow-up (November 23, 2026)
+
+A further supplied capture contains two complete CorePowerTest boots with
+zero failures: first reset reason `0x00000002` (pin reset, 23 checks), then
+`0x00000100` (System OFF pin wake, 26 checks). Both pass three standby timer
+wakes, CPU/peripheral clock and UART-rate restoration, static/stack RAM checks,
+retention configuration, and wake-pin rearm: **6/6 standby cycles**. The second
+boot explicitly passes System OFF reset-on-wake and both RAM retention and
+non-retention checks. This capture corroborates earlier LM20A validation;
+because overlap with the prior five-boot log is not established, do not add
+these results to the previously counted independent wake totals.
+
+Both summaries report `evicted=0` and an empty SysLog FIFO, with
+`uartRejected=0x2aa5` and `0x3f70` respectively. These are unaccepted
+UART submission attempts, not proven wire-byte losses. Unsupported reduced
+CPU power mode is not a test failure. No driver change or additional power
+calibration is indicated by these results.
