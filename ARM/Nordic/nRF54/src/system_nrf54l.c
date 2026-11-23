@@ -372,13 +372,6 @@ void SystemInit(void)
             #endif
         #endif
 
-		// Keep the Nordic MDK 9.2.2 SystemInit sequence.
-		// IOsonata applies board FICR-calibrated crystal capacitors
-		// before application clock users can start LFXO or HFXO.
-#if !defined(NRF_TRUSTZONE_NONSECURE) && !defined(NRF_SKIP_CLOCK_CONFIGURATION)
-		SystemOscInit();
-#endif
-
     #endif
 }
 
