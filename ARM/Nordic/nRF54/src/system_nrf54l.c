@@ -125,20 +125,18 @@ void SystemCoreClockUpdate(void)
 			16000000UL, 3000000UL);
 	}
 #elif defined(NRF54LM20A_XXAA)
-	// CoreClockTest, nRF54LM20A at 128 MHz: 15,999,359 us loops/s and
-	// 42,664,533 ns loops/s. msDelay(100) measured 99,996 us with the
-	// earlier 8,000,640 us divisor.
-	if (SystemCoreClock == 128000000UL)
-	{
-		(void)ArmDelayClockSetDivisors(SystemCoreClock,
-			8000320UL, 3000150UL);
-	}
-	else
-	{
-		// 64 MHz has not yet been measured on hardware.
-		(void)ArmDelayClockSetDivisors(SystemCoreClock,
-			16000000UL, 3000000UL);
-	}
+	// Hardware calibration at both PLL startup frequencies:
+	// 64 MHz: 7,998,400 us and 21,331,413 ns loops/s.
+	// 128 MHz: 15,999,360 us and 42,664,533 ns loops/s.
+	// System Core owns runtime factors; the test only measures endpoints.
+	static const ArmDelayPoint_t s_DelayLow = {
+		64000000UL, 7998400UL, 21331413UL
+	};
+	static const ArmDelayPoint_t s_DelayHigh = {
+		128000000UL, 15999360UL, 42664533UL
+	};
+	(void)ArmDelayClockInterpolate(SystemCoreClock,
+		&s_DelayLow, &s_DelayHigh);
 #elif defined(NRF54LM20B_XXAA)
 	// LM20B still awaits separate hardware calibration.
 	if (SystemCoreClock == 128000000UL)
@@ -168,13 +166,7 @@ void SystemInit(void)
             #elif defined(NRF_CONFIG_CPU_FREQ_MHZ)
                 #error "Illegal CPU frequency set"
             #else
-                // TEMPORARY: LM20A 64-MHz CoreClockTest endpoint calibration.
-                // Restore the LM20A 128-MHz default after measurement.
-                #if defined(NRF54LM20A_XXAA)
-                    NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK64M;
-                #else
-                    NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
-                #endif
+                NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
             #endif
 
 			/* Start the selected PLL and wait for the clock to be ready. */
