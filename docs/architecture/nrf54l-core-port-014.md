@@ -151,8 +151,11 @@ debug trace pins are configured. The DWT's previous CTRL/DEMCR state is
 already restored by the generic calibration helper.
 
 The diagnostic first attempts DWT and prints measured loop rates and
-derived divisors at the configured CPU frequency. If DWT remains inaccessible
-the independent HF Timer measurement still reports candidate factors.
+derived divisors at the configured CPU frequency. The DWT result is now
+retained as the primary measurement, rather than overwritten by the HF
+Timer-derived factor. The HF Timer independently measures public delay APIs
+and reports whether its inferred factors agree with DWT within 2%. If DWT is
+unavailable, the HF Timer produces the fallback candidate factors.
 `SystemCoreClockUpdate()` continues to apply the last
 hardware-validated production constants. Do **not** replace these with an
 unverified cycle count: first obtain the on-board DWT result and independently

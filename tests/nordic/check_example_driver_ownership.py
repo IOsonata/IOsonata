@@ -72,10 +72,14 @@ class DemoDriverOwnership(unittest.TestCase):
 		end = source.index("static void CoreClockTestDelayCalibrationRecord(", start)
 		section = source[start:end]
 
-		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", section)
+		self.assertIn("dwtMeasured = DelayCalibrationMeasure(pSample);", section)
+		self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed", section)
+		self.assertIn("*pSample = timerPoint;", section)
+		self.assertIn("return dwtMeasured || valid;", section)
+		self.assertIn('CoreClockTestResult("DWT/HF delay-factor agreement", agreement);', section)
 		self.assertIn("TimerGetHighFreqDevNo()", section)
 		self.assertIn("TimerGetHighFreqDevCount()", section)
-		self.assertLess(section.index("ArmDelayCalibrate(&measured, cpuHz)"),
+		self.assertLess(section.index("dwtMeasured = DelayCalibrationMeasure(pSample);"),
 			section.index("TimerGetHighFreqDevCount()"))
 		self.assertIn("TimerGetMicrosecond(&s_RetainedTimer)", section)
 		self.assertNotIn("TimerGetLowFreqDevCount()", section)
@@ -84,7 +88,7 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("nsDelay(100000000U);", section)
 		self.assertIn("CoreClockTestDelayCalibrationRecord();", source)
 		self.assertIn("CoreClockTestDelayCalibrationReport();", source)
-		self.assertIn("ArmDelayClockInterpolate(midpoint, &low, &high)", source)
+		self.assertIn("DelayCalibrationInterpolate(midpoint, &s_DelayLow,", source)
 		self.assertIn("if (core != s_DelayHigh.CpuHz", source)
 
 	def test_core_clock_peripheral_clock_interface(self):
