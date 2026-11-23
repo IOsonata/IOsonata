@@ -89,7 +89,8 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("nsDelay(100000000U);", section)
 		self.assertIn("CoreClockTestDelayCalibrationRecord();", source)
 		self.assertIn("CoreClockTestDelayCalibrationReport();", source)
-		self.assertIn("DelayCalibrationInterpolate(midpoint, &s_DelayLow,", source)
+		self.assertNotIn("DelayCalibrationInterpolate(", source)
+		self.assertIn("Delay two-point calibration: two CPU speeds measured", source)
 		self.assertIn("if (core != s_DelayHigh.CpuHz", source)
 
 	def test_core_clock_peripheral_clock_interface(self):

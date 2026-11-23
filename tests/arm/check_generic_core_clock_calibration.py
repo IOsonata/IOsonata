@@ -21,7 +21,6 @@ class GenericDelayCalibration(unittest.TestCase):
 				self.assertNotIn(forbidden, source)
 		self.assertIn("DelayCalibrationMeasure(pSample)", source)
 		self.assertIn("DelayCalibrationFromTimer(", source)
-		self.assertIn("static bool DelayCalibrationInterpolate(", source)
 
 	def test_architectures_share_api_without_sharing_mechanisms(self):
 		arm = ARM.read_text(encoding="utf-8")
@@ -37,17 +36,18 @@ class GenericDelayCalibration(unittest.TestCase):
 		self.assertNotIn("ArmDelay", riscv)
 		self.assertIn("IOsonataRiscvDelayCycles", riscv)
 
-	def test_interpolation_is_local_to_core_clock_test(self):
+	def test_interpolation_is_owned_by_system_core(self):
 		source = TEST.read_text(encoding="utf-8")
 		arm = ARM.read_text(encoding="utf-8")
+		cal = ARM_CAL.read_text(encoding="utf-8")
 		riscv = RISCV.read_text(encoding="utf-8")
-		self.assertIn("static bool DelayCalibrationInterpolate(", source)
-		self.assertIn("pResult->UsLoopsPerSecond", source)
-		self.assertIn("pResult->NsLoopsPerSecond", source)
+		self.assertNotIn("DelayCalibrationInterpolate(", source)
+		self.assertNotIn("ArmDelayClockInterpolate(", source)
+		self.assertIn("ArmDelayClockInterpolate(", cal)
+		self.assertIn("CoreClockTestDelayCalibrationReport();", source)
+		self.assertIn("Delay two-point calibration: two CPU speeds measured", source)
 		self.assertNotIn("DelayCalibrationInterpolate(", arm)
-		self.assertNotIn("DelayCalibrationInterpolate(", cal)
 		self.assertNotIn("DelayCalibrationInterpolate(", riscv)
-		self.assertTrue(ARM_CAL.exists())
 
 	def test_only_generic_system_core_clock_header_remains(self):
 		canonical = ROOT / "include/coredev/system_core_clock.h"
