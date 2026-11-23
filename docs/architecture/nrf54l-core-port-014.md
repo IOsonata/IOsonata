@@ -269,6 +269,46 @@ has repeated passing hardware runs. CorePowerTest, nRF54LM20x
 hardware, 64-MHz calibration and separate BLE/MPSL coexistence
 remain independent acceptance tasks.
 
+## nRF54LM20x next hardware validation target
+
+The checked-in Eclipse/CDT `nRF54LM20x` managed library,
+`CoreClockTest` and `CorePowerTest` currently build for
+`NRF54LM20A_XXAA`. They reuse the common nRF54L system, GRTC, power
+and oscillator files and both examples have Debug and Release
+configurations. The pin map agrees with Nordic's nRF54LM20 DK:
+UARTE20 on P1.16 TX / P1.17 RX, and active-low Button 0 on P1.26.
+
+**Check the DK revision and SoC first.** Nordic states that DK
+revisions v0.3.4 and v0.5.4 have nRF54LM20A while v0.7.0 and
+later have nRF54LM20B. An LM20B board should not be taken as
+validated by a test binary compiled for `NRF54LM20A_XXAA`.
+Update/validate the target's managed MCU configuration for LM20B
+if that is the physical device, without replacing the A support.
+Nordic development hardware compatibility:
+https://docs.nordicsemi.com/r/bundle/comp_matrix_nrf54lm20a/page/comp/nrf54lm20a/nrf54lm20a_ic_rev_comp_with_dev_hw.html
+
+The nRF54LM20x startup still uses the uncalibrated generic CPU
+delay divisors, unlike the measured 128 MHz nRF54L15 factors.
+Run the generic `CoreClockTest` on the actual LM20 target and measure
+the delay calibration at its real startup CPU frequency before
+changing any production factors. Do not copy the L15 factors on
+assumption. Also verify that its board-provided `g_McuOsc`
+crystal load-capacitance settings are correct.
+
+For a verified nRF54LM20A board, clean-build the managed Release
+library and both Core tests:
+
+```sh
+python3 tests/nordic/build_managed_power_clock.py \
+    --target nrf54lm20x --config Release
+```
+
+First run `CoreClockTest` for startup clock, delay factors and all
+GRTC/HF timer cases. Then run `CorePowerTest` and test System OFF
+pin wake **without a debugger**, power-cycling after a debug session
+if necessary. Require each complete test to report zero failures,
+and verify post-System-OFF reset reason and retention readbacks.
+
 ## Managed clean-build commands
 
 The shared Nordic headless Eclipse/CDT build script now includes both nRF54L
