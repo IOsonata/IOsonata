@@ -25,7 +25,10 @@ are unchanged and MCU-independent. UART default is 1,000,000 baud.
   An auto-selected temporary Timer returns its group on Disable. Selection
   and reservation are interrupt-safe; release disables its interrupt group,
   clears the group's compare channels/events, and invalidates the old handle.
-  Reinitialization cannot replace a different live Timer handle.
+  A generic test may sequentially reuse its handle for another group only
+  after the previous timer is disabled and all its triggers are cleared.
+  The previous explicit reservation remains owned; live timers or armed
+  triggers cannot be rebound, and another Timer handle cannot take them.
 - `sDelay()` uses that generic TimerInit/EnableTrigger/DisableTrigger/Disable
   sequence. GRTC runs at 1 MHz, independently of the nRF52/nRF53 LFCLK
   startup-compensation logic; no unsupported fixed LFCLK compensation is
