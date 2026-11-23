@@ -496,3 +496,20 @@ This is a source-level correction **pending hardware verification**. Clean-build
 LM20A CoreClockTest and check 100-ms delay against the HF reference, followed
 by the complete timer matrix and CorePowerTest. Do not modify the PRBS-tested
 UART driver to address the independent serial-output issue.
+
+## LM20A two-run CoreClockTest follow-up (November 23, 2026)
+
+Both hardware runs report `msDelay(100)=99,996 us`, `nsDelay(100ms)=99,999 us`,
+and a calibrated us-loop rate of approximately 15,999,359/s. This confirms
+the **original** LM20A 8,000,640 divisor, so the earlier unvalidated 4,000,320
+change was reverted. The two cold `sDelay(1)` readings, 1,433,700 and
+1,433,521 us, isolate 433,700/433,521 us of LFXO startup overhead. Warm
+and reuse measurements are within 2 us of the requested second.
+
+Set an LM20A-only **provisional** cold correction of 433,611 GRTC ticks
+(1 MHz) and zero warm correction. The separate L15 correction remains
+434,775 ticks, while LM20B remains unmeasured. Rebuild/reflash and confirm
+cold `sDelay(1)` on multiple resets before accepting this compensation.
+All 11 timer devices and trigger/ownership checks passed in both provided
+runs. The previous serial-link limitation and 64-MHz endpoint calibration
+are independent open issues.
