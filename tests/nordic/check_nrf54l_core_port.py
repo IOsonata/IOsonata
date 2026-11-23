@@ -187,10 +187,10 @@ class Nrf54lCorePort(unittest.TestCase):
         start = source.index("#elif defined(NRF54LM20A_XXAA)")
         end = source.index("#elif defined(NRF54LM20B_XXAA)", start)
         lm20a = source[start:end]
-        self.assertIn("4000320UL, 3000150UL", lm20a)
+        self.assertIn("8000640UL, 3000150UL", lm20a)
         self.assertIn("16000000UL, 3000000UL", lm20a)
-        self.assertNotIn("8000640UL, 3000150UL", lm20a)
-        self.assertEqual(128000000 * 1000000 // 4000320, 31997440)
+        self.assertNotIn("4000320UL, 3000150UL", lm20a)
+        self.assertEqual(128000000 * 1000000 // 8000640, 15998720)
 
     def test_lm20b_remains_unmeasured(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
@@ -202,6 +202,17 @@ class Nrf54lCorePort(unittest.TestCase):
         l15 = source[source.index("#if defined(NRF54L15_XXAA)"):
                      source.index("#elif defined(NRF54LM20A_XXAA)")]
         self.assertIn("8000400UL, 3000150UL", l15)
+
+    def test_lm20a_cold_sdelay_is_separate_from_l15(self):
+        timer = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text()
+        l15 = timer[timer.index("#elif defined(NRF54L15_XXAA)"):
+                    timer.index("#elif defined(NRF54LM20A_XXAA)")]
+        lm20a = timer[timer.index("#elif defined(NRF54LM20A_XXAA)"):
+                      timer.index("#elif defined(NRF52832_XXAA)")]
+        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 434775", l15)
+        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 433611", lm20a)
+        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", lm20a)
+        self.assertEqual((1433700 + 1433521) // 2 - 433611, 999999)
 
     def test_both_managed_libraries_link_backends(self):
         for mcu in ("nRF54L15", "nRF54LM20x"):
