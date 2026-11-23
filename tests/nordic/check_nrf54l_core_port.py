@@ -97,6 +97,31 @@ class Nrf54lCorePort(unittest.TestCase):
                 self.assertIn("state = DisableInterrupt();", function)
                 self.assertIn("EnableInterrupt(state);", function)
 
+    def test_nrf54l_uarte_serializes_dma_tx_completion(self):
+        uart = (ROOT / "ARM/Nordic/src/uart_nrfx.cpp").read_text()
+        start = uart.index("#ifdef UARTE_PRESENT\n#if defined(NRF54L_SERIES)")
+        end = uart.index("\n#else", start)
+        block = uart[start:end]
+
+        # END initiates STOP, but does not retire an active transfer.
+        # STOPPED must arrive before the next FIFO block starts or the
+        # public physical-completion callback can be raised.
+        self.assertIn("dev->bTxStopPending = true;", block)
+        self.assertIn("NRFX_UARTE_TASKS_STOPTX(dev->pDmaReg) = 1U;", block)
+        self.assertIn("if (dev->pDmaReg->EVENTS_TXSTOPPED != 0U)", block)
+        self.assertIn("if (dev->bTxStopPending)", block)
+        self.assertIn("remaining = dev->TxDmaLen - sent;", block)
+        self.assertIn("memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining)", block)
+        self.assertIn("DEVINTRF_EVT_TX_FIFO_EMPTY", block)
+        self.assertLess(block.index("NRFX_UARTE_TASKS_STOPTX(dev->pDmaReg) = 1U;"),
+                        block.index("if (dev->pDmaReg->EVENTS_TXSTOPPED != 0U)"))
+        self.assertLess(block.index("if (dev->pDmaReg->EVENTS_TXSTOPPED != 0U)"),
+                        block.index("DEVINTRF_EVT_TX_FIFO_EMPTY"))
+
+        self.assertIn("UARTE_INTENSET_TXSTOPPED_Set << UARTE_INTENSET_TXSTOPPED_Pos", uart)
+        self.assertIn("s_nRFxUARTDev[devno].bTxStopPending = false;", uart)
+        self.assertIn("#else\n\t// TXSTOPPED is not a DMA completion event.", uart)
+
     def test_sdelay_uses_generic_timer_and_grtc(self):
         source = self.timer
         self.assertIn("defined(NRF54L_SERIES)", source)

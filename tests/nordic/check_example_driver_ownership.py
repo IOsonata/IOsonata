@@ -52,6 +52,20 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("DEVINTRF_EVT_TX_FIFO_EMPTY", source)
 		self.assertIn("CoreClockTestFlush();", source)
 
+	def test_core_clock_uart_batches_dma_output(self):
+		source = CLOCK.read_text(encoding="utf-8")
+		start = source.index("#define CORE_CLOCK_TEST_TX_BLOCK_SIZE")
+		end = source.index("\nstatic void CoreClockTestResult(", start)
+		formatting = source[start:end]
+		self.assertIn("#define CORE_CLOCK_TEST_TX_BLOCK_SIZE\t64U", formatting)
+		self.assertIn("CoreClockTestWrite(block, used);", formatting)
+		self.assertIn("CoreClockTestAppend(block, &used,", formatting)
+		self.assertIn("(int)(Length - offset)", formatting)
+		self.assertIn("CORE_CLOCK_TEST_TX_RETRY_LIMIT", formatting)
+		self.assertIn("s_UartTxEmpty = false;", formatting)
+		self.assertNotIn("UARTTx(&s_Uart, &value, 1)", source)
+		self.assertIn("DEVINTRF_EVT_TX_FIFO_EMPTY", source)
+
 	def test_core_clock_delay_calibration_prioritizes_dwt(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		start = source.index("static bool CoreClockTestDelaySample(")

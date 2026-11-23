@@ -91,6 +91,39 @@ The generic test's existing `DEVINTRF_EVT_TX_FIFO_EMPTY` callback
 continues to control the flush check; no direct UART hardware access was
 added to the test. Build and real-board revalidation remain mandatory.
 
+## nRF54L15 second hardware run — UART integrity regression
+
+The second nRF54L15 CoreClockTest (128 MHz) showed widespread UART
+character loss and concatenation under interrupt-driven EasyDMA. The test
+reported `CoreClockTest complete: 0 failures`, but that summary does not
+validate UART integrity. CPU delay, 11 timers and GRTC ownership passed.
+
+The transmit path previously started the next nRF54L DMA block directly
+from `EVENTS_DMA.TX.END`. The port now follows a non-linked UARTE transfer
+handoff: END requests DMA.TX.STOP, STOPPED retires the completed block,
+only then starts the next queued block and notifies the public
+`DEVINTRF_EVT_TX_FIFO_EMPTY` event. A partially sent DMA block's
+unsent suffix remains owned until the STOPPED transition and is retried.
+The new path is nRF54L-specific; legacy nRF52/nRF53 transmit handling
+is unchanged.
+
+The generic CoreClockTest formatter also now batches characters into
+64-byte UART submissions instead of invoking DMA on every single byte.
+The formatter still supports the existing `%s` and `%u` formats,
+uses a small stack buffer, and does not access private UART FIFO state.
+Both fixes keep UART interrupts and EasyDMA enabled.
+
+The hardware run additionally showed 250.4–250.6 ms GRTC time against
+about 250.05 ms HF reference in the LFRC phase, and about 252.46–252.50 ms
+after LF source restoration. Keep this distinct from UART loss. The GRTC
+clock-source selection/rate remains under investigation.
+
+**Pending hardware acceptance:** clean-build the library and CoreClockTest;
+check output byte-for-byte for multiple runs and verify the zero-failure
+summary. Run an independent UART PRBS/loopback integrity test in IRQ+DMA
+mode before declaring the driver fixed. Neither the new UART corrections
+nor the GRTC timing explanation have been verified on a physical board.
+
 ## Managed clean-build commands
 
 The shared Nordic headless Eclipse/CDT build script now includes both nRF54L
