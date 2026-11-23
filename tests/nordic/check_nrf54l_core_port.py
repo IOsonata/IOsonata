@@ -47,6 +47,28 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertNotIn("GrtcSleepClaim", source)
         self.assertNotIn("GrtcSleepRelease", source)
 
+    def test_board_oscillator_caps_configured_before_first_grtc_start(self):
+        system = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
+        oscillator = (ROOT / "ARM/Nordic/nRF54/src/osc_nrf54l.c").read_text()
+        reset = (ROOT / "ARM/src/ResetEntry.c").read_text()
+        for family in ("nRF54L15", "nRF54LM20x"):
+            project = (ROOT / "ARM/Nordic/nRF54" / family /
+                       "lib/ioc/.project").read_text()
+            self.assertIn("src/osc_nrf54l.c", project)
+            self.assertIn("src/system_nrf54l.c", project)
+
+        self.assertIn("SystemOscInit();", system)
+        self.assertIn("!defined(NRF_TRUSTZONE_NONSECURE)", system)
+        self.assertIn("!defined(NRF_SKIP_CLOCK_CONFIGURATION)", system)
+        self.assertLess(system.index("SystemOscInit();"),
+                        system.index("/*lint --flb"))
+        self.assertLess(reset.index("memset((void *)&__bss_start__"),
+                        reset.index("SystemInit();"))
+        self.assertIn("NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP != intcap", oscillator)
+        self.assertIn("NRF_OSCILLATORS->XOSC32KI.INTCAP != intcap", oscillator)
+        self.assertIn("NRF_OSCILLATORS->XOSC32KI.INTCAP = intcap;", oscillator)
+        self.assertIn("NRF_GRTC->TASKS_START = 1U;", self.grtc)
+
     def test_grtc_selects_board_lf_source_only_before_start(self):
         source = self.grtc
         start = source.index("static bool nRFxGrtcEnable(")

@@ -372,6 +372,14 @@ void SystemInit(void)
             #endif
         #endif
 
+		// ResetEntry has initialized g_McuOsc before SystemInit.
+		// Apply board crystal capacitors before a GRTC/clock user
+		// can start LFXO or HFXO. Keep non-secure/skip-clock
+		// startup from touching secure oscillator registers.
+#if !defined(NRF_TRUSTZONE_NONSECURE) && !defined(NRF_SKIP_CLOCK_CONFIGURATION)
+		SystemOscInit();
+#endif
+
     #endif
 }
 

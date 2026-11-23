@@ -75,7 +75,12 @@ void SystemOscInit(void)
 	//intcap = NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP;
 
 	//intcap = OSCILLATORS_HFXO_CAP_CALCULATE(NRF_FICR, (12));
-	NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = intcap;
+	// A soft reset may leave an already-configured oscillator running.
+	// Avoid rewriting retained capacitor settings when unchanged.
+	if (NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP != intcap)
+	{
+		NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = intcap;
+	}
 
 	intcap = 0;
 	if (g_McuOsc.LowPwrOsc.LoadCap > 0)
@@ -92,7 +97,9 @@ void SystemOscInit(void)
 
 		intcap = (((g_McuOsc.LowPwrOsc.LoadCap - 40UL) * (uint32_t)(slope + 392) + 5) / 5120) + (offset >> 6);
 	}
-	NRF_OSCILLATORS->XOSC32KI.INTCAP = intcap;
-	intcap = NRF_OSCILLATORS->XOSC32KI.INTCAP;
+	if (NRF_OSCILLATORS->XOSC32KI.INTCAP != intcap)
+	{
+		NRF_OSCILLATORS->XOSC32KI.INTCAP = intcap;
+	}
 }
 
