@@ -639,7 +639,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	}
 	else
 	{
-		#if ARM_DELAY_CAL_DWT_AVAILABLE
+#if ARM_DELAY_CAL_DWT_AVAILABLE
 		CoreClockTestPrint("DWT hardware probe unavailable; HF Timer fallback\r\n");
 #else
 		CoreClockTestPrint("DWT not exposed by CMSIS; HF Timer fallback\r\n");

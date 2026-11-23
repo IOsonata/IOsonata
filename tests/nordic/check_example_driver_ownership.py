@@ -73,6 +73,7 @@ class DemoDriverOwnership(unittest.TestCase):
 		section = source[start:end]
 
 		self.assertIn("dwtMeasured = DelayCalibrationMeasure(pSample);", section)
+		self.assertNotIn("\t\t#if ARM_DELAY_CAL_DWT_AVAILABLE", section)
 		self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed", section)
 		self.assertIn("*pSample = timerPoint;", section)
 		self.assertIn("return dwtMeasured || valid;", section)

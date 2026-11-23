@@ -88,6 +88,14 @@ uint32_t SystemnsDelayFactor = 1000000UL;
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 #endif    
 
+// Only the nRF54L System Core implementation owns this DWT calibration state.
+#if defined(NRF54L_SERIES) && !defined(NRF_TRUSTZONE_NONSECURE) && \
+	defined(NRF_TAD_S) && defined(TAD_ENABLE_ENABLE_Msk)
+static uint32_t s_DelayDwtTadPrevious;
+static bool s_bDelayDwtTadPrepared;
+
+#endif
+
 /**
  * @brief	Get core clock frequency
  *
@@ -103,9 +111,6 @@ uint32_t SystemCoreClockGet(void)
 // No SWO/ETM pin mux is modified here; an existing debugger's state wins.
 #if defined(NRF54L_SERIES) && !defined(NRF_TRUSTZONE_NONSECURE) && \
 	defined(NRF_TAD_S) && defined(TAD_ENABLE_ENABLE_Msk)
-static uint32_t s_DelayDwtTadPrevious;
-static bool s_bDelayDwtTadPrepared;
-
 bool SystemDelayDwtPrepare(void)
 {
 	if (s_bDelayDwtTadPrepared)

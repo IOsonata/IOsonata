@@ -129,6 +129,10 @@ class Nrf54lCorePort(unittest.TestCase):
         hook = source[begin:end]
         self.assertIn("NRF_TAD_S->ENABLE = s_DelayDwtTadPrevious | TAD_ENABLE_ENABLE_Msk;", hook)
         self.assertIn("NRF_TAD_S->ENABLE = s_DelayDwtTadPrevious;", hook)
+        self.assertLess(source.index("static uint32_t s_DelayDwtTadPrevious;"),
+                        source.index("uint32_t SystemCoreClockGet(void)"))
+        self.assertLess(source.index("static bool s_bDelayDwtTadPrepared;"),
+                        source.index("uint32_t SystemCoreClockGet(void)"))
         self.assertIn("s_bDelayDwtTadPrepared = false;", hook)
         self.assertNotIn("TRACE_PORT->PIN_CNF", hook)
         self.assertNotIn("ArmDelayCalibrate(", source)
