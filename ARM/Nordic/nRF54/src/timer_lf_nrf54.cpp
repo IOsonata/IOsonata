@@ -492,6 +492,20 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			}
 		}
 	}
+	// Retire the old disabled group before rebinding this Timer handle.
+	// Otherwise the old interrupt group keeps a pointer whose DevNo now
+	// names the new hardware and can dispatch an event to the wrong timer.
+	for (candidate = 0; candidate < TIMER_NRFX_RTC_MAX; candidate++)
+	{
+		if (candidate != devno &&
+			s_nRfxGrtcData[candidate].pTimer == pTimer)
+		{
+			s_nRfxGrtcData[candidate].pInt[2] =
+				nRFxGrtcCCMask(s_nRfxGrtcData[candidate]);
+			s_nRfxGrtcData[candidate].pTimer = nullptr;
+			s_bGrtcAutoSelected[candidate] = false;
+		}
+	}
 	// Install ownership before restoring interrupts, so another user
 	// cannot select the same group while initialization proceeds.
 	s_nRfxGrtcData[devno].pTimer = pTimer;
