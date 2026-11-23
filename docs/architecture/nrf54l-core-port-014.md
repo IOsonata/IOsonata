@@ -342,16 +342,38 @@ assertions correctly ran only when the previous reset was a recognized
 System OFF wake. Thus at least **one complete System OFF + button wake +
 RAM-retention cycle is validated**, not 35 such cycles.
 
-The `SYSTEM_RESET_DEBUG` reasons on 32 boots do not by themselves
-establish what asserted reset; the user reported only approximately four
-manual wake-button presses. **Unexpected repeated resets or wakeups are
-unresolved** and System OFF power/wake behavior is not yet fully
-accepted. Stopping a debugger process may not clear a probe's debug
-interface state: isolate the hardware with SWD disconnected, power-cycle,
-and capture raw `RESETREAS` plus the decoded reset reason after a
-true standalone System OFF wake. Do not infer that each software `0x20`
-reset was physically caused by a debugger, and do not alter UART.
-nRF54LM20x and BLE/MPSL coexistence are separate test targets.
+The earlier `SYSTEM_RESET_DEBUG` reasons on 32 boots were
+unexpected and did not establish their physical cause. The maintainer
+pressed the button only about four times in that original capture.
+These unexplained restarts are retained here as historical evidence.
+
+**Fresh power-cycle validation, November 23, 2026:** After power
+cycling the nRF54L15, the maintainer made five physical wake-button
+presses. The supplied log contains four complete post-wake boots
+reporting decoded reset reason `0x00000100`, and each reported
+`System OFF reset-on-wake: PASS`,
+`RAM retention after System OFF: PASS`, and
+`RAM non-retention after System OFF: PASS` with 26 checks and zero
+failures. All three standby-timer wake cycles, restored CPU/peripheral
+clocks and UART rate, and static/stack RAM tests also passed on each
+captured post-wake boot. The log starts mid-cycle and ends at the final
+System OFF prompt: five physical button presses must not be counted
+as five complete post-wake records.
+
+No `0x00000020` reset appears in the new clean power-cycle capture.
+A pyOCD session that failed to exit Debug Interface mode cleanly
+is the maintainer's leading hypothesis for the previous anomaly,
+but this does **not** establish a pyOCD software defect or prove
+its exact detach sequence failed. The power cycle removed the
+behavior in this test. No GPIO, System OFF, PLL, delay, or UART
+driver change is indicated.
+
+**Current nRF54L15 status:** Standalone System OFF button wake
+and post-wake RAM retention/non-retention are hardware validated
+for the tested board. The earlier debug-state anomaly should be
+retained as a note for debugger-assisted tests, not a blocker
+for normal standalone wake. nRF54LM20x and BLE/MPSL coexistence
+remain independent acceptance tasks.
 
 ## Hardware acceptance - follow-up required
 
@@ -368,22 +390,26 @@ For **each** nRF54L15 and nRF54LM20x target, run:
    the board exposes them. nRF54L15 DK and IBK standalone button wake
    was reported working. One subsequent `0x00000100` boot verified
    `System OFF reset-on-wake` and both RAM retention/non-retention checks.
-   Only a few manual button presses (approximately four) were made
-   in the 35-run capture; most additional starts were unexpected and
-   decoded as `SYSTEM_RESET_DEBUG`. Diagnose the reset source before
-   signing off repeated System OFF wake behavior.
+   The earlier debugger/reset capture contained unexpected
+   `SYSTEM_RESET_DEBUG` boots, but a clean power-cycle capture
+   subsequently showed four complete `SYSTEM_RESET_WAKE_PIN` boots
+   with post-wake retention PASS and no unexpected restarts.
+   Standalone button wake is accepted on the tested nRF54L15 board.
 3. Reboot and repeat, paying attention to GRTC group ownership and BLE/MPSL
    coexistence. MPSL-enabled builds are a separate configuration from
    bare-metal acceptance.
 
 The nRF54L15 bare-metal GRTC group ownership and interrupt operations
 have now been exercised by three complete CoreClockTest hardware runs.
-The subsequent nRF54L15 CorePowerTest capture also verifies 105 timer-wake
-cycles and one full System OFF pin-wake/RAM-retention cycle. The many
-other restarts, predominantly reporting `SYSTEM_RESET_DEBUG`, were **not**
-all requested button wakes and require investigation. This does
-**not** validate stable System OFF wake/reset behavior, the nRF54LM20x
-target, BLE/MPSL coexistence or every required managed build.
+The initial nRF54L15 CorePowerTest capture verifies 105 timer-wake
+cycles, and one recognized System OFF pin-wake/RAM-retention cycle,
+but included unexplained debugger-classified restarts. The subsequent
+clean power-cycle test verifies four additional full pin-wake/retention
+cycles without unexpected restarts; the maintainer reported five
+physical button presses. The remaining nRF54L15 standalone
+power tests are accepted for the tested board. The suspected
+residual pyOCD debug state remains unproven. This does **not**
+validate nRF54LM20x, BLE/MPSL coexistence or all managed builds.
 Do not merge to main until the remaining acceptance checks are complete.
 
 ## Source-level check
