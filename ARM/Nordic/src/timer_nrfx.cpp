@@ -254,6 +254,14 @@ extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);
 // the crystal startup may change with temperature and board load.
 #define NRF_SDELAY_COLD_DEFAULT_TICKS 434775
 #define NRF_SDELAY_WARM_DEFAULT_TICKS 0
+#elif defined(NRF54LM20A_XXAA)
+// Two LM20A CoreClockTest runs at 128 MHz measured cold sDelay(1)
+// as 1,433,700 and 1,433,521 us (zero compensation); warm/reuse
+// measured 1,000,000/999,998 and 1,000,000/999,999 us.
+// GRTC runs at 1 MHz, so compensate approximately 433,611 ticks
+// only on cold startup. This value is provisional until retested.
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 433611
+#define NRF_SDELAY_WARM_DEFAULT_TICKS 0
 #elif defined(NRF52832_XXAA) || defined(NRF52832_XXAB)
 // nRF52832 cold LFCLK: initial 1,262,331 us at zero compensation.
 // With 8,596 ticks: 1,000,118 and 1,000,346 us on two cold runs.
