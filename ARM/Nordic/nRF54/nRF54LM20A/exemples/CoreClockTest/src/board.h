@@ -73,16 +73,16 @@ SOFTWARE.
 // TEMPORARY startup diagnostics for the LM20A 64-MHz validation.
 // This board hook keeps vendor registers out of generic CoreClockTest.
 #define CORE_CLOCK_TEST_STARTUP_TRACE() do { \
-	CoreClockTestPrint("LM20A TRACE marker %u compileMHz %u\\r\\n", \
+	CoreClockTestPrint("LM20A TRACE marker %u compileMHz %u\r\n", \
 		(unsigned)g_nRF54LM20AClockTrace[0], \
 		(unsigned)g_nRF54LM20AClockTrace[1]); \
-	CoreClockTestPrint("LM20A TRACE PLL before requested %u actual %u\\r\\n", \
+	CoreClockTestPrint("LM20A TRACE PLL before requested %u actual %u\r\n", \
 		(unsigned)g_nRF54LM20AClockTrace[2], \
 		(unsigned)g_nRF54LM20AClockTrace[3]); \
-	CoreClockTestPrint("LM20A TRACE PLL after requested %u actual %u\\r\\n", \
+	CoreClockTestPrint("LM20A TRACE PLL after requested %u actual %u\r\n", \
 		(unsigned)g_nRF54LM20AClockTrace[4], \
 		(unsigned)g_nRF54LM20AClockTrace[5]); \
-	CoreClockTestPrint("LM20A TRACE startupHz %u currentFreq %u PLL requested %u actual %u\\r\\n", \
+	CoreClockTestPrint("LM20A TRACE startupHz %u currentFreq %u PLL requested %u actual %u\r\n", \
 		(unsigned)g_nRF54LM20AClockTrace[6], \
 		(unsigned)SystemCoreClockGet(), \
 		(unsigned)NRF_OSCILLATORS->PLL.FREQ, \
