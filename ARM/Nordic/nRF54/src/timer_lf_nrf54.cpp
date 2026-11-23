@@ -93,6 +93,9 @@ alignas(4) static nRFGrtcData_t s_nRfxGrtcData[TIMER_NRFX_RTC_MAX] = {
 // too and can start it after this driver did.
 static bool s_bGrtcEnabled[TIMER_NRFX_RTC_MAX];
 static bool s_bGrtcAutoSelected[TIMER_NRFX_RTC_MAX];
+// Reservation persists when a generic Timer handle is rebound to another
+// disabled GRTC group; pTimer in each group is only its active dispatch handle.
+static TimerDev_t *s_pGrtcOwner[TIMER_NRFX_RTC_MAX];
 
 // Interrupt of a timer: GRTC_0_IRQn to GRTC_3_IRQn are consecutive, one per
 // INTEN register group, the DevNo
@@ -198,6 +201,7 @@ static void nRFxGrtcDisable(TimerDev_t * const pTimer)
 			pRtc->Trigger[i].Type = TIMER_TRIG_TYPE_SINGLE;
 		}
 		pRtc->pTimer = nullptr;
+		s_pGrtcOwner[devno] = nullptr;
 		s_bGrtcAutoSelected[devno] = false;
 	}
 	EnableInterrupt(state);
@@ -432,7 +436,7 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		for (candidate = TIMER_NRFX_RTC_MAX - 2; candidate >= 0;
 			candidate--)
 		{
-			if (s_nRfxGrtcData[candidate].pTimer == nullptr &&
+			if (s_pGrtcOwner[candidate] == nullptr &&
 				!s_bGrtcEnabled[candidate])
 			{
 				selected.DevNo = candidate;
@@ -469,8 +473,8 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			}
 		}
 	}
-	if (s_nRfxGrtcData[devno].pTimer != nullptr &&
-		s_nRfxGrtcData[devno].pTimer != pTimer)
+	if (s_pGrtcOwner[devno] != nullptr &&
+		s_pGrtcOwner[devno] != pTimer)
 	{
 		EnableInterrupt(state);
 		return false;
@@ -509,6 +513,7 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	// Install ownership before restoring interrupts, so another user
 	// cannot select the same group while initialization proceeds.
 	s_nRfxGrtcData[devno].pTimer = pTimer;
+	s_pGrtcOwner[devno] = pTimer;
 	s_bGrtcAutoSelected[devno] = automatic;
 	EnableInterrupt(state);
     pTimer->DevNo = devno;
