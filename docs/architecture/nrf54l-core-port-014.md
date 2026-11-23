@@ -285,6 +285,37 @@ tests, which contain only Debug and Release configurations. Build/validate
 BLE/MPSL coexistence separately. The command has not been executed in this
 session and does not replace the board tests.
 
+## nRF54L15 System OFF button wake: debugger versus standalone
+
+The maintainer reported that CorePowerTest completed all three resumable
+standby timer-wake cycles and its pre-System-OFF checks with zero failures
+on both the Nordic nRF54L15 DK and IBK-NRF54L15, but pressing the wake
+button did not restart the test while a debugger was attached. Repeating
+without the debugger confirmed that **button wake works in normal
+standalone execution**. The attached-debugger behavior is therefore not
+evidence of a broken SystemWakePin/GPIO implementation.
+
+Nordic documents that System OFF is **emulated in Debug Interface mode**:
+debug resources, including CPU and RAM, remain powered. The hardware
+requires an infinite loop after writing SYSTEMOFF in this mode; the
+existing SystemPowerOff implementation already has that loop using
+__WFE(). True System OFF and GPIO wake acceptance must be performed
+without an active debugging session, followed by a pin reset when
+leaving Debug Interface mode if the debugger retained debug power.
+
+Official references:
+- https://docs.nordicsemi.com/r/bundle/ps_nrf54l15/page/pmu.html-unique_1272341417
+- https://docs.nordicsemi.com/r/bundle/ps_nrf54l15/page/debug.html-debuginterfacemode
+
+Do not change the GPIO pin mappings, the wake implementation or the
+PRBS-tested UART driver on the basis of this debugger-only difference.
+
+**Remaining verification:** After the standalone button wake, capture
+the next boot's RESETREAS/decoded reset reason, System OFF reset-on-wake
+check and retention results. Button-triggered startup alone does not
+verify these post-wake assertions; BLE/MPSL coexistence and nRF54LM20x
+remain separate.
+
 ## Hardware acceptance - follow-up required
 
 For **each** nRF54L15 and nRF54LM20x target, run:
@@ -297,7 +328,9 @@ For **each** nRF54L15 and nRF54LM20x target, run:
 2. `CorePowerTest` without a debugger attached: capability reporting,
    resumable standby timer wake (all three cycles), clock/UART/RAM
    restoration, wake-pin validation and System OFF button wake/reset, where
-   the board exposes them. Require the complete zero-failure summary.
+   the board exposes them. nRF54L15 DK and IBK standalone button wake
+   was reported working; the post-wake reset reason and retention checks
+   remain to be captured. Require the full post-wake zero-failure summary.
 3. Reboot and repeat, paying attention to GRTC group ownership and BLE/MPSL
    coexistence. MPSL-enabled builds are a separate configuration from
    bare-metal acceptance.
