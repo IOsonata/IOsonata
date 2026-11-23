@@ -1061,6 +1061,9 @@ int main(void)
 	CoreClockTestPrint("CoreClockTest\r\nStartup CPU %u Hz, peripheral clock 0 %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	CoreClockTestFlush();
+#ifdef CORE_CLOCK_TEST_STARTUP_TRACE
+	CORE_CLOCK_TEST_STARTUP_TRACE();
+#endif
 	CoreClockTestResult("Core clock startup", SystemCoreClockGet() != 0U);
 	CoreClockTestSharedClockTest();
 	CoreClockTestPowerMode();
