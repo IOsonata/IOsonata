@@ -189,6 +189,8 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertNotIn("TASKS_START", section)
         self.assertNotIn("TASKS_STOP", section)
         self.assertIn("warmClock = nRFxGrtcSleepClockWarm();", source)
+        self.assertLess(source.index("static bool nRFxGrtcSleepClockWarm(void)"),
+                        source.index("int TimerEnablePeiTrigger("))
 
     def test_nrf54l15_provisional_cold_compensation(self):
         source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(

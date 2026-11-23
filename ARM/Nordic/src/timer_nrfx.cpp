@@ -72,6 +72,31 @@ bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t Event);
 #endif
 
+#if defined(NRF54L_SERIES)
+// A newly started direct LFXO GRTC may pay the crystal's 430-ms startup
+// cost. When GRTC is already running, or system LFCLK is already running
+// from LFXO, its source is warm. An RC-configured board does not have
+// this long LFXO startup penalty. Do not start/stop any clock here.
+static bool nRFxGrtcSleepClockWarm(void)
+{
+	uint32_t lfStat;
+
+	if ((NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk) != 0U)
+	{
+		return true;
+	}
+	if (GetLowFreqOscType() != OSC_TYPE_XTAL)
+	{
+		return true;
+	}
+	lfStat = NRF_CLOCK_S->LFCLK.STAT;
+	return (lfStat & CLOCK_LFCLK_STAT_STATE_Msk) != 0U &&
+		(lfStat & CLOCK_LFCLK_STAT_SRC_Msk) ==
+		(CLOCK_LFCLK_SRC_SRC_LFXO << CLOCK_LFCLK_STAT_SRC_Pos);
+}
+#endif
+
+
 int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, uint32_t msPeriod, TIMER_TRIG_TYPE Type)
 {
@@ -255,30 +280,6 @@ extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);
 #endif
 
 #define NRF_SDELAY_MAX_CHUNK_SECONDS 60U
-
-#if defined(NRF54L_SERIES)
-// A newly started direct LFXO GRTC may pay the crystal's 430-ms startup
-// cost. When GRTC is already running, or system LFCLK is already running
-// from LFXO, its source is warm. An RC-configured board does not have
-// this long LFXO startup penalty. Do not start/stop any clock here.
-static bool nRFxGrtcSleepClockWarm(void)
-{
-	uint32_t lfStat;
-
-	if ((NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk) != 0U)
-	{
-		return true;
-	}
-	if (GetLowFreqOscType() != OSC_TYPE_XTAL)
-	{
-		return true;
-	}
-	lfStat = NRF_CLOCK_S->LFCLK.STAT;
-	return (lfStat & CLOCK_LFCLK_STAT_STATE_Msk) != 0U &&
-		(lfStat & CLOCK_LFCLK_STAT_SRC_Msk) ==
-		(CLOCK_LFCLK_SRC_SRC_LFXO << CLOCK_LFCLK_STAT_SRC_Pos);
-}
-#endif
 
 static TimerDev_t s_SleepTimer;
 static volatile bool s_bSleepTimerBusy;
