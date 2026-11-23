@@ -316,8 +316,14 @@ each reporting zero failures. In every cycle the three automatic timer
 standby wakes, CPU/peripheral clock and UART-rate restoration, static/stack
 RAM checks, and wake-pin configuration/rearm pass: 105/105 standby wakes.
 
-The decoded reset reasons must be distinguished rather than counting every
-boot after a System OFF prompt as a pin wake:
+The maintainer clarified the physical test sequence: the first run used
+the debugger; the second run followed stopping the debugger and pressing
+reset; thereafter the wake button was pressed only a few times (roughly
+four), **not 33 times**. Most subsequent starts occurred without an
+intentional button press. The repeated CorePowerTest starts must not be
+counted as successful System OFF button wakes.
+
+The decoded reset reasons must be distinguished from physical actions:
 
 | Decoded reason | IOsonata meaning | Observed boots |
 | --- | --- | ---: |
@@ -336,13 +342,16 @@ assertions correctly ran only when the previous reset was a recognized
 System OFF wake. Thus at least **one complete System OFF + button wake +
 RAM-retention cycle is validated**, not 35 such cycles.
 
-The `SYSTEM_RESET_DEBUG` reasons do not by themselves establish whether
-the debugger was attached at that instant or what component asserted the
-debug reset. Avoid assigning them to GPIO failure or UART. To isolate
-the remaining reset-origin anomaly, run with no active debug interface
-and preferably only power plus USB-UART connected, then capture successive
-`0x00000100` boots and post-wake retention results. nRF54LM20x and
-BLE/MPSL coexistence remain independent tests.
+The `SYSTEM_RESET_DEBUG` reasons on 32 boots do not by themselves
+establish what asserted reset; the user reported only approximately four
+manual wake-button presses. **Unexpected repeated resets or wakeups are
+unresolved** and System OFF power/wake behavior is not yet fully
+accepted. Stopping a debugger process may not clear a probe's debug
+interface state: isolate the hardware with SWD disconnected, power-cycle,
+and capture raw `RESETREAS` plus the decoded reset reason after a
+true standalone System OFF wake. Do not infer that each software `0x20`
+reset was physically caused by a debugger, and do not alter UART.
+nRF54LM20x and BLE/MPSL coexistence are separate test targets.
 
 ## Hardware acceptance - follow-up required
 
@@ -359,7 +368,10 @@ For **each** nRF54L15 and nRF54LM20x target, run:
    the board exposes them. nRF54L15 DK and IBK standalone button wake
    was reported working. One subsequent `0x00000100` boot verified
    `System OFF reset-on-wake` and both RAM retention/non-retention checks.
-   Distinguish debug-origin resets from pin-wake resets on further runs.
+   Only a few manual button presses (approximately four) were made
+   in the 35-run capture; most additional starts were unexpected and
+   decoded as `SYSTEM_RESET_DEBUG`. Diagnose the reset source before
+   signing off repeated System OFF wake behavior.
 3. Reboot and repeat, paying attention to GRTC group ownership and BLE/MPSL
    coexistence. MPSL-enabled builds are a separate configuration from
    bare-metal acceptance.
@@ -367,9 +379,11 @@ For **each** nRF54L15 and nRF54LM20x target, run:
 The nRF54L15 bare-metal GRTC group ownership and interrupt operations
 have now been exercised by three complete CoreClockTest hardware runs.
 The subsequent nRF54L15 CorePowerTest capture also verifies 105 timer-wake
-cycles and one full System OFF pin-wake/RAM-retention cycle. This does
-**not** validate the nRF54LM20x target, repeated independent pin-wake
-reset origins, BLE/MPSL coexistence or every required managed build.
+cycles and one full System OFF pin-wake/RAM-retention cycle. The many
+other restarts, predominantly reporting `SYSTEM_RESET_DEBUG`, were **not**
+all requested button wakes and require investigation. This does
+**not** validate stable System OFF wake/reset behavior, the nRF54LM20x
+target, BLE/MPSL coexistence or every required managed build.
 Do not merge to main until the remaining acceptance checks are complete.
 
 ## Source-level check
