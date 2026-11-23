@@ -125,13 +125,13 @@ void SystemCoreClockUpdate(void)
 			16000000UL, 3000000UL);
 	}
 #elif defined(NRF54LM20A_XXAA)
-	// LM20A at 128 MHz: the previous 8,000,640-us divisor caused a
-	// 250-ms msDelay request to complete in approximately 125 ms.
-	// Leave the independently validated nanosecond factor unchanged.
+	// LM20A at 128 MHz: two CoreClockTest runs measured msDelay(100)
+	// at 99,996 us with 15,998,720 iterations/s. The 8,000,640
+	// divisor is confirmed; do not double the microsecond factor.
 	if (SystemCoreClock == 128000000UL)
 	{
 		(void)ArmDelayClockSetDivisors(SystemCoreClock,
-			4000320UL, 3000150UL);
+			8000640UL, 3000150UL);
 	}
 	else
 	{
