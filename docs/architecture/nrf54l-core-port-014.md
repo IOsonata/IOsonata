@@ -41,7 +41,34 @@ are unchanged and MCU-independent. UART default is 1,000,000 baud.
 - The existing System OFF, GPIO wake, retention-register and RAM retention
   paths remain in place and must be evaluated by CorePowerTest.
 
-## Hardware acceptance - no results yet
+## nRF54L15 first hardware run
+
+Initial nRF54L15 CoreClockTest exposed a reproducible 2x-fast msDelay:
+`msDelay(100)` measured approximately 50,004 us at 128 MHz,
+while `nsDelay(100 ms)` measured 100,004 us. All 11 timer devices
+accordingly showed approximately 125 ms for the 250 ms msDelay test
+and only two callbacks in the 110 ms continuous-trigger sample.
+
+The measured 128 MHz nRF54L15 divisor is now 8,000,640 (us) and
+3,000,120 (ns), in `ARM/Nordic/nRF54/src/system_nrf54l.c`.
+It applies only to NRF54L15_XXAA at 128 MHz; 64 MHz and
+nRF54LM20 remain pending separate hardware calibration.
+
+The final `sDelay occupied disabled LF timers` failure revealed that
+sequentially reusing the same TimerDev handle discarded the GRTC
+reservation of earlier disabled groups. The driver now stores explicit
+group reservations separately from the active interrupt-dispatch handle.
+Automatic allocation must skip reserved groups.
+
+The initial `sDelay` cold/warm/reuse results were about 990.5 ms,
+which passed the existing 2% acceptance criterion. Do not make a speculative
+correction until the 128 MHz msDelay fix and timer ownership change
+have been rebuilt and rerun.
+
+**The first hardware run is not accepted:** the described fixes are
+committed but have not been validated by a subsequent hardware run.
+
+## Hardware acceptance - follow-up required
 
 For **each** nRF54L15 and nRF54LM20x target, run:
 
