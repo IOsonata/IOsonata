@@ -231,6 +231,44 @@ affect low-power timing, so compare the recorded configuration separately
 from the UART timing logs. If the board selects direct GRTC LFXO,
 system-LFCLK switching should not rewrite GRTC.CLKCFG.
 
+## nRF54L15 CoreClockTest acceptance after SystemOscInit restoration
+
+The maintainer supplied three complete, clean CoreClockTest serial captures
+after rebuilding and restoring SystemOscInit, with **0 failures in every run**.
+No HardFault or truncated UART lines were observed in these captures. This
+supersedes the earlier crash suspicion; the earlier failure was not
+reproduced after the clean rebuild.
+
+At 128 MHz, all three runs measured msDelay(100) and nsDelay(100 ms)
+at 100,000 us with the production divisors 8,000,400 (us) and
+3,000,150 (ns). The sDelay(1) end-to-end times, in us, were:
+
+| Mode | Run 1 | Run 2 | Run 3 |
+| --- | ---: | ---: | ---: |
+| Cold | 1,000,036 | 997,104 | 996,654 |
+| Warm | 1,000,017 | 999,813 | 999,813 |
+| Reuse | 1,000,017 | 999,813 | 999,812 |
+
+The largest cold error was 3,346 us (0.335%); warm and reuse results
+were within 188 us of one second. The 11 enumerated timer devices,
+timer-trigger tests, independent clock ownership and disabled-group
+contention all completed with no recorded failures.
+
+The four GRTC devices reported approximately 248,724 / 248,809 /
+248,851 us averaged over their 250-ms LFRC-phase measurements,
+while the independent HF reference remained about 250,067 us.
+After the system LF source was restored, the corresponding GRTC
+averages were approximately 250,067 / 250,118 / 250,118 us.
+This residual ~0.49-0.54% LFRC-phase timing discrepancy is an
+unresolved clock-source observation, **not** a failing acceptance
+check under the current 2% threshold. Do not alter UART, PLL, or
+the production CPU delay factors based on it.
+
+**Validation scope:** nRF54L15 bare-metal CoreClockTest at 128 MHz
+has repeated passing hardware runs. CorePowerTest, nRF54LM20x
+hardware, 64-MHz calibration and separate BLE/MPSL coexistence
+remain independent acceptance tasks.
+
 ## Managed clean-build commands
 
 The shared Nordic headless Eclipse/CDT build script now includes both nRF54L
@@ -264,9 +302,12 @@ For **each** nRF54L15 and nRF54LM20x target, run:
    coexistence. MPSL-enabled builds are a separate configuration from
    bare-metal acceptance.
 
-The GRTC group ownership, startup, and interrupt operations have **not**
-been tested on hardware for this port. Do not mark targets validated or
-merge to main until managed builds and real-board acceptance pass.
+The nRF54L15 bare-metal GRTC group ownership and interrupt operations
+have now been exercised by three complete CoreClockTest hardware runs.
+This does **not** validate the nRF54LM20x target, CorePowerTest
+standby/System OFF behavior, BLE/MPSL coexistence, or every required
+managed build. Do not merge to main until the remaining acceptance
+checks are complete.
 
 ## Source-level check
 
