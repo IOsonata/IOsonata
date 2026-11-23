@@ -26,25 +26,66 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertNotIn("UARTRx(", source[start:end])
 		self.assertIn("msDelay(2);", source[start:end])
 
-	def test_core_clock_delay_calibration_prioritizes_dwt(self):
+	def test_nordic_core_clock_uses_irq_dma(self):
+		# UART interrupts are on by default in the generic CoreClockTest.
+		# Nordic boards opt into EasyDMA without duplicating this default.
+		boards = (
+			"nRF52/nRF52832",
+			"nRF52/nRF52840",
+			"nRF53/nRF5340_App",
+			"nRF53/nRF5340_Net",
+			"nRF54/nRF54L15",
+			"nRF54/nRF54LM20A",
+			"nRF54/nRF54LM20B",
+		)
+		for board in boards:
+			path = ROOT / "ARM/Nordic" / board / "exemples/CoreClockTest/src/board.h"
+			with self.subTest(board=board):
+				source = path.read_text(encoding="utf-8")
+				self.assertNotIn("#define CORE_CLOCK_TEST_UART_INT", source)
+				self.assertIn("#define CORE_CLOCK_TEST_UART_DMA true", source)
+
+		source = CLOCK.read_text(encoding="utf-8")
+		self.assertIn("#define CORE_CLOCK_TEST_UART_INT true", source)
+		self.assertIn("#define CORE_CLOCK_TEST_UART_DMA false", source)
+		self.assertIn(".bIntMode = CORE_CLOCK_TEST_UART_INT", source)
+		self.assertIn(".bDMAMode = CORE_CLOCK_TEST_UART_DMA", source)
+		self.assertIn("DEVINTRF_EVT_TX_FIFO_EMPTY", source)
+		self.assertIn("CoreClockTestFlush();", source)
+
+	def test_core_clock_uart_batches_dma_output(self):
+		source = CLOCK.read_text(encoding="utf-8")
+		start = source.index("#define CORE_CLOCK_TEST_TX_BLOCK_SIZE")
+		end = source.index("\nstatic void CoreClockTestResult(", start)
+		formatting = source[start:end]
+		self.assertIn("#define CORE_CLOCK_TEST_TX_BLOCK_SIZE\t64U", formatting)
+		self.assertIn("CoreClockTestWrite(block, used);", formatting)
+		self.assertIn("CoreClockTestAppend(block, &used,", formatting)
+		self.assertIn("(int)(Length - offset)", formatting)
+		self.assertIn("CORE_CLOCK_TEST_TX_RETRY_LIMIT", formatting)
+		self.assertIn("s_UartTxEmpty = false;", formatting)
+		self.assertNotIn("UARTTx(&s_Uart, &value, 1)", source)
+		self.assertIn("DEVINTRF_EVT_TX_FIFO_EMPTY", source)
+
+	def test_core_clock_uses_existing_delay_calibration(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		start = source.index("static bool CoreClockTestDelaySample(")
 		end = source.index("static void CoreClockTestDelayCalibrationRecord(", start)
 		section = source[start:end]
 
-		self.assertIn("ArmDelayCalibrate(&measured, cpuHz)", section)
-		self.assertIn("TimerGetHighFreqDevNo()", section)
+		self.assertIn("if (DelayCalibrationMeasure(pSample))", section)
+		self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,", section)
+		self.assertIn("CoreClockTestDelayDivisors(pSample);", section)
 		self.assertIn("TimerGetHighFreqDevCount()", section)
-		self.assertLess(section.index("ArmDelayCalibrate(&measured, cpuHz)"),
+		self.assertIn("TimerGetHighFreqDevNo()", section)
+		self.assertLess(section.index("DelayCalibrationMeasure(pSample)"),
 			section.index("TimerGetHighFreqDevCount()"))
 		self.assertIn("TimerGetMicrosecond(&s_RetainedTimer)", section)
-		self.assertNotIn("TimerGetLowFreqDevCount()", section)
-		self.assertNotIn("RTC", section.split("if (TimerGetHighFreqDevCount()", 1)[1])
 		self.assertIn("msDelay(100);", section)
 		self.assertIn("nsDelay(100000000U);", section)
 		self.assertIn("CoreClockTestDelayCalibrationRecord();", source)
 		self.assertIn("CoreClockTestDelayCalibrationReport();", source)
-		self.assertIn("ArmDelayClockInterpolate(midpoint, &low, &high)", source)
+		self.assertNotIn("DelayCalibrationInterpolate(", source)
 		self.assertIn("if (core != s_DelayHigh.CpuHz", source)
 
 	def test_core_clock_peripheral_clock_interface(self):

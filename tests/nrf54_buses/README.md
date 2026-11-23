@@ -1,7 +1,7 @@
 # nRF54L I2C and SPI checks
 
-The shared Nordic drivers are included in the nRF54L15 and nRF54LM20x library
-projects. The C and C++ I2C/SPI interfaces remain unchanged.
+The shared Nordic drivers are included in the nRF54L15, nRF54LM20A and nRF54LM20B
+library projects. The C and C++ I2C/SPI interfaces remain unchanged.
 
 Supported modes:
 

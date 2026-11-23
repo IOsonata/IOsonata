@@ -9,7 +9,7 @@ library as the corresponding IOsonata examples.
 | Loopback | `usb_cdc_loopback.cpp` | `tinyusb_cdc_loopback/main.cpp` | nRF52840 TinyUsbCdcLoopback/ioc |
 | Dual CDC | `usb_dual_cdc_stress.cpp` | `tinyusb_dual_cdc_stress/main.cpp` | nRF52840 TinyUsbDualCdcStress/ioc |
 | Composite | `usb_combo_stress.cpp` | `tinyusb_combo_stress/main.cpp` | nRF52840 TinyUsbComboStress/ioc |
-| Composite | `usb_combo_stress.cpp` | `tinyusb_combo_stress/main.cpp` | nRF54LM20x TinyUsbComboStress/ioc |
+| Composite | `usb_combo_stress.cpp` | `tinyusb_combo_stress/main.cpp` | nRF54LM20A or nRF54LM20B TinyUsbComboStress/ioc |
 
 IOsonata sources and the portable composite TinyUSB application are relative
 to [exemples/usb](../). The Nordic-only single and dual CDC sources are in
@@ -17,7 +17,8 @@ to [exemples/usb](../). The Nordic-only single and dual CDC sources are in
 Target projects are below
 [ARM/Nordic/nRF52/nRF52840/exemples](../../../ARM/Nordic/nRF52/nRF52840/exemples)
 and
-[ARM/Nordic/nRF54/nRF54LM20x/exemples](../../../ARM/Nordic/nRF54/nRF54LM20x/exemples).
+[ARM/Nordic/nRF54/nRF54LM20A/exemples](../../../ARM/Nordic/nRF54/nRF54LM20A/exemples)
+(the same projects are in nRF54LM20B).
 
 ## Build in IOcomposer
 
@@ -85,7 +86,7 @@ support uses; the IOsonata port uses the controller's buffer DMA. Record this
 with any comparison.
 
 The DWC2 device driver is the project's
-[src/dcd_dwc2.c](../../../ARM/Nordic/nRF54/nRF54LM20x/exemples/TinyUsbComboStress/src/dcd_dwc2.c),
+[src/dcd_dwc2.c](../../../ARM/Nordic/nRF54/nRF54LM20A/exemples/TinyUsbComboStress/src/dcd_dwc2.c),
 a copy of TinyUSB 064afa3 `src/portable/synopsys/dwc2/dcd_dwc2.c` with two
 changes for isochronous endpoints. The stock driver enables an ISO transfer
 for the microframe after the current one and retries only IN, through the
@@ -128,7 +129,8 @@ the interrupt and ISO endpoints from the descriptors.
 TinyUSB's LM20 support has no VBUS event handling, and unplug/replug of the
 USBHS connector was not checked with this project.
 
-Build the matching Debug or Release `nRF54LM20x/lib/ioc` configuration first.
+Build the matching Debug or Release `lib/ioc` configuration of the same
+target (`nRF54LM20A` or `nRF54LM20B`) first.
 The project was build-checked against TinyUSB 064afa3. The runner's optional
 ISO trace and controller diagnostic requests (0x5C and 0x5B) stall on this
 firmware and are skipped; the ISO counters (0x5A) are available.

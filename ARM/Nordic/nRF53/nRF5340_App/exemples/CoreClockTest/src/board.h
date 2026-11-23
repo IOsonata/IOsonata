@@ -80,4 +80,7 @@ SOFTWARE.
 // Test core oscillator selection. Shared HFXO ownership has its own test.
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
+// UART interrupts are enabled by the shared test; this board uses EasyDMA.
+#define CORE_CLOCK_TEST_UART_DMA true
+
 #endif

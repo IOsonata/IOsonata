@@ -54,6 +54,7 @@ SOFTWARE.
 #include "nrf.h"
 
 #include "timer_nrfx.h"
+#include "coredev/system_core_clock.h"
 
 #if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
 	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
@@ -70,6 +71,31 @@ bool nRFxRtcEnablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 bool nRFxRtcDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t Event);
 #endif
+
+#if defined(NRF54L_SERIES)
+// A newly started direct LFXO GRTC may pay the crystal's 430-ms startup
+// cost. When GRTC is already running, or system LFCLK is already running
+// from LFXO, its source is warm. An RC-configured board does not have
+// this long LFXO startup penalty. Do not start/stop any clock here.
+static bool nRFxGrtcSleepClockWarm(void)
+{
+	uint32_t lfStat;
+
+	if ((NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk) != 0U)
+	{
+		return true;
+	}
+	if (GetLowFreqOscType() != OSC_TYPE_XTAL)
+	{
+		return true;
+	}
+	lfStat = NRF_CLOCK_S->LFCLK.STAT;
+	return (lfStat & CLOCK_LFCLK_STAT_STATE_Msk) != 0U &&
+		(lfStat & CLOCK_LFCLK_STAT_SRC_Msk) ==
+		(CLOCK_LFCLK_SRC_SRC_LFXO << CLOCK_LFCLK_STAT_SRC_Pos);
+}
+#endif
+
 
 int TimerEnablePeiTrigger(TimerDev_t *pTimer, PeiDev_t *pPei,
 	PeiEvent_t *pEvt, uint32_t msPeriod, TIMER_TRIG_TYPE Type)
@@ -195,11 +221,14 @@ int TimerGetHighFreqDevNo()
 	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
 	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
 	defined(NRF52833_XXAA) || defined(NRF52840_XXAA) || \
-	defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK)
+	defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || \
+	defined(NRF54L_SERIES)
 
 // TimerInit selects an unused LF timer for DevNo=-1; TimerDisable
 // returns only automatically selected timers to the timer driver.
+#if !defined(NRF54L_SERIES)
 extern "C" bool nRFxSleepLfClockRunning(void);
+#endif
 #if defined(NRF5340_XXAA_APPLICATION)
 extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);
 #endif
@@ -217,6 +246,22 @@ extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);
 #elif defined(NRF5340_XXAA_NETWORK)
 #define NRF_SDELAY_COLD_DEFAULT_TICKS 8
 #define NRF_SDELAY_WARM_DEFAULT_TICKS (-10)
+#elif defined(NRF54L15_XXAA)
+// The nRF54L15's direct GRTC LFXO takes about 0.43 s to start.
+// CoreClockTest measured 1,434,775 us for a cold sDelay(1) with
+// zero compensation and 1,000,047 us on the following warm call.
+// GRTC uses 1-MHz ticks, not 32,768-Hz RTC ticks. Provisional:
+// the crystal startup may change with temperature and board load.
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 434775
+#define NRF_SDELAY_WARM_DEFAULT_TICKS 0
+#elif defined(NRF54LM20A_XXAA)
+// Two LM20A CoreClockTest runs at 128 MHz measured cold sDelay(1)
+// as 1,433,700 and 1,433,521 us (zero compensation); warm/reuse
+// measured 1,000,000/999,998 and 1,000,000/999,999 us.
+// GRTC runs at 1 MHz, so compensate approximately 433,611 ticks
+// only on cold startup. This value is provisional until retested.
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 433611
+#define NRF_SDELAY_WARM_DEFAULT_TICKS 0
 #elif defined(NRF52832_XXAA) || defined(NRF52832_XXAB)
 // nRF52832 cold LFCLK: initial 1,262,331 us at zero compensation.
 // With 8,596 ticks: 1,000,118 and 1,000,346 us on two cold runs.
@@ -300,7 +345,13 @@ extern "C" bool sDelay(uint32_t Seconds)
 	s_bSleepTimerBusy = true;
 	__set_PRIMASK(irqState);
 
+#if defined(NRF54L_SERIES)
+	// The direct LFXO needs a cold-start correction if the GRTC has
+	// not started and a ready system LFXO is not already available.
+	warmClock = nRFxGrtcSleepClockWarm();
+#else
 	warmClock = nRFxSleepLfClockRunning();
+#endif
 	cfg = {};
 	cfg.DevNo = -1;
 	cfg.ClkSrc = TIMER_CLKSRC_DEFAULT;

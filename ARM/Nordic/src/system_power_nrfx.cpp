@@ -240,8 +240,9 @@ uint32_t SystemResetReason(void)
 	return s_SysPwrResetReason;
 }
 
-#if defined(NRF5340_XXAA_NETWORK) || defined(NRF5340_XXAA_APPLICATION)
-// Resumable CPU sleep on both nRF5340 cores. Leave existing NVIC wake
+#if defined(NRF5340_XXAA_NETWORK) || defined(NRF5340_XXAA_APPLICATION) || \
+	defined(NRF54L_SERIES)
+// Resumable CPU sleep on nRF53 and nRF54L. Leave existing NVIC wake
 // sources and the shared LFCLK configured. System OFF is independent.
 void SystemSleep(void)
 {
@@ -276,6 +277,11 @@ uint32_t SystemPowerCapabilitiesGet(void)
 #elif defined(NRF5340_XXAA_NETWORK)
 	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_TIMER_WAKE |
 		SYSTEM_POWER_CAP_RET_REG;
+#elif defined(NRF54L_SERIES)
+	// GRTC compare interrupts wake the CPU from System ON sleep.
+	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_TIMER_WAKE |
+		SYSTEM_POWER_CAP_SYSTEM_OFF | SYSTEM_POWER_CAP_WAKE_PIN |
+		SYSTEM_POWER_CAP_RAM_RETENTION | SYSTEM_POWER_CAP_RET_REG;
 #else
 	// Keep capability expansion explicit for other Nordic families.
 	return SYSTEM_POWER_CAP_SYSTEM_OFF | SYSTEM_POWER_CAP_WAKE_PIN |

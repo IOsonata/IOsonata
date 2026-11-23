@@ -111,8 +111,48 @@ void SystemCoreClockUpdate(void)
             break;
     }
 #endif
+#if defined(NRF54L15_XXAA)
+	// CoreClockTest, nRF54L15 at 128 MHz: 15,999,199 us loops/s and
+	// 42,664,533 ns loops/s. Keep 64 MHz pending measurement.
+	if (SystemCoreClock == 128000000UL)
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			8000400UL, 3000150UL);
+	}
+	else
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			16000000UL, 3000000UL);
+	}
+#elif defined(NRF54LM20A_XXAA)
+	// Hardware calibration at both PLL startup frequencies:
+	// 64 MHz: 7,998,400 us and 21,331,413 ns loops/s.
+	// 128 MHz: 15,999,360 us and 42,664,533 ns loops/s.
+	// System Core owns runtime factors; the test only measures endpoints.
+	static const ArmDelayPoint_t s_DelayLow = {
+		64000000UL, 7998400UL, 21331413UL
+	};
+	static const ArmDelayPoint_t s_DelayHigh = {
+		128000000UL, 15999360UL, 42664533UL
+	};
+	(void)ArmDelayClockInterpolate(SystemCoreClock,
+		&s_DelayLow, &s_DelayHigh);
+#elif defined(NRF54LM20B_XXAA)
+	// LM20B still awaits separate hardware calibration.
+	if (SystemCoreClock == 128000000UL)
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			8000640UL, 3000150UL);
+	}
+	else
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			16000000UL, 3000000UL);
+	}
+#else
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		16000000UL, 3000000UL);
+#endif
 }
 
 void SystemInit(void)
@@ -356,6 +396,13 @@ void SystemInit(void)
                 }
             #endif
         #endif
+
+		// Keep the Nordic MDK 9.2.2 SystemInit sequence.
+		// IOsonata applies board FICR-calibrated crystal capacitors
+		// before application clock users can start LFXO or HFXO.
+#if !defined(NRF_TRUSTZONE_NONSECURE) && !defined(NRF_SKIP_CLOCK_CONFIGURATION)
+		SystemOscInit();
+#endif
 
     #endif
 }

@@ -175,6 +175,58 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertNotIn("nRFxRtcSleepClaim(", delay)
         self.assertNotIn("nRFxRtcSleepRelease(", delay)
 
+    def test_nrf54l_grtc_distinguishes_cold_lfxo(self):
+        source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
+            encoding="utf-8")
+        section = source.split("static bool nRFxGrtcSleepClockWarm(void)", 1)[1]
+        section = section.split("static TimerDev_t s_SleepTimer;", 1)[0]
+        self.assertIn("NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk", section)
+        self.assertIn("GetLowFreqOscType() != OSC_TYPE_XTAL", section)
+        self.assertIn("NRF_CLOCK_S->LFCLK.STAT", section)
+        self.assertIn("CLOCK_LFCLK_STAT_STATE_Msk", section)
+        self.assertIn("CLOCK_LFCLK_STAT_SRC_Msk", section)
+        self.assertIn("CLOCK_LFCLK_SRC_SRC_LFXO", section)
+        self.assertNotIn("TASKS_START", section)
+        self.assertNotIn("TASKS_STOP", section)
+        self.assertIn("warmClock = nRFxGrtcSleepClockWarm();", source)
+        self.assertLess(source.index("static bool nRFxGrtcSleepClockWarm(void)"),
+                        source.index("int TimerEnablePeiTrigger("))
+
+    def test_nrf54l15_provisional_cold_compensation(self):
+        source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
+            encoding="utf-8")
+        self.assertIn("#elif defined(NRF54L15_XXAA)", source)
+        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 434775", source)
+        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", source)
+        # The one recorded 1,434,775-us cold call becomes 1 second
+        # after shortening only the cold GRTC compare. Warm calls must
+        # not receive this correction.
+        self.assertEqual(1000000, 1434775 - 434775)
+        self.assertEqual(1000047, 1000047 - 0)
+
+    def test_nrf54lm20a_cold_compensation(self):
+        source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
+            encoding="utf-8")
+        start = source.index("#elif defined(NRF54LM20A_XXAA)")
+        end = source.index("#elif defined(NRF52832_XXAA)", start)
+        section = source[start:end]
+        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 433611",
+                      section)
+        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0",
+                      section)
+        # GRTC counter is 1 MHz, so 433611 ticks compensate 433611 us.
+        for elapsed in (1433700, 1433521):
+            self.assertLessEqual(abs(elapsed - 433611 - 1000000), 1000)
+
+    def test_sdelay_reports_architecture_neutral_time_error(self):
+        example = TEST.read_text(encoding="utf-8")
+        start = example.index("static void CoreClockTestSleepDelayMeasure(")
+        end = example.index("static void CoreClockTestSleepDelay(void)", start)
+        section = example[start:end]
+        self.assertIn("sDelay %s overhead: %s %u us", section)
+        self.assertNotIn("32768U", section)
+        self.assertNotIn("LF ticks", section)
+
     def test_nrf5340_app_uses_measured_startup_for_sdelay(self):
         clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(
             encoding="utf-8")

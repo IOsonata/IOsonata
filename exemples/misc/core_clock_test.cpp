@@ -50,67 +50,16 @@ SOFTWARE.
 #ifndef CLOCK_DEMO_IRQ_PRIORITY
 #define CLOCK_DEMO_IRQ_PRIORITY 6
 #endif
+// UART interrupt mode is the generic default. Boards lacking IRQ support
+// may override this option; DMA remains an independent choice.
 #ifndef CORE_CLOCK_TEST_UART_INT
-#define CORE_CLOCK_TEST_UART_INT false
+#define CORE_CLOCK_TEST_UART_INT true
 #endif
 #ifndef CORE_CLOCK_TEST_UART_DMA
 #define CORE_CLOCK_TEST_UART_DMA false
 #endif
 
 #define CLOCK_TEST_CYCLES	3U
-
-// Calibration interpolation belongs to the diagnostic, not the HAL.
-// Interpolation is arithmetic only; the MCU's clock owner applies factors.
-// A fixed-frequency MCU can use one measured endpoint.
-static bool DelayCalibrationInterpolate(uint32_t CpuHz,
-	const DelayCalibrationPoint_t *pLow,
-	const DelayCalibrationPoint_t *pHigh,
-	DelayCalibrationPoint_t *pResult)
-{
-	uint32_t span;
-	uint32_t lowWeight;
-	uint32_t highWeight;
-	uint64_t us;
-	uint64_t ns;
-
-	if (pLow == NULL || pHigh == NULL || pResult == NULL || CpuHz == 0U ||
-		!pLow->Measured || !pHigh->Measured ||
-		pLow->CpuHz == 0U || pHigh->CpuHz < pLow->CpuHz ||
-		pLow->UsLoopsPerSecond == 0U || pLow->NsLoopsPerSecond == 0U ||
-		pHigh->UsLoopsPerSecond == 0U || pHigh->NsLoopsPerSecond == 0U)
-	{
-		return false;
-	}
-
-	*pResult = *pLow;
-	pResult->CpuHz = CpuHz;
-	if (pLow->CpuHz == pHigh->CpuHz || CpuHz <= pLow->CpuHz)
-	{
-		return true;
-	}
-	if (CpuHz >= pHigh->CpuHz)
-	{
-		pResult->UsLoopsPerSecond = pHigh->UsLoopsPerSecond;
-		pResult->NsLoopsPerSecond = pHigh->NsLoopsPerSecond;
-		return true;
-	}
-
-	span = pHigh->CpuHz - pLow->CpuHz;
-	lowWeight = pHigh->CpuHz - CpuHz;
-	highWeight = CpuHz - pLow->CpuHz;
-	us = ((uint64_t)pLow->UsLoopsPerSecond * lowWeight +
-		(uint64_t)pHigh->UsLoopsPerSecond * highWeight + span / 2U) / span;
-	ns = ((uint64_t)pLow->NsLoopsPerSecond * lowWeight +
-		(uint64_t)pHigh->NsLoopsPerSecond * highWeight + span / 2U) / span;
-
-	if (us == 0U || ns == 0U || us > UINT32_MAX || ns > UINT32_MAX)
-	{
-		return false;
-	}
-	pResult->UsLoopsPerSecond = (uint32_t)us;
-	pResult->NsLoopsPerSecond = (uint32_t)ns;
-	return true;
-}
 
 // The generic API is declared for every target. A weak reference lets the
 // diagnostic report a missing MCU implementation instead of failing at link
@@ -209,65 +158,114 @@ static int CoreClockTestUartEvent(DevIntrf_t *pDev, DEVINTRF_EVT Event,
 	return 0;
 }
 
-// This test prints only strings and unsigned decimal values, keeping
-// the formatting path small on targets without interrupt/DMA support.
-static void CoreClockTestPut(const char *pText)
-{
-	uint8_t value;
+// Print through bounded multi-byte submissions rather than one EasyDMA
+// transaction per character. The UART driver copies accepted bytes into
+// its own FIFO; it does not retain this stack buffer. This remains generic
+// for MCUs without DMA and requires no full printf/heap implementation.
+#define CORE_CLOCK_TEST_TX_BLOCK_SIZE	64U
+#define CORE_CLOCK_TEST_TX_RETRY_LIMIT	5000U
 
-	while (*pText != 0)
+static void CoreClockTestWrite(const char *pText, unsigned Length)
+{
+	unsigned offset;
+	unsigned retries;
+	int accepted;
+
+	offset = 0U;
+	retries = 0U;
+	while (offset < Length)
 	{
-		value = (uint8_t)*pText;
+		// Completion belongs to the last accepted byte, not a prior DMA.
 		s_UartTxEmpty = false;
-		if (UARTTx(&s_Uart, &value, 1) == 1)
+		accepted = UARTTx(&s_Uart, (uint8_t *)(pText + offset),
+			(int)(Length - offset));
+		if (accepted > 0)
 		{
-			pText++;
+			offset += (unsigned)accepted;
+			retries = 0U;
+		}
+		else
+		{
+			if (++retries >= CORE_CLOCK_TEST_TX_RETRY_LIMIT)
+			{
+				s_Failures++;
+				return;
+			}
+			usDelay(100U);
 		}
 	}
+}
+
+static void CoreClockTestAppend(char *pBuffer, unsigned *pUsed, char Value)
+{
+	if (*pUsed == CORE_CLOCK_TEST_TX_BLOCK_SIZE)
+	{
+		CoreClockTestWrite(pBuffer, *pUsed);
+		*pUsed = 0U;
+	}
+	pBuffer[*pUsed] = Value;
+	(*pUsed)++;
 }
 
 static void CoreClockTestPrint(const char *pFormat, ...)
 {
 	va_list args;
-	char text[11];
+	const char *pString;
+	char block[CORE_CLOCK_TEST_TX_BLOCK_SIZE];
+	char digits[11];
+	unsigned used;
+	unsigned digitCount;
 	unsigned value;
-	unsigned pos;
 
+	used = 0U;
 	va_start(args, pFormat);
 	while (*pFormat != 0)
 	{
 		if (*pFormat != '%')
 		{
-			text[0] = *pFormat++;
-			text[1] = 0;
-			CoreClockTestPut(text);
+			CoreClockTestAppend(block, &used, *pFormat);
+			pFormat++;
+			continue;
 		}
-		else
+		pFormat++;
+		if (*pFormat == 's')
+		{
+			pString = va_arg(args, const char *);
+			if (pString != nullptr)
+			{
+				while (*pString != 0)
+				{
+					CoreClockTestAppend(block, &used, *pString);
+					pString++;
+				}
+			}
+		}
+		else if (*pFormat == 'u')
+		{
+			value = va_arg(args, unsigned);
+			digitCount = 0U;
+			do
+			{
+				digits[digitCount] = '0' + value % 10U;
+				digitCount++;
+				value /= 10U;
+			} while (value != 0U);
+			while (digitCount != 0U)
+			{
+				digitCount--;
+				CoreClockTestAppend(block, &used, digits[digitCount]);
+			}
+		}
+		if (*pFormat != 0)
 		{
 			pFormat++;
-			if (*pFormat == 's')
-			{
-				CoreClockTestPut(va_arg(args, const char *));
-			}
-			else if (*pFormat == 'u')
-			{
-				value = va_arg(args, unsigned);
-				pos = sizeof(text) - 1U;
-				text[pos] = 0;
-				do
-				{
-					text[--pos] = '0' + value % 10U;
-					value /= 10U;
-				} while (value != 0U);
-				CoreClockTestPut(text + pos);
-			}
-			if (*pFormat != 0)
-			{
-				pFormat++;
-			}
 		}
 	}
 	va_end(args);
+	if (used != 0U)
+	{
+		CoreClockTestWrite(block, used);
+	}
 }
 
 static void CoreClockTestResult(const char *pName, bool Passed)
@@ -463,7 +461,6 @@ static void CoreClockTestSleepDelayMeasure(const char *pMode)
 	uint32_t started;
 	uint32_t elapsed;
 	uint32_t difference;
-	uint32_t correction;
 	bool ok;
 
 	cfg = s_TimerCfg;
@@ -488,13 +485,13 @@ static void CoreClockTestSleepDelayMeasure(const char *pMode)
 	}
 	difference = elapsed >= 1000000U ?
 		elapsed - 1000000U : 1000000U - elapsed;
-	correction = (uint32_t)(((uint64_t)difference * 32768U + 500000U) /
-		1000000U);
 	CoreClockTestPrint("sDelay %s end-to-end %u us (target 1000000 us)\r\n",
 		pMode, (unsigned)elapsed);
-	CoreClockTestPrint("sDelay %s overhead: %s %u LF ticks\r\n",
+	// Report independent time error in us; the LF timer may be a 1-MHz
+	// GRTC rather than a 32,768-Hz RTC on a different MCU.
+	CoreClockTestPrint("sDelay %s overhead: %s %u us\r\n",
 		pMode, elapsed >= 1000000U ? "subtract" : "add",
-		(unsigned)correction);
+		(unsigned)difference);
 	CoreClockTestResult("sDelay end-to-end within 2 percent",
 		difference <= 20000U);
 }
@@ -701,9 +698,6 @@ static void CoreClockTestDelayCalibrationRecord(void)
 
 static void CoreClockTestDelayCalibrationReport(void)
 {
-	DelayCalibrationPoint_t interpolated;
-	uint32_t midpoint;
-
 	if (!s_DelayHigh.Measured || !s_DelayLow.Measured)
 	{
 		CoreClockTestPrint("Delay two-point calibration: not available\r\n");
@@ -722,19 +716,9 @@ static void CoreClockTestDelayCalibrationReport(void)
 		CoreClockTestPrint("Delay two-point calibration: one CPU speed observed\r\n");
 		return;
 	}
-	midpoint = s_DelayLow.CpuHz +
-		(s_DelayHigh.CpuHz - s_DelayLow.CpuHz) / 2U;
-	if (DelayCalibrationInterpolate(midpoint, &s_DelayLow,
-		&s_DelayHigh, &interpolated))
-	{
-		CoreClockTestPrint("Delay interpolated %u Hz: us loop/s %u, ns loop/s %u\r\n",
-			(unsigned)midpoint, (unsigned)interpolated.UsLoopsPerSecond,
-			(unsigned)interpolated.NsLoopsPerSecond);
-	}
-	else
-	{
-		CoreClockTestResult("Delay interpolation", false);
-	}
+	// Report both measured endpoints. The System Core implementation
+	// already owns frequency-dependent factor calculation/interpolation.
+	CoreClockTestPrint("Delay two-point calibration: two CPU speeds measured\r\n");
 }
 
 static bool CoreClockTestTimerInit(int DevNo)

@@ -387,8 +387,21 @@ void IOPinDisable(int PortNo, int PinNo)
  */
 void IOPinDisableInterrupt(int IntNo)
 {
+	int idx;
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+	int portNo;
+#endif
+
     if (IntNo >= IOPIN_MAX_INT)
         return;
+
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+	// Never clear an interrupt number that is not in use.
+	if (s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].Sense == IOPINSENSE_DISABLE)
+	{
+		return;
+	}
+#endif
 
 #if defined(IOPIN_NRF52_GPIOTE)
 	// Never clear an unused IRQ slot or a PEI-owned GPIOTE channel.
@@ -410,6 +423,9 @@ void IOPinDisableInterrupt(int IntNo)
 
 	// A negative IntNo is the port event, the last entry
 	NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].PortPinNo >> 8);
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+	portNo = s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].PortPinNo >> 8;
+#endif
 
     if (IntNo < 0)
     {
@@ -418,32 +434,17 @@ void IOPinDisableInterrupt(int IntNo)
 		gpiotereg->H20_GPIOTE_INTENCLR = H20_GPIOTE_PORT_Msk;
 		gpiotereg->H20_GPIOTE_EVENTS_PORT = 0;
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
-        if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
-        {
-        	if (IntNo > 4)
-        	{
-				gpiotereg->INTENCLR1 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
-				gpiotereg->EVENTS_PORT[1].NONSECURE = 0;
-        	}
-        	else
-        	{
-				gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
-				gpiotereg->EVENTS_PORT[0].NONSECURE = 0;
-        	}
-        }
-        else
-        {
-        	if (IntNo > 4)
-        	{
-        		gpiotereg->INTENCLR1 = GPIOTE_INTENCLR0_PORT0SECURE_Msk;
-    			gpiotereg->EVENTS_PORT[1].SECURE = 0;
-        	}
-        	else
-        	{
-        		gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0SECURE_Msk;
-    			gpiotereg->EVENTS_PORT[0].SECURE = 0;
-        	}
-        }
+		// PORT is event index 0 on both GPIOTE instances.
+		if (portNo & 0x80)
+		{
+			gpiotereg->INTENCLR0 = GPIOTE_INTENCLR0_PORT0NONSECURE_Msk;
+			gpiotereg->EVENTS_PORT[0].NONSECURE = 0;
+		}
+		else
+		{
+			gpiotereg->INTENCLR1 = GPIOTE_INTENCLR1_PORT0SECURE_Msk;
+			gpiotereg->EVENTS_PORT[0].SECURE = 0;
+		}
 #else
         gpiotereg->INTENCLR = GPIOTE_INTENSET_PORT_Msk;
         gpiotereg->EVENTS_PORT = 0;
@@ -453,21 +454,26 @@ void IOPinDisableInterrupt(int IntNo)
     {
     	NRF_GPIO_Type *reg = nRFGpioGetReg(s_GpIOSenseEvt[IntNo].PortPinNo >> 8);
 
+		idx = IntNo;
+
 #if defined(NRF54H20_XXAA)
 		gpiotereg->H20_GPIOTE_INTENCLR = (1 << IntNo);
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
-    	if (IntNo > 4)
-    	{
-    		gpiotereg->INTENCLR1 = (1 << (IntNo - 4));
-    	}
-    	else
-    	{
-    		gpiotereg->INTENCLR0 = (1 << IntNo);
-    	}
+		// Same channel and interrupt group as IOPinEnableInterrupt.
+		idx = IntNo >= GPIOTE30_GPIOTE_NCHANNELS_SIZE ?
+			IntNo - GPIOTE30_GPIOTE_NCHANNELS_SIZE : IntNo;
+		if (portNo & 0x80)
+		{
+			gpiotereg->INTENCLR0 = 1UL << idx;
+		}
+		else
+		{
+			gpiotereg->INTENCLR1 = 1UL << idx;
+		}
 #else
     	gpiotereg->INTENCLR = (1 << IntNo);
 #endif
-        gpiotereg->CONFIG[IntNo] = 0;
+        gpiotereg->CONFIG[idx] = 0;
 #if defined(IOPIN_NRF52_GPIOTE)
 		// Do not leave an old edge pending when this slot is reused.
 		gpiotereg->EVENTS_IN[IntNo] = 0U;
@@ -492,34 +498,37 @@ void IOPinDisableInterrupt(int IntNo)
 	NVIC_DisableIRQ(H20_GPIOTE_IRQn);
 	gpiotereg->H20_GPIOTE_INTENCLR = 0xFFFFFFFF;
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
-    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x7F00)
-    {
-		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+	// PortPinNo is already cleared here, use the port saved above.
+	if ((portNo & 0x7F) != 0)
+	{
+		if (portNo & 0x80)
 		{
 			NVIC_ClearPendingIRQ(GPIOTE20_0_IRQn);
 			NVIC_DisableIRQ(GPIOTE20_0_IRQn);
+			gpiotereg->INTENCLR0 = 0xFFFFFFFF;
 		}
 		else
 		{
 			NVIC_ClearPendingIRQ(GPIOTE20_1_IRQn);
 			NVIC_DisableIRQ(GPIOTE20_1_IRQn);
+			gpiotereg->INTENCLR1 = 0xFFFFFFFF;
 		}
-		gpiotereg->INTENCLR1 = 0xFFFFFFFF;
-    }
-    else
-    {
-		if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
+	}
+	else
+	{
+		if (portNo & 0x80)
 		{
 			NVIC_ClearPendingIRQ(GPIOTE30_0_IRQn);
 			NVIC_DisableIRQ(GPIOTE30_0_IRQn);
+			gpiotereg->INTENCLR0 = 0xFFFFFFFF;
 		}
 		else
 		{
 			NVIC_ClearPendingIRQ(GPIOTE30_1_IRQn);
 			NVIC_DisableIRQ(GPIOTE30_1_IRQn);
+			gpiotereg->INTENCLR1 = 0xFFFFFFFF;
 		}
-		gpiotereg->INTENCLR1 = 0xFFFFFFFF;
-    }
+	}
 
 #else
 #ifdef NRF5340_XXAA_NETWORK
@@ -583,6 +592,26 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	if (IntNo < -1 || IntNo >= IOPIN_MAX_INT)
 		return false;
 
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	// P2 has no GPIOTE.
+	if ((PortNo & 0x7F) == 2)
+	{
+		return false;
+	}
+#endif
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+	// Interrupt numbers 0..3 are the GPIOTE30 channels of P0. The
+	// following ones are the GPIOTE20 channels of the other ports.
+	// The interrupt handlers dispatch on that same assignment.
+	if (IntNo >= 0 &&
+		(((PortNo & 0x7F) == 0 && IntNo >= GPIOTE30_GPIOTE_NCHANNELS_SIZE) ||
+		((PortNo & 0x7F) != 0 && IntNo < GPIOTE30_GPIOTE_NCHANNELS_SIZE) ||
+		PinNo >= 32U))
+	{
+		return false;
+	}
+#endif
+
 #ifdef NRF5340_XXAA_NETWORK
 	if ((PortNo >= GPIO_COUNT) || (IntNo >= 0 && PinNo >= 32))
 		return false;
@@ -591,7 +620,9 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(PortNo);
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
-#if defined(NRF5340_XXAA_NETWORK) || defined(NRF54H20_XXAA)
+#if defined(NRF5340_XXAA_NETWORK) || defined(NRF54H20_XXAA) || \
+	defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || \
+	defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
 	if (gpiotereg == NULL || reg == NULL)
 		return false;
 #endif
@@ -604,8 +635,9 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 
 	uint32_t cfg = 0;
 #if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
-	// Two GPIOTE instances of 4 channels each, the second one starts over at 0
-	int idx = IntNo > 3 ? IntNo - 4 : IntNo;
+	// GPIOTE30 has 4 channels, GPIOTE20 has 8. Its channels start over at 0.
+	int idx = IntNo >= GPIOTE30_GPIOTE_NCHANNELS_SIZE ?
+		IntNo - GPIOTE30_GPIOTE_NCHANNELS_SIZE : IntNo;
 #else
 	// One instance, so the channel is the interrupt number. Folding 4 to 7 back
 	// onto 0 to 3 here made those four allocations program the config of a
@@ -673,32 +705,17 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		gpiotereg->H20_GPIOTE_EVENTS_PORT = 0;
 		gpiotereg->H20_GPIOTE_INTENSET = H20_GPIOTE_PORT_Msk;
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
-
-		if (IntNo > 3)
+		// PORT is event index 0 on both GPIOTE instances.
+		// Interrupt group 0 is the non-secure line, group 1 the secure one.
+		if (PortNo & 0x80)
 		{
-			if (PortNo & 0x80)
-			{
-				gpiotereg->EVENTS_PORT[1].NONSECURE = 0;
-				gpiotereg->INTENSET1 = GPIOTE_INTENSET1_PORT0NONSECURE_Msk;
-			}
-			else
-			{
-				gpiotereg->EVENTS_PORT[1].SECURE = 0;
-				gpiotereg->INTENSET1 = GPIOTE_INTENSET1_PORT0SECURE_Msk;
-			}
+			gpiotereg->EVENTS_PORT[0].NONSECURE = 0;
+			gpiotereg->INTENSET0 = GPIOTE_INTENSET0_PORT0NONSECURE_Msk;
 		}
 		else
 		{
-			if (PortNo & 0x80)
-			{
-				gpiotereg->EVENTS_PORT[0].NONSECURE = 0;
-				gpiotereg->INTENSET0 = GPIOTE_INTENSET0_PORT0NONSECURE_Msk;
-			}
-			else
-			{
-				gpiotereg->EVENTS_PORT[0].SECURE = 0;
-				gpiotereg->INTENSET0 = GPIOTE_INTENSET0_PORT0SECURE_Msk;
-			}
+			gpiotereg->EVENTS_PORT[0].SECURE = 0;
+			gpiotereg->INTENSET1 = GPIOTE_INTENSET1_PORT0SECURE_Msk;
 		}
 #else
 		gpiotereg->EVENTS_PORT = 0;
@@ -783,27 +800,14 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 #if defined(NRF54H20_XXAA)
 		gpiotereg->H20_GPIOTE_INTENSET = (1 << IntNo);
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
-		if (IntNo > 3)
+		// Interrupt group 0 is the non-secure line, group 1 the secure one.
+		if (PortNo & 0x80)
 		{
-			if (PortNo & 0x80)
-			{
-				gpiotereg->INTENSET1 |= (1 << idx) | GPIOTE_INTENCLR1_PORT0NONSECURE_Msk;
-			}
-			else
-			{
-				gpiotereg->INTENSET1 |= (1 << idx) | GPIOTE_INTENCLR1_PORT0SECURE_Msk;
-			}
+			gpiotereg->INTENSET0 = 1UL << idx;
 		}
 		else
 		{
-			if (PortNo & 0x80)
-			{
-				gpiotereg->INTENSET0 |= (1 << IntNo) | GPIOTE_INTENCLR1_PORT0NONSECURE_Msk;
-			}
-			else
-			{
-				gpiotereg->INTENSET0 |= (1 << IntNo) | GPIOTE_INTENCLR1_PORT0SECURE_Msk;
-			}
+			gpiotereg->INTENSET1 = 1UL << idx;
 		}
 
 #else
@@ -1381,11 +1385,37 @@ bool IOPinDisableTask(PeiDev_t *pPei, PeiEvent_t Evt,
 	return false;
 }
 
-static int IOPinFindAvailInterrupt(void)
+static int IOPinFindAvailInterrupt(int PortNo)
 {
+	int first;
+	int end;
 	int i;
 
-	for (i = 0; i < IOPIN_MAX_INT; i++)
+	first = 0;
+	end = IOPIN_MAX_INT;
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	// P2 has no GPIOTE.
+	if ((PortNo & 0x7F) == 2)
+	{
+		return -1;
+	}
+#endif
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+	// Interrupt numbers 0..3 are the GPIOTE30 channels of P0. The
+	// following ones are the GPIOTE20 channels of the other ports.
+	if ((PortNo & 0x7F) == 0)
+	{
+		end = GPIOTE30_GPIOTE_NCHANNELS_SIZE;
+	}
+	else
+	{
+		first = GPIOTE30_GPIOTE_NCHANNELS_SIZE;
+	}
+#else
+	(void)PortNo;
+#endif
+
+	for (i = first; i < end; i++)
 	{
 		if (s_GpIOSenseEvt[i].SensEvtCB != NULL ||
 			((s_GpIOTaskUsed | s_GpIOEventUsed) & (1UL << i)) != 0U)
@@ -1397,6 +1427,12 @@ static int IOPinFindAvailInterrupt(void)
 		// configured directly by another subsystem.
 		if (s_GpIOSenseEvt[i].Sense != IOPINSENSE_DISABLE ||
 			NRF_GPIOTE->CONFIG[i] != 0U)
+		{
+			continue;
+		}
+#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA) || defined(NRF71_SERIES)
+		// An interrupt enabled with a NULL callback is still in use.
+		if (s_GpIOSenseEvt[i].Sense != IOPINSENSE_DISABLE)
 		{
 			continue;
 		}
@@ -1427,7 +1463,7 @@ static int IOPinFindAvailInterrupt(void)
  */
 int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	int intno = IOPinFindAvailInterrupt();
+	int intno = IOPinFindAvailInterrupt(PortNo);
 
 	if (intno >= 0)
 	{
@@ -1453,6 +1489,13 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 
+#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	// P2 has no SENSE or DETECT mechanism.
+	if ((PortNo & 0x7F) == 2)
+	{
+		return;
+	}
+#endif
 	if (reg == NULL || PinNo == -1)
 	{
 		return;

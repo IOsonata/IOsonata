@@ -3,7 +3,8 @@
 Shared firmware sources live here. Open the matching target project in
 IOcomposer under
 [ARM/Nordic/nRF52/nRF52840/exemples](../../ARM/Nordic/nRF52/nRF52840/exemples)
-or [ARM/Nordic/nRF54/nRF54LM20x/exemples](../../ARM/Nordic/nRF54/nRF54LM20x/exemples).
+or [ARM/Nordic/nRF54/nRF54LM20A/exemples](../../ARM/Nordic/nRF54/nRF54LM20A/exemples)
+(the same projects are in nRF54LM20B).
 Build the matching MCU IOsonata library first, then clean-build the application
 with matching Debug or Release settings.
 
@@ -57,7 +58,7 @@ each project:
 |---|---|---|
 | nRF52840 | nRF52840 DK | UART0, VCOM0 lines: RX P0.08, TX P0.06 |
 | nRF52840 | Nordic Thingy:91 (`NORDIC_THINGY91` in board.h) | UART0 to the nRF9160 UART0: RX P0.11, TX P0.15 |
-| nRF54LM20x | nRF54LM20 DK | Debugger serial port 1, UARTE20: RX P1.17, TX P1.16 (`UART_DEVNO 0` for port 0) |
+| nRF54LM20A, nRF54LM20B | nRF54LM20 DK | Debugger serial port 1, UARTE20: RX P1.17, TX P1.16 (`UART_DEVNO 0` for port 0) |
 | SAM4LCxC | SAM4L8 Xplained Pro | USART1, EDBG Virtual COM Port: RX PC26, TX PC27 |
 | SAM4LSxC | SAM4LS C-package board | USART1: RX PC26, TX PC27 |
 
