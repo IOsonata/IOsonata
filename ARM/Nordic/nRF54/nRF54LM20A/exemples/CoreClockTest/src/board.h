@@ -38,8 +38,6 @@ SOFTWARE.
 #define __BOARD_H__
 
 #include "coredev/iopincfg.h"
-#include "nrf.h"
-#include "system_nrf54l.h"
 
 // Console, the SysLog output
 #define UART_DEVNO			1
@@ -70,28 +68,5 @@ SOFTWARE.
 // UART interrupts are enabled by the shared test; this board uses EasyDMA.
 #define CORE_CLOCK_TEST_UART_DMA true
 
-// TEMPORARY startup diagnostics for the LM20A 64-MHz validation.
-// This board hook keeps vendor registers out of generic CoreClockTest.
-#define CORE_CLOCK_TEST_STARTUP_TRACE() do { \
-	CoreClockTestPrint("LM20A DIAG app trace v2 currentHz %u PLL requested %u actual %u\r\n", \
-		(unsigned)SystemCoreClockGet(), \
-		(unsigned)NRF_OSCILLATORS->PLL.FREQ, \
-		(unsigned)NRF_OSCILLATORS->PLL.CURRENTFREQ); \
-	if (g_nRF54LM20AClockTrace != nullptr) { \
-		CoreClockTestPrint("LM20A DIAG library startup marker %u compileMHz %u\r\n", \
-			(unsigned)g_nRF54LM20AClockTrace[0], \
-			(unsigned)g_nRF54LM20AClockTrace[1]); \
-		CoreClockTestPrint("LM20A DIAG before requested %u actual %u, after requested %u actual %u\r\n", \
-			(unsigned)g_nRF54LM20AClockTrace[2], \
-			(unsigned)g_nRF54LM20AClockTrace[3], \
-			(unsigned)g_nRF54LM20AClockTrace[4], \
-			(unsigned)g_nRF54LM20AClockTrace[5]); \
-		CoreClockTestPrint("LM20A DIAG startup clock %u\r\n", \
-			(unsigned)g_nRF54LM20AClockTrace[6]); \
-	} else { \
-		CoreClockTestPrint("LM20A DIAG startup snapshot MISSING: rebuild LM20A Debug library\r\n"); \
-	} \
-	CoreClockTestFlush(); \
-} while (0)
 
 #endif
