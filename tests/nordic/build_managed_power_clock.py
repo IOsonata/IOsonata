@@ -16,7 +16,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = ("nrf52832", "nrf52840", "nrf5340_app", "nrf5340_net",
-           "nrf54l15", "nrf54lm20a", "nrf54lm20b")
+           "nrf54l15", "nrf54lm20a", "nrf54lm20b", "nrf9160", "nrf91x1")
 PROJECT_ROOT = {
     "nrf52832": ROOT / "ARM/Nordic/nRF52/nRF52832",
     "nrf52840": ROOT / "ARM/Nordic/nRF52/nRF52840",
@@ -25,6 +25,8 @@ PROJECT_ROOT = {
     "nrf54l15": ROOT / "ARM/Nordic/nRF54/nRF54L15",
     "nrf54lm20a": ROOT / "ARM/Nordic/nRF54/nRF54LM20A",
     "nrf54lm20b": ROOT / "ARM/Nordic/nRF54/nRF54LM20B",
+    "nrf9160": ROOT / "ARM/Nordic/nRF91/nRF9160",
+    "nrf91x1": ROOT / "ARM/Nordic/nRF91/nRF91x1",
 }
 DEFAULT_ECLIPSE = Path("/Applications/IOcomposer.app/Contents/MacOS/eclipse")
 
@@ -114,7 +116,7 @@ def main():
             root / "exemples/HfxoTestBle/ioc",
         ]
         if target in ("nrf5340_app", "nrf5340_net", "nrf54l15",
-                      "nrf54lm20a", "nrf54lm20b"):
+                      "nrf54lm20a", "nrf54lm20b", "nrf9160", "nrf91x1"):
             if any(config.endswith("_SDC") for config in configurations):
                 raise ValueError(
                     target + " CoreClockTest/CorePowerTest projects provide only Debug and Release")
