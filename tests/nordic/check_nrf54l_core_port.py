@@ -59,6 +59,42 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("EnableInterrupt(state);", enable)
         self.assertIn("return false;", enable)
 
+    def test_stale_grtc_handles_cannot_touch_reassigned_group(self):
+        source = self.grtc
+        self.assertIn("return pRtc->pTimer == pTimer ? pRtc : nullptr;", source)
+
+        # After auto-release or handle rebinding, DevNo may still identify
+        # hardware now assigned to another TimerDev. Every operation that
+        # uses that group must check the current dispatch owner first.
+        guarded = (
+            "nRFxGrtcReset",
+            "nRFxGrtcSetFrequency",
+            "nRFxGrtcGetTickCount",
+            "nRFxGrtcGetMaxTrigger",
+            "nRFxGrtcEnableTrigger",
+            "nRFxGrtcDisableTrigger",
+            "nRFxGrtcFindAvailTrigger",
+        )
+        for name in guarded:
+            with self.subTest(operation=name):
+                start = source.rfind("static ", 0, source.index(name + "("))
+                end = source.find("\nstatic ", source.index(name + "("))
+                function = source[start:end if end >= 0 else None]
+                check = function.index("nRFxGrtcOwned(pTimer)")
+                self.assertIn("pRtc == nullptr", function)
+                for hardware in ("NRF_GRTC->CC[", "->pInt[", "->pSysCnt"):
+                    if hardware in function:
+                        self.assertLess(check, function.index(hardware))
+
+        for name in ("nRFxGrtcReset", "nRFxGrtcEnableTrigger",
+                     "nRFxGrtcDisableTrigger", "nRFxGrtcFindAvailTrigger"):
+            with self.subTest(atomic_operation=name):
+                start = source.index(name + "(")
+                end = source.find("\nstatic ", start)
+                function = source[start:end if end >= 0 else None]
+                self.assertIn("state = DisableInterrupt();", function)
+                self.assertIn("EnableInterrupt(state);", function)
+
     def test_sdelay_uses_generic_timer_and_grtc(self):
         source = self.timer
         self.assertIn("defined(NRF54L_SERIES)", source)
