@@ -603,3 +603,37 @@ endpoint, LM20B hardware testing and BLE/MPSL coexistence are still
 separate acceptance tasks. The unsupported CPU low-power-mode and optional
 RC-calibration reports in the capture are not test failures. No merge to
 main is authorized by CoreClockTest results alone.
+
+## nRF54LM20A CorePowerTest hardware acceptance (November 23, 2026)
+
+The supplied CorePowerTest UART transcript contains **five complete boot/test
+runs with zero failures**. The first two report 23 checks each with decoded
+reset reasons 0x00000002 (pin reset) and 0x00000020 (debug reset). The next
+three report 26 checks each with decoded reason 0x00000100 (System OFF pin
+wake); all explicitly pass `System OFF reset-on-wake`, RAM-retention and
+RAM non-retention checks. These are three recorded complete post-System-OFF
+wake cycles, not five. The physical wake action was not independently
+logged, so reset-cause classification is the evidence used.
+
+Each of the five runs passes three automatic standby-timer wake cycles,
+CPU/peripheral clock restoration, UART rate restoration, and static/stack
+RAM checks: **15/15 standby wakes**. Retention-register read/write,
+retention-region range checks, RAM retention enable/disable, and wake-pin
+configuration/invalid-index/disable/rearm also pass. Reduced CPU power mode
+is reported UNSUPPORTED, not FAIL. The reported capability mask is 0x3f.
+
+The `LogDiag` counter `uartRejected` ranges from 0x2ab4 to 0x3f7d,
+while `evicted` stays zero and the SysLog FIFO is empty at each summary.
+The example reports UART `TxDropCnt` as *unaccepted submissions*, which
+SysLog may retry: this counter is **not evidence of wire-byte loss**. It
+remains a distinct serial transport/backpressure concern, not an observed
+power/clock functional failure. The single 0x20 debug reset does not prove
+a GPIO wake or reset fault; its cause remains unverified.
+
+**Hardware status:** nRF54LM20A CoreClockTest 128-MHz and CorePowerTest
+functional checks are accepted for the tested board. The transcript does
+not establish broad operating-temperature cold-start margins, LM20A
+64-MHz delay calibration, nRF54LM20B hardware acceptance, BLE/MPSL
+coexistence, or clean managed build matrices. Keep these separate from the
+successful bare-metal hardware results. Do not merge this branch into main
+based on LM20A validation alone.
