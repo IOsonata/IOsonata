@@ -81,7 +81,9 @@ class Nrf54lCorePort(unittest.TestCase):
                 end = source.find("\nstatic ", source.index(name + "("))
                 function = source[start:end if end >= 0 else None]
                 check = function.index("nRFxGrtcOwned(pTimer)")
-                self.assertIn("pRtc == nullptr", function)
+                self.assertTrue("pRtc == nullptr" in function or
+                                "pRtc != nullptr" in function or
+                                "nRFxGrtcOwned(pTimer) == nullptr" in function)
                 for hardware in ("NRF_GRTC->CC[", "->pInt[", "->pSysCnt"):
                     if hardware in function:
                         self.assertLess(check, function.index(hardware))

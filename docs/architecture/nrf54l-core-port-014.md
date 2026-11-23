@@ -60,6 +60,15 @@ reservation of earlier disabled groups. The driver now stores explicit
 group reservations separately from the active interrupt-dispatch handle.
 Automatic allocation must skip reserved groups.
 
+Additional source review found stale-handle access paths in GRTC `Reset`, `EnableTrigger`,
+`DisableTrigger`, `GetTickCount`, `GetMaxTrigger`, `SetFrequency` and
+`FindAvailTrigger`. An automatically released timer retains its former
+`DevNo`, which can subsequently refer to a group used by a different timer.
+All seven operations now check the active group owner before accessing group
+state. Mutating trigger/reset paths also hold the interrupt mask across the
+ownership check and update. Source-level regression assertions were added.
+These changes are not a replacement for the required hardware rerun.
+
 The initial `sDelay` cold/warm/reuse results were about 990.5 ms,
 which passed the existing 2% acceptance criterion. Do not make a speculative
 correction until the 128 MHz msDelay fix and timer ownership change
