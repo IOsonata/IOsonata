@@ -77,6 +77,22 @@ have been rebuilt and rerun.
 **The first hardware run is not accepted:** the described fixes are
 committed but have not been validated by a subsequent hardware run.
 
+## Managed clean-build commands
+
+The shared Nordic headless Eclipse/CDT build script now includes both nRF54L
+managed targets, including their library and generic Core tests:
+
+```sh
+python3 tests/nordic/build_managed_power_clock.py \
+	--target nrf54l15 --target nrf54lm20x \
+	--config Debug --config Release
+```
+
+`Debug_SDC` / `Release_SDC` are not offered for these two Core
+tests, which contain only Debug and Release configurations. Build/validate
+BLE/MPSL coexistence separately. The command has not been executed in this
+session and does not replace the board tests.
+
 ## Hardware acceptance - follow-up required
 
 For **each** nRF54L15 and nRF54LM20x target, run:
