@@ -34,6 +34,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "nrf.h"
+#include "hal/nrf_ficr.h"
 
 #include "coredev/system_core_clock.h"
 
@@ -44,55 +45,146 @@ __WEAK McuOsc_t g_McuOsc = {
 	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 10, 100},
 	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 70},
 #else
-	// Nordic DK
-	// 32MHz, 8pF
-	// 32.768kHz, 9pF
+	// Nordic nRF54L15 DK and IBK-NRF54L15: same crystal specifications.
+	// HFXO: 32 MHz, 8 pF; LFXO: 32.768 kHz, 9 pF.
 	.CoreOsc = { OSC_TYPE_XTAL,	32000000, 20, 80},
 	.LowPwrOsc = { OSC_TYPE_XTAL, 32768, 20, 90},
 #endif
 	.bUSBClk = false
 };
 
+// nrfx before 4.7.0 does not declare the FICR capacitance helpers.
+// Match Nordic's signed trim decoding and femtofarad calculations.
+#if !defined(FICR_HFXO_CAP_CALCULATE) || !defined(FICR_LFXO_CAP_CALCULATE)
+static int32_t nRF54LTrimSlope(uint32_t Trim, uint32_t Mask, uint32_t Shift)
+{
+	uint32_t field;
+	uint32_t mask;
+	uint32_t sign;
+
+	field = (Trim & Mask) >> Shift;
+	mask = Mask >> Shift;
+	sign = mask - (mask >> 1);
+
+	return (int32_t)(field ^ sign) - (int32_t)sign;
+}
+#endif
+
+#if !defined(FICR_HFXO_CAP_CALCULATE)
+static uint32_t nRF54LHfxoCapCalculate(uint32_t CapFf)
+{
+	uint32_t trim;
+	uint32_t offset;
+	int32_t slope;
+	int64_t scaled;
+
+	trim = NRF_FICR->XOSC32MTRIM;
+	slope = nRF54LTrimSlope(trim, FICR_XOSC32MTRIM_SLOPE_Msk,
+		FICR_XOSC32MTRIM_SLOPE_Pos);
+	offset = (trim & FICR_XOSC32MTRIM_OFFSET_Msk) >>
+		FICR_XOSC32MTRIM_OFFSET_Pos;
+	scaled = ((int64_t)CapFf - 5500LL) * (slope + 791) +
+		(int64_t)(offset << 2) * 1000LL;
+	if (scaled <= 0LL)
+	{
+		return 0U;
+	}
+	scaled >>= 8;
+
+	return (uint32_t)((scaled + 500LL) / 1000LL);
+}
+#endif
+
+#if !defined(FICR_LFXO_CAP_CALCULATE)
+static uint32_t nRF54LLfxoCapCalculate(uint32_t CapFf)
+{
+	uint32_t trim;
+	uint32_t offset;
+	int32_t slope;
+	int64_t scaled;
+
+	trim = NRF_FICR->XOSC32KTRIM;
+	slope = nRF54LTrimSlope(trim, FICR_XOSC32KTRIM_SLOPE_Msk,
+		FICR_XOSC32KTRIM_SLOPE_Pos);
+	offset = (trim & FICR_XOSC32KTRIM_OFFSET_Msk) >>
+		FICR_XOSC32KTRIM_OFFSET_Pos;
+	scaled = (2LL * CapFf - 12000LL) * (slope + 392) +
+		(int64_t)(offset << 3) * 1000LL;
+	if (scaled <= 0LL)
+	{
+		return 0U;
+	}
+
+	return (uint32_t)((scaled + 256000LL) / 512000LL);
+}
+#endif
+
 void SystemOscInit(void)
 {
-//	 INTCAP = (((CAPACITANCE-5.5)*(FICR->XOSC32MTRIM.SLOPE+791)) +
-//	           FICR->XOSC32MTRIM.OFFSET*4)/256
-	/* As specified in the nRF54L15 PS:
-	 * CAPVALUE = (((CAPACITANCE-5.5)*(FICR->XOSC32MTRIM.SLOPE+791)) +
-	 *              FICR->XOSC32MTRIM.OFFSET<<2)>>8;
-	 * where CAPACITANCE is the desired total load capacitance value in pF,
-	 * holding any value between 4.0 pF and 17.0 pF in 0.25 pF steps.
-	 */
-	uint32_t intcap = 0;
-	if (g_McuOsc.CoreOsc.LoadCap > 0)
+	uint32_t hfCap;
+	uint32_t lfCap;
+	uint32_t lfStat;
+	bool lfRunning;
+
+	// The board describes load capacitance in tenths of a pF.
+	// Nordic FICR calibration takes femtofarads: 0.1 pF = 100 fF.
+	// An unpopulated/internal-capacitor-free board uses zero.
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL)
 	{
-		int32_t slope = (NRF_FICR->XOSC32MTRIM & FICR_XOSC32MTRIM_SLOPE_Msk) >> FICR_XOSC32MTRIM_SLOPE_Pos;
-		slope = ((-(slope>>8))<<8) | slope;
-		uint32_t offset = (NRF_FICR->XOSC32MTRIM & FICR_XOSC32MTRIM_OFFSET_Msk) >> FICR_XOSC32MTRIM_OFFSET_Pos;
-		intcap = (uint32_t)((((g_McuOsc.CoreOsc.LoadCap * 2 - 40) - 55) * (slope + 791)) / 10 + (offset << 2))>>8;
+		hfCap = 0U;
+		if (g_McuOsc.CoreOsc.LoadCap != 0U)
+		{
+#if defined(FICR_HFXO_CAP_CALCULATE)
+			hfCap = nrf_ficr_hfxo_cap_calculate(NRF_FICR,
+				g_McuOsc.CoreOsc.LoadCap * 100U);
+#else
+			hfCap = nRF54LHfxoCapCalculate(
+				g_McuOsc.CoreOsc.LoadCap * 100U);
+#endif
+		}
+
+		// Do not modify an already-running HFXO owned by a bootloader
+		// or another clock user. This call does not start an oscillator.
+#if defined(CLOCK_XO_STAT_STATE_Msk)
+		if ((NRF_CLOCK_S->XO.STAT & CLOCK_XO_STAT_STATE_Msk) == 0U &&
+			NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP != hfCap)
+#else
+		if (NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP != hfCap)
+#endif
+		{
+			NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = hfCap;
+		}
 	}
-	//NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = intcap;
-	//intcap = NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP;
 
-	//intcap = OSCILLATORS_HFXO_CAP_CALCULATE(NRF_FICR, (12));
-	NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP = intcap;
-
-	intcap = 0;
-	if (g_McuOsc.LowPwrOsc.LoadCap > 0)
+	if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL)
 	{
-		/* As specified in the nRF54L15 PS:
-		 * CAPVALUE = round( (CAPACITANCE - 4) * (FICR->XOSC32KTRIM.SLOPE + 0.765625 * 2^9)/(2^9)
-		 *            + FICR->XOSC32KTRIM.OFFSET/(2^6) );
-		 * where CAPACITANCE is the desired capacitor value in pF, holding any
-		 * value between 4 pF and 18 pF in 0.5 pF steps.
-		 */
-		int32_t slope = (NRF_FICR->XOSC32KTRIM & FICR_XOSC32KTRIM_SLOPE_Msk) >> FICR_XOSC32KTRIM_SLOPE_Pos;
-		slope = ((-(slope>>8))<<8) | slope;
-		uint32_t offset = (NRF_FICR->XOSC32KTRIM & FICR_XOSC32KTRIM_OFFSET_Msk) >> FICR_XOSC32KTRIM_OFFSET_Pos;
+		lfCap = 0U;
+		if (g_McuOsc.LowPwrOsc.LoadCap != 0U)
+		{
+#if defined(FICR_LFXO_CAP_CALCULATE)
+			lfCap = nrf_ficr_lfxo_cap_calculate(NRF_FICR,
+				g_McuOsc.LowPwrOsc.LoadCap * 100U);
+#else
+			lfCap = nRF54LLfxoCapCalculate(
+				g_McuOsc.LowPwrOsc.LoadCap * 100U);
+#endif
+		}
 
-		intcap = (((g_McuOsc.LowPwrOsc.LoadCap - 40UL) * (uint32_t)(slope + 392) + 5) / 5120) + (offset >> 6);
+		// GRTC can run directly from LFXO while system LFCLK is off.
+		// Preserve the capacitor configuration if either user is active.
+		lfStat = NRF_CLOCK_S->LFCLK.STAT;
+		lfRunning = (lfStat & CLOCK_LFCLK_STAT_STATE_Msk) != 0U &&
+			(lfStat & CLOCK_LFCLK_STAT_SRC_Msk) ==
+			(CLOCK_LFCLK_SRC_SRC_LFXO << CLOCK_LFCLK_STAT_SRC_Pos);
+		if ((NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk) != 0U &&
+			((NRF_GRTC->CLKCFG & GRTC_CLKCFG_CLKSEL_Msk) >>
+			GRTC_CLKCFG_CLKSEL_Pos) == GRTC_CLKCFG_CLKSEL_LFXO)
+		{
+			lfRunning = true;
+		}
+		if (!lfRunning && NRF_OSCILLATORS->XOSC32KI.INTCAP != lfCap)
+		{
+			NRF_OSCILLATORS->XOSC32KI.INTCAP = lfCap;
+		}
 	}
-	NRF_OSCILLATORS->XOSC32KI.INTCAP = intcap;
-	intcap = NRF_OSCILLATORS->XOSC32KI.INTCAP;
 }
-
