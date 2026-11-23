@@ -156,7 +156,7 @@
 									<listOptionValue builtIn="false" value="nrf_cc310_0.9.13"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths.568220917" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
-									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release_FPU&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug_FPU&quot;"/>
 								</option>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.1930156084" name="Cross ARM C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
@@ -749,7 +749,7 @@
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths.1324742254" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../TaktOS/ARM/cm4/ioc/DebugFPU&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug_SDC&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release_SDC&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/mpsl/lib/nrf52/hard-float&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/mpsl/fem/common/lib/nrf52/hard-float&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/sdk-nrfxlib/softdevice_controller/lib/nrf52/hard-float&quot;"/>
