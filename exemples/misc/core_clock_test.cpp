@@ -50,8 +50,10 @@ SOFTWARE.
 #ifndef CLOCK_DEMO_IRQ_PRIORITY
 #define CLOCK_DEMO_IRQ_PRIORITY 6
 #endif
+// UART interrupt mode is the generic default. Boards lacking IRQ support
+// may override this option; DMA remains an independent choice.
 #ifndef CORE_CLOCK_TEST_UART_INT
-#define CORE_CLOCK_TEST_UART_INT false
+#define CORE_CLOCK_TEST_UART_INT true
 #endif
 #ifndef CORE_CLOCK_TEST_UART_DMA
 #define CORE_CLOCK_TEST_UART_DMA false

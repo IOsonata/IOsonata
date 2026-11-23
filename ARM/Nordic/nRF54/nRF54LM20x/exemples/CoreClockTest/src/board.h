@@ -65,9 +65,7 @@ SOFTWARE.
 // Test core oscillator selection. Shared HFXO ownership has its own test.
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
-// UART diagnostics use the asynchronous IRQ-driven EasyDMA path.
-// Keep this in board configuration; the shared CoreClockTest remains MCU-independent.
-#define CORE_CLOCK_TEST_UART_INT true
+// UART interrupts are enabled by the shared test; this board uses EasyDMA.
 #define CORE_CLOCK_TEST_UART_DMA true
 
 #endif

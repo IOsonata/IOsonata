@@ -27,8 +27,8 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("msDelay(2);", source[start:end])
 
 	def test_nordic_core_clock_uses_irq_dma(self):
-		# All Nordic CoreClockTest managed boards must explicitly opt into
-		# interrupt-driven EasyDMA. Never rely on the polling defaults.
+		# UART interrupts are on by default in the generic CoreClockTest.
+		# Nordic boards opt into EasyDMA without duplicating this default.
 		boards = (
 			"nRF52/nRF52832",
 			"nRF52/nRF52840",
@@ -41,10 +41,12 @@ class DemoDriverOwnership(unittest.TestCase):
 			path = ROOT / "ARM/Nordic" / board / "exemples/CoreClockTest/src/board.h"
 			with self.subTest(board=board):
 				source = path.read_text(encoding="utf-8")
-				self.assertIn("#define CORE_CLOCK_TEST_UART_INT true", source)
+				self.assertNotIn("#define CORE_CLOCK_TEST_UART_INT", source)
 				self.assertIn("#define CORE_CLOCK_TEST_UART_DMA true", source)
 
 		source = CLOCK.read_text(encoding="utf-8")
+		self.assertIn("#define CORE_CLOCK_TEST_UART_INT true", source)
+		self.assertIn("#define CORE_CLOCK_TEST_UART_DMA false", source)
 		self.assertIn(".bIntMode = CORE_CLOCK_TEST_UART_INT", source)
 		self.assertIn(".bDMAMode = CORE_CLOCK_TEST_UART_DMA", source)
 		self.assertIn("DEVINTRF_EVT_TX_FIFO_EMPTY", source)
