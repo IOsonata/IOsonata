@@ -57,7 +57,9 @@ existing shared-clock policy; a platform clock owner may override it.
 
 ## Projects and bench procedure
 
-Build `ARM/Nordic/nRF54/nRF54LM20x/lib/ioc`, then one of these projects:
+Build `ARM/Nordic/nRF54/nRF54LM20A/lib/ioc` or
+`ARM/Nordic/nRF54/nRF54LM20B/lib/ioc` for the chip on the board, then one of
+these projects of the same target:
 
 - `exemples/UsbCdcLoopback/ioc`: portable CDC loopback.
 - `exemples/UsbCdcPrbsTx/ioc`: CDC throughput and stream integrity.
@@ -95,9 +97,9 @@ integrations and are not part of this portable USB project set.
 driver, with incomplete ISO OUT handling added; see the
 [TinyUSB comparison notes](../exemples/usb/tinyusb_common/README.md).
 
-These USB projects select `NRF54LM20B_XXAA`, matching the library, and use the
-shared LM20 memory-layout script. For LM20A, select `NRF54LM20A_XXAA` in both the
-library and application. Use the USB connector connected to the LM20 USBHS pins,
+The USB projects exist in both the nRF54LM20A and nRF54LM20B targets. Each
+defines its target's MCU and links its target's library and linker script.
+Use the USB connector connected to the LM20 USBHS pins,
 not the board's debugger USB connector. The project uses the Nordic FICR/system
 startup PHY tuning.
 
@@ -115,7 +117,7 @@ interoperability.
 
 ### USB CDC to BLE peripheral bridge
 
-`ARM/Nordic/nRF54/nRF54LM20x/exemples/UsbBleDemo/ioc` links the shared
+`exemples/UsbBleDemo/ioc` of either target links the shared
 [usb_ble.cpp](../exemples/bluetooth/usb_ble.cpp). It combines IOsonata's
 bare-metal USB CDC device implementation with Nordic's Bluetooth stack in the
 same application. The nRF54LM20 project provides Debug, Release, Debug_SDC and
@@ -143,9 +145,10 @@ Each has four configurations:
   Release_SDC library, and link `mpsl`, `mpsl_fem_common` and
   `softdevice_controller_multirole` from sdk-nrfxlib.
 
-For the central projects, Debug and Release currently select
-`gcc_nrf54lm20a_xxaa_s145.ld`, while Debug_SDC and Release_SDC select
-`gcc_nrf54lm20b_xxaa.ld`. All configurations define `NRF54LM20B_XXAA`.
+For the central projects, Debug and Release select the target's
+`gcc_nrf54lm20a_xxaa_s145.ld` or `gcc_nrf54lm20b_xxaa_s145.ld`, while
+Debug_SDC and Release_SDC select `gcc_nrf54lm20a_xxaa.ld` or
+`gcc_nrf54lm20b_xxaa.ld`. All configurations define the target's MCU.
 The TaktOS project also links `TaktOS_M33`.
 `src/board.h` maps the four DK LEDs; LED4 shows the Bluetooth link.
 

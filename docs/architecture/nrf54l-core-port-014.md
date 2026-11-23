@@ -8,9 +8,16 @@ Baseline: squash commit `1398e64d5f2ba5a7f5972abda6feeacd589e2a85`.
 - `ARM/Nordic/nRF54/nRF54L15/lib/ioc`
 - `ARM/Nordic/nRF54/nRF54L15/exemples/CoreClockTest/ioc`
 - `ARM/Nordic/nRF54/nRF54L15/exemples/CorePowerTest/ioc`
-- `ARM/Nordic/nRF54/nRF54LM20x/lib/ioc`
-- `ARM/Nordic/nRF54/nRF54LM20x/exemples/CoreClockTest/ioc`
-- `ARM/Nordic/nRF54/nRF54LM20x/exemples/CorePowerTest/ioc`
+- `ARM/Nordic/nRF54/nRF54LM20A/lib/ioc`
+- `ARM/Nordic/nRF54/nRF54LM20A/exemples/CoreClockTest/ioc`
+- `ARM/Nordic/nRF54/nRF54LM20A/exemples/CorePowerTest/ioc`
+- `ARM/Nordic/nRF54/nRF54LM20B/lib/ioc`
+- `ARM/Nordic/nRF54/nRF54LM20B/exemples/CoreClockTest/ioc`
+- `ARM/Nordic/nRF54/nRF54LM20B/exemples/CorePowerTest/ioc`
+
+The former combined `nRF54LM20x` target is now two targets, see
+"nRF54LM20A and nRF54LM20B targets" at the end of this document. Earlier
+sections that say nRF54LM20x describe the combined target as it was.
 
 Use IOcomposer Eclipse CDT managed builds. Clean the library, build it, then
 clean/build each test for matching configurations. The shared test sources
@@ -322,7 +329,7 @@ library and both Core tests:
 
 ```sh
 python3 tests/nordic/build_managed_power_clock.py \
-    --target nrf54lm20x --config Release
+    --target nrf54lm20a --config Release
 ```
 
 First run `CoreClockTest` for startup clock, delay factors and all
@@ -338,7 +345,7 @@ managed targets, including their library and generic Core tests:
 
 ```sh
 python3 tests/nordic/build_managed_power_clock.py \
-	--target nrf54l15 --target nrf54lm20x \
+	--target nrf54l15 --target nrf54lm20a --target nrf54lm20b \
 	--config Debug --config Release
 ```
 
@@ -530,3 +537,43 @@ any future LM20B build must use a matching B-specific library configuration.
 CoreClockTest application so an old B-compiled static library cannot remain
 linked. Run fresh-reset cold/warm/reuse `sDelay(1)`, full timer matrix, and
 CorePowerTest. Hardware confirmation of the fixed cold path is pending.
+
+## nRF54LM20A and nRF54LM20B targets (November 23, 2026)
+
+The combined `ARM/Nordic/nRF54/nRF54LM20x` target is replaced by two
+targets named after their MCU define:
+
+| Target | MCU define | Library project | Linker scripts |
+| --- | --- | --- | --- |
+| `ARM/Nordic/nRF54/nRF54LM20A` | `NRF54LM20A_XXAA` | `IOsonata_nRF54LM20A` | `gcc_nrf54lm20a_xxaa*.ld` |
+| `ARM/Nordic/nRF54/nRF54LM20B` | `NRF54LM20B_XXAA` | `IOsonata_nRF54LM20B` | `gcc_nrf54lm20b_xxaa*.ld` |
+
+Each target has its own library project and the same 40 example projects.
+Every project of a target defines that target's MCU, links that target's
+library and uses that target's linker scripts, so a library and an
+application can no longer be built for different variants.
+
+Per-target files:
+
+- `lib/src/vector_nrf54lm20a.c` keeps IRQ 86 reserved, as in Nordic's
+  nRF54LM20A startup file. `lib/src/vector_nrf54lm20b.c` has
+  `AXONS_IRQHandler` there.
+- `lib/include/nrfx_config_nrf54lm20a_application.h` and
+  `nrfx_config_nrf54lm20b_application.h`, selected by
+  `ARM/Nordic/include/nrfx_config.h` from the MCU define.
+
+The shared sources under `ARM/Nordic/src` and `ARM/Nordic/nRF54/src` are
+unchanged. Compiled with the managed Release settings of each target, 15
+library sources produce the same object code as the combined target did
+with the same MCU define; only the nRF54LM20A vector table differs (no
+AXONS entry).
+
+All nRF54LM20 hardware results recorded in this document were taken on an
+nRF54LM20A board and belong to the nRF54LM20A target. The nRF54LM20B
+target has no hardware result yet. Its cold `sDelay` compensation in
+`timer_nrfx.cpp` is still zero and its delay divisors in
+`system_nrf54l.c` are the nRF54LM20A values, not measured on a B chip.
+
+The managed build script takes `--target nrf54lm20a` and
+`--target nrf54lm20b`. Clean-build the library of a target before its
+tests: an archive left from the combined project must not be linked.

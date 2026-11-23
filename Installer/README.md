@@ -583,13 +583,14 @@ Available IOsonata library projects:
    3) ARM/Nordic/nRF53/nRF5340_App/lib/ioc
    4) ARM/Nordic/nRF53/nRF5340_Net/lib/ioc
    5) ARM/Nordic/nRF54/nRF54L15/lib/ioc
-   6) ARM/Nordic/nRF54/nRF54LM20x/lib/ioc
-   7) ARM/Nordic/nRF91/nRF9160/lib/ioc
-   8) ARM/Nordic/nRF91/nRF91x1/lib/ioc
+   6) ARM/Nordic/nRF54/nRF54LM20A/lib/ioc
+   7) ARM/Nordic/nRF54/nRF54LM20B/lib/ioc
+   8) ARM/Nordic/nRF91/nRF9160/lib/ioc
+   9) ARM/Nordic/nRF91/nRF91x1/lib/ioc
    A) Build All
    0) Exit
 
-Select IOsonata project to build (0-8 or A):
+Select IOsonata project to build (0-9 or A):
 ```
 
 ### What Gets Built

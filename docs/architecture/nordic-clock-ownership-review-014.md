@@ -47,7 +47,7 @@ UART PowerOff fix. Do not interpret it as a passing calibration.
 | --- | --- | --- |
 | `exemples/bluetooth/uart_ble_central.cpp` | Statistics read `UARTDev_t::hTxFifo` and `TxDropCnt` directly; preserve the diagnostic functionality when correcting it | Already in 0.13 |
 | `ARM/Nordic/nRF52/nRF52832/exemples/SlimeVRTracker/src/main.cpp` | Application starts HFCLK through CLOCK registers rather than System Clock; review ESB ownership first | Already in 0.13 |
-| `ARM/Nordic/nRF54/nRF54LM20x/exemples/TinyUsbComboStress/src/tinyusb_combo_port.cpp` | Bring-up code starts XO24M directly; decide whether the USB port or system clock implementation should own this resource | Already in 0.13 |
+| `ARM/Nordic/nRF54/nRF54LM20A/exemples/TinyUsbComboStress/src/tinyusb_combo_port.cpp` (same file in nRF54LM20B) | Bring-up code starts XO24M directly; decide whether the USB port or system clock implementation should own this resource | Already in 0.13 |
 | `ARM/Nordic/src/system_power_nrfx.cpp` | SystemPowerOff can return on failed HFXO precondition, despite the generic nonreturning description | Introduced after 0.13 |
 | `ARM/ST/STM32WBAxx/src/system_power_stm32wba.cpp` | SystemPowerOff can return when a power register check fails | Introduced after 0.13 |
 | `ARM/Nordic/src/system_clock_nrfx.cpp` | BLE ownership handover and final release in interrupt context require separate target validation | Introduced after 0.13 |
