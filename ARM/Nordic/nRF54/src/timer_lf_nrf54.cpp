@@ -135,28 +135,52 @@ static bool nRFxGrtcEnable(TimerDev_t * const pTimer)
 static void nRFxGrtcDisable(TimerDev_t * const pTimer)
 {
 	uint32_t state;
+	nRFGrtcData_t *pRtc;
 	int devno;
+	int i;
+	int idx;
 
-	devno = pTimer->DevNo;
-	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX ||
-		s_nRfxGrtcData[devno].pTimer != pTimer)
+	if (pTimer == nullptr)
 	{
+		return;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX)
+	{
+		return;
+	}
+	state = DisableInterrupt();
+	pRtc = &s_nRfxGrtcData[devno];
+	if (pRtc->pTimer != pTimer)
+	{
+		EnableInterrupt(state);
 		return;
 	}
 	s_bGrtcEnabled[devno] = false;
 	NVIC_DisableIRQ(nRFxGrtcIrqNo(devno));
 	NVIC_ClearPendingIRQ(nRFxGrtcIrqNo(devno));
 
-	// Only an automatically selected temporary timer is returned to the
-	// pool. Explicitly initialized but disabled timers retain ownership.
+	// Explicitly initialized timers retain their trigger and group
+	// ownership across Disable. Only temporary timers return to the pool.
 	if (s_bGrtcAutoSelected[devno])
 	{
-		state = DisableInterrupt();
-		s_nRfxGrtcData[devno].pInt[2] = nRFxGrtcCCMask(s_nRfxGrtcData[devno]);
-		s_nRfxGrtcData[devno].pTimer = nullptr;
+		pRtc->pInt[2] = nRFxGrtcCCMask(*pRtc);
+		for (i = 0; i < pRtc->MaxNbTrigEvt; i++)
+		{
+			idx = pRtc->StartCCIdx + i;
+			NRF_GRTC->CC[idx].CCEN = 0U;
+			NRF_GRTC->EVENTS_COMPARE[idx] = 0U;
+			pRtc->CC[i] = 0U;
+			pRtc->Compare[i] = 0U;
+			pRtc->Trigger[i].nsPeriod = 0U;
+			pRtc->Trigger[i].Handler = nullptr;
+			pRtc->Trigger[i].pContext = nullptr;
+			pRtc->Trigger[i].Type = TIMER_TRIG_TYPE_SINGLE;
+		}
+		pRtc->pTimer = nullptr;
 		s_bGrtcAutoSelected[devno] = false;
-		EnableInterrupt(state);
 	}
+	EnableInterrupt(state);
 }
 
 // SYSCOUNTER, SYSCOUNTERL read before SYSCOUNTERH. Read again while BUSY
@@ -376,8 +400,9 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	{
 		return false;
 	}
-	// The last GRTC interrupt group and CC7..11 belong to MPSL.
-	// DevNo=-1 selects a free application group, never the MPSL group.
+	// Reserve the selected group atomically. Never assign MPSL's
+	// final group (CC7..11) on an automatic timer request.
+	uint32_t state = DisableInterrupt();
 	automatic = pCfg->DevNo == -1;
 	selected = *pCfg;
 	if (automatic)
@@ -395,39 +420,48 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		}
 		if (selected.DevNo < 0)
 		{
+			EnableInterrupt(state);
 			return false;
 		}
 	}
 	devno = selected.DevNo;
-	// One Timer handle may own only one GRTC group at a time.
 	for (candidate = 0; candidate < TIMER_NRFX_RTC_MAX; candidate++)
 	{
-		if (candidate != devno && s_nRfxGrtcData[candidate].pTimer == pTimer)
+		if (candidate != devno &&
+			s_nRfxGrtcData[candidate].pTimer == pTimer)
 		{
+			EnableInterrupt(state);
 			return false;
 		}
 	}
 	if (s_nRfxGrtcData[devno].pTimer != nullptr &&
 		s_nRfxGrtcData[devno].pTimer != pTimer)
 	{
+		EnableInterrupt(state);
 		return false;
 	}
 	if (s_bGrtcEnabled[devno] &&
 		s_nRfxGrtcData[devno].pTimer != pTimer)
 	{
+		EnableInterrupt(state);
 		return false;
 	}
 	if (s_nRfxGrtcData[devno].pTimer == pTimer)
 	{
-		// A reinitialization must not silently destroy active triggers.
 		for (int i = 0; i < s_nRfxGrtcData[devno].MaxNbTrigEvt; i++)
 		{
 			if (s_nRfxGrtcData[devno].Trigger[i].nsPeriod != 0U)
 			{
+				EnableInterrupt(state);
 				return false;
 			}
 		}
 	}
+	// Install ownership before restoring interrupts, so another user
+	// cannot select the same group while initialization proceeds.
+	s_nRfxGrtcData[devno].pTimer = pTimer;
+	s_bGrtcAutoSelected[devno] = automatic;
+	EnableInterrupt(state);
     pTimer->DevNo = devno;
     pTimer->EvtHandler = pCfg->EvtHandler;
 	nRFGrtcData_t &rtc = s_nRfxGrtcData[pTimer->DevNo];
@@ -437,8 +471,7 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	rtc.pSysCnt = &NRF_GRTC->SYSCOUNTER[devno];
     memset(rtc.Trigger, 0, sizeof(rtc.Trigger));
 
-    rtc.pTimer = pTimer;
-	s_bGrtcAutoSelected[devno] = automatic;
+
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 
