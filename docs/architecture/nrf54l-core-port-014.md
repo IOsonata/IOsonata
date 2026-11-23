@@ -861,3 +861,33 @@ This was a metadata repair, not a clock/PLL or delay-factor change.
 Actual Eclipse managed Debug/Release builds and the new Python check
 have not yet been executed in this environment. Validate the
 linker command in each configuration before acceptance.
+
+## nRF5340 App/Net managed Release library-path audit
+
+The nRF5340 Application and Network Eclipse managed example projects
+were audited following discovery that new Nordic example Release builds
+could link the Debug static library. The same problem affected nRF5340.
+
+For the **Application core**, 23 identified example managed projects
+were inspected and 20 required correction. For the **Network core**,
+11 identified example managed projects were inspected and all 11 required
+correction. CoreClockTest and CorePowerTest were affected on both cores,
+as were several BLE, UART, timer, IPC, and other examples. Already
+correct configurations were left unchanged.
+
+The affected `Release` configurations now use
+`../../../../lib/ioc/Release` rather than `Debug`; their `Debug`
+configurations retain `../../../../lib/ioc/Debug`. No power, clock,
+UART, timer, CPU frequency, or linker-script source was changed.
+
+The new regression script
+`python3 tests/nordic/check_managed_library_paths.py` enumerates
+all available example `.cproject` files for nRF5340 App/Net and
+nRF54L15/LM20A/LM20B, and checks that each managed configuration
+links the corresponding library build and target library name.
+
+The metadata corrections were verified on representative App and Net
+Core tests and BLE examples using the remote files. A complete local
+Eclipse Debug/Release build matrix and execution of the new Python
+regression have not yet been performed; these remain acceptance checks
+before merging into main.
