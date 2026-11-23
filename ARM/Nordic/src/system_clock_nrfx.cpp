@@ -938,6 +938,21 @@ extern "C" bool nRFxSleepLfClockRunning(void)
 	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
 }
 
+// A STOP issued here is settled once LFCLKSTAT reports the clock stopped,
+// or once a BLE stack controls CLOCK and runs LFCLK itself. Without this
+// the flag would stay set after the last release until the next direct
+// enable, and refuse a later MPSL request or a timer enable under the
+// SoftDevice. Call with interrupts masked.
+static void nRFxLfclkStopSettle(void)
+{
+	if (s_bNRFxLfclkStopPending &&
+		((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U ||
+		nRFxMpslActive() || nRFxClockSdEnabled()))
+	{
+		s_bNRFxLfclkStopPending = false;
+	}
+}
+
 bool SystemLowFreqClockEnable(void)
 {
 	uint32_t src;
@@ -959,6 +974,7 @@ bool SystemLowFreqClockEnable(void)
 	}
 #endif
 	state = DisableInterrupt();
+	nRFxLfclkStopSettle();
 	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt == UINT32_MAX)
 	{
 		EnableInterrupt(state);
@@ -1327,6 +1343,7 @@ int32_t nRFxMpslLfclkRequest(void)
 		return -1;
 	}
 	state = DisableInterrupt();
+	nRFxLfclkStopSettle();
 	if (s_nRFxMpslLfclkReqCnt == UINT32_MAX ||
 		s_bNRFxLfclkTransition || s_bNRFxLfclkStopPending)
 	{
