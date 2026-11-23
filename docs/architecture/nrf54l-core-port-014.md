@@ -577,3 +577,29 @@ target has no hardware result yet. Its cold `sDelay` compensation in
 The managed build script takes `--target nrf54lm20a` and
 `--target nrf54lm20b`. Clean-build the library of a target before its
 tests: an archive left from the combined project must not be linked.
+
+## nRF54LM20A CoreClockTest hardware acceptance (November 23, 2026)
+
+After splitting nRF54LM20A and nRF54LM20B into separate managed projects,
+the nRF54LM20A CoreClockTest hardware capture records **four consecutive
+complete runs with zero failures**, each at 128 MHz. Every run passes the
+HF/LF lifecycle, core/peripheral clock switching and restoration, 11 timer
+devices (four 1-MHz GRTC groups plus seven HF timers), one-shot/continuous
+trigger operations, independent clock ownership and sDelay timer contention.
+
+The four measured cold `sDelay(1)` values are 1,000,006, 1,011,782,
+1,005,654 and 1,000,479 us, all within the 2% threshold (maximum error
+1.1782%). Warm and reuse results remain within 3 us of 1 second. The
+128-MHz busy-loop timing is consistent: `msDelay(100)=99,996 us`, and
+`nsDelay(100 ms)=100,000 us`, with independently reported divisor
+recommendations of 8,000,320 and 3,000,150. The production LM20A 128-MHz
+fallback divisors remain 8,000,640 and 3,000,150; no further correction is
+warranted by this data.
+
+Cold LFXO/GRTC startup compensation of 433,611 ticks is **accepted at the
+existing 2% tolerance on this LM20A board**, rather than claimed as an
+exact startup time across conditions. CorePowerTest, the 64-MHz delay
+endpoint, LM20B hardware testing and BLE/MPSL coexistence are still
+separate acceptance tasks. The unsupported CPU low-power-mode and optional
+RC-calibration reports in the capture are not test failures. No merge to
+main is authorized by CoreClockTest results alone.
