@@ -195,11 +195,14 @@ int TimerGetHighFreqDevNo()
 	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
 	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
 	defined(NRF52833_XXAA) || defined(NRF52840_XXAA) || \
-	defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK)
+	defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || \
+	defined(NRF54L_SERIES)
 
 // TimerInit selects an unused LF timer for DevNo=-1; TimerDisable
 // returns only automatically selected timers to the timer driver.
+#if !defined(NRF54L_SERIES)
 extern "C" bool nRFxSleepLfClockRunning(void);
+#endif
 #if defined(NRF5340_XXAA_APPLICATION)
 extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);
 #endif
@@ -300,7 +303,13 @@ extern "C" bool sDelay(uint32_t Seconds)
 	s_bSleepTimerBusy = true;
 	__set_PRIMASK(irqState);
 
+#if defined(NRF54L_SERIES)
+	// GRTC has its own continuously running 1-MHz system counter.
+	// TimerInit does not start an LFCLK oscillator for this timer.
+	warmClock = true;
+#else
 	warmClock = nRFxSleepLfClockRunning();
+#endif
 	cfg = {};
 	cfg.DevNo = -1;
 	cfg.ClkSrc = TIMER_CLKSRC_DEFAULT;
