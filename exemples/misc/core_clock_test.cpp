@@ -557,11 +557,6 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	uint32_t nsFactorBefore;
 	uint32_t nsFactorAfter;
 	bool valid;
-	bool dwtMeasured;
-	bool agreement;
-	uint64_t usDiff;
-	uint64_t nsDiff;
-	DelayCalibrationPoint_t timerPoint;
 
 	cpuHz = SystemCoreClockGet();
 	if (pSample == nullptr || cpuHz == 0U)
@@ -576,8 +571,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 
 	// DWT is an optional measurement instrument, never the runtime delay.
 	// If unavailable, use the existing HF Timer calibration path.
-	dwtMeasured = DelayCalibrationMeasure(pSample);
-	if (dwtMeasured)
+	if (DelayCalibrationMeasure(pSample))
 	{
 		CoreClockTestPrint("Delay calibration DWT %u Hz: us loop/s %u, ns loop/s %u\r\n",
 			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
@@ -586,17 +580,13 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	}
 	else
 	{
-#if ARM_DELAY_CAL_DWT_AVAILABLE
-		CoreClockTestPrint("DWT hardware probe unavailable; HF Timer fallback\r\n");
-#else
-		CoreClockTestPrint("DWT not exposed by CMSIS; HF Timer fallback\r\n");
-#endif
+		CoreClockTestPrint("DWT calibration unavailable; HF Timer will measure delay timing\r\n");
 	}
 
 	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
 	{
-		CoreClockTestPrint("Delay timing: no HF Timer reference\r\n");
-		return dwtMeasured;
+		CoreClockTestPrint("Delay timing: no CPU counter or HF Timer\r\n");
+		return false;
 	}
 
 	cfg = s_TimerCfg;
@@ -605,7 +595,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	if (!TimerInit(&s_RetainedTimer, &cfg))
 	{
 		CoreClockTestPrint("Delay timing: HF Timer init FAIL\r\n");
-		return dwtMeasured;
+		return false;
 	}
 	valid = TimerSetFrequency(&s_RetainedTimer, 0U) != 0U &&
 		TimerEnable(&s_RetainedTimer);
@@ -613,7 +603,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	{
 		TimerDisable(&s_RetainedTimer);
 		CoreClockTestPrint("Delay timing: HF Timer start FAIL\r\n");
-		return dwtMeasured;
+		return false;
 	}
 
 	// Sample the busy loop without UART or other interrupt-handler time.
@@ -665,43 +655,24 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	if (usElapsed == 0U || nsPublicElapsed == 0U)
 	{
 		CoreClockTestResult("Delay HF Timer measurement", false);
-		return dwtMeasured;
+		return false;
 	}
-	// The HF Timer estimates factors from the public API, independently.
-	// Preserve a successful DWT result instead of overwriting it.
-	timerPoint = {};
+	// Recommend factors from the public API, never from a differently
+	// placed inline assembly probe.
 	valid = DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,
-		&timerPoint);
+		pSample);
 	if (valid)
 	{
 		CoreClockTestPrint("Delay calibration HF Timer %u Hz: us loop/s %u, ns loop/s %u\r\n",
-			(unsigned)cpuHz, (unsigned)timerPoint.UsLoopsPerSecond,
-			(unsigned)timerPoint.NsLoopsPerSecond);
-		if (dwtMeasured)
-		{
-			usDiff = pSample->UsLoopsPerSecond > timerPoint.UsLoopsPerSecond ?
-				pSample->UsLoopsPerSecond - timerPoint.UsLoopsPerSecond :
-				timerPoint.UsLoopsPerSecond - pSample->UsLoopsPerSecond;
-			nsDiff = pSample->NsLoopsPerSecond > timerPoint.NsLoopsPerSecond ?
-				pSample->NsLoopsPerSecond - timerPoint.NsLoopsPerSecond :
-				timerPoint.NsLoopsPerSecond - pSample->NsLoopsPerSecond;
-			agreement = usDiff * 100ULL <=
-				(uint64_t)timerPoint.UsLoopsPerSecond * 2ULL &&
-				nsDiff * 100ULL <=
-				(uint64_t)timerPoint.NsLoopsPerSecond * 2ULL;
-			CoreClockTestResult("DWT/HF delay-factor agreement", agreement);
-		}
-		else
-		{
-			*pSample = timerPoint;
-			CoreClockTestDelayDivisors(pSample);
-		}
+			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
+			(unsigned)pSample->NsLoopsPerSecond);
+		CoreClockTestDelayDivisors(pSample);
 	}
 	else
 	{
-		CoreClockTestPrint("HF Timer factors unavailable; timing only\r\n");
+		CoreClockTestPrint("Delay factors unavailable on this MCU; timing only\r\n");
 	}
-	return dwtMeasured || valid;
+	return valid;
 }
 
 static void CoreClockTestDelayCalibrationRecord(void)

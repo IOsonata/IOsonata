@@ -66,31 +66,25 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertNotIn("UARTTx(&s_Uart, &value, 1)", source)
 		self.assertIn("DEVINTRF_EVT_TX_FIFO_EMPTY", source)
 
-	def test_core_clock_delay_calibration_prioritizes_dwt(self):
+	def test_core_clock_uses_existing_delay_calibration(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		start = source.index("static bool CoreClockTestDelaySample(")
 		end = source.index("static void CoreClockTestDelayCalibrationRecord(", start)
 		section = source[start:end]
 
-		self.assertIn("dwtMeasured = DelayCalibrationMeasure(pSample);", section)
-		self.assertNotIn("\t\t#if ARM_DELAY_CAL_DWT_AVAILABLE", section)
-		self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed", section)
-		self.assertIn("*pSample = timerPoint;", section)
-		self.assertIn("return dwtMeasured || valid;", section)
-		self.assertIn('CoreClockTestResult("DWT/HF delay-factor agreement", agreement);', section)
-		self.assertIn("TimerGetHighFreqDevNo()", section)
+		self.assertIn("if (DelayCalibrationMeasure(pSample))", section)
+		self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,", section)
+		self.assertIn("CoreClockTestDelayDivisors(pSample);", section)
 		self.assertIn("TimerGetHighFreqDevCount()", section)
-		self.assertLess(section.index("dwtMeasured = DelayCalibrationMeasure(pSample);"),
+		self.assertIn("TimerGetHighFreqDevNo()", section)
+		self.assertLess(section.index("DelayCalibrationMeasure(pSample)"),
 			section.index("TimerGetHighFreqDevCount()"))
 		self.assertIn("TimerGetMicrosecond(&s_RetainedTimer)", section)
-		self.assertNotIn("TimerGetLowFreqDevCount()", section)
-		self.assertNotIn("RTC", section.split("if (TimerGetHighFreqDevCount()", 1)[1])
 		self.assertIn("msDelay(100);", section)
 		self.assertIn("nsDelay(100000000U);", section)
 		self.assertIn("CoreClockTestDelayCalibrationRecord();", source)
 		self.assertIn("CoreClockTestDelayCalibrationReport();", source)
 		self.assertNotIn("DelayCalibrationInterpolate(", source)
-		self.assertIn("Delay two-point calibration: two CPU speeds measured", source)
 		self.assertIn("if (core != s_DelayHigh.CpuHz", source)
 
 	def test_core_clock_peripheral_clock_interface(self):

@@ -35,21 +35,6 @@ typedef struct {
 
 #define ARM_DELAY_CAL_LOOPS	8192U
 
-// Optional MCU-owned DWT gate. On SoCs such as nRF54L, the trace/debug
-// peripheral must be enabled temporarily before CYCCNT can advance.
-// These weak hooks are no-ops when an MCU does not implement them.
-// Calibrating never enables trace pins or changes application clock sources.
-#if defined(__GNUC__)
-#ifdef __cplusplus
-extern "C" {
-#endif
-bool SystemDelayDwtPrepare(void) __attribute__((weak));
-void SystemDelayDwtRestore(void) __attribute__((weak));
-#ifdef __cplusplus
-}
-#endif
-#endif
-
 // Measured cycles for ARM_DELAY_CAL_LOOPS iterations. The fallback uses
 // documented per-target assembly-loop cycles until measurement succeeds.
 typedef struct {
@@ -309,9 +294,6 @@ static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
 	uint32_t oldNs;
 	uint32_t cpuHz;
 	bool success;
-#if defined(__GNUC__) && ARM_DELAY_CAL_DWT_AVAILABLE
-	bool prepared;
-#endif
 
 	if (pPoint == NULL)
 	{
@@ -329,17 +311,7 @@ static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
 	measured.NsCycles = 0U;
 	measured.CpuHz = 0U;
 	measured.Measured = false;
-#if defined(__GNUC__) && ARM_DELAY_CAL_DWT_AVAILABLE
-	prepared = SystemDelayDwtPrepare == NULL ||
-		SystemDelayDwtPrepare();
-	success = prepared && ArmDelayCalibrate(&measured, cpuHz);
-	if (prepared && SystemDelayDwtRestore != NULL)
-	{
-		SystemDelayDwtRestore();
-	}
-#else
 	success = ArmDelayCalibrate(&measured, cpuHz);
-#endif
 	if (success)
 	{
 		pPoint->UsLoopsPerSecond = SystemMicroSecLoopCnt;

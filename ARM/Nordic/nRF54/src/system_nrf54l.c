@@ -88,14 +88,6 @@ uint32_t SystemnsDelayFactor = 1000000UL;
     __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 #endif    
 
-// Only the nRF54L System Core implementation owns this DWT calibration state.
-#if defined(NRF54L_SERIES) && !defined(NRF_TRUSTZONE_NONSECURE) && \
-	defined(NRF_TAD_S) && defined(TAD_ENABLE_ENABLE_Msk)
-static uint32_t s_DelayDwtTadPrevious;
-static bool s_bDelayDwtTadPrepared;
-
-#endif
-
 /**
  * @brief	Get core clock frequency
  *
@@ -105,37 +97,6 @@ uint32_t SystemCoreClockGet(void)
 {
 	return SystemCoreClock;
 }
-
-// Enable nRF54L trace/debug only for a foreground DWT calibration.
-// The test's delay helper restores both DWT state and the TAD gate.
-// No SWO/ETM pin mux is modified here; an existing debugger's state wins.
-#if defined(NRF54L_SERIES) && !defined(NRF_TRUSTZONE_NONSECURE) && \
-	defined(NRF_TAD_S) && defined(TAD_ENABLE_ENABLE_Msk)
-bool SystemDelayDwtPrepare(void)
-{
-	if (s_bDelayDwtTadPrepared)
-	{
-		return false;
-	}
-	s_DelayDwtTadPrevious = NRF_TAD_S->ENABLE;
-	NRF_TAD_S->ENABLE = s_DelayDwtTadPrevious | TAD_ENABLE_ENABLE_Msk;
-	__DSB();
-	__ISB();
-	s_bDelayDwtTadPrepared = true;
-	return true;
-}
-
-void SystemDelayDwtRestore(void)
-{
-	if (s_bDelayDwtTadPrepared)
-	{
-		NRF_TAD_S->ENABLE = s_DelayDwtTadPrevious;
-		__DSB();
-		__ISB();
-		s_bDelayDwtTadPrepared = false;
-	}
-}
-#endif
 
 void SystemCoreClockUpdate(void)
 {
@@ -151,13 +112,12 @@ void SystemCoreClockUpdate(void)
     }
 #endif
 #if defined(NRF54L15_XXAA)
-	// CoreClockTest, nRF54L15 at 128 MHz: 15,998,720 us loops/s and
-	// 42,664,959 ns loops/s. The former 16,000,000 divisor made
-	// msDelay run twice too fast. Keep 64 MHz pending measurement.
+	// CoreClockTest, nRF54L15 at 128 MHz: 15,999,199 us loops/s and
+	// 42,664,533 ns loops/s. Keep 64 MHz pending measurement.
 	if (SystemCoreClock == 128000000UL)
 	{
 		(void)ArmDelayClockSetDivisors(SystemCoreClock,
-			8000640UL, 3000120UL);
+			8000400UL, 3000150UL);
 	}
 	else
 	{
