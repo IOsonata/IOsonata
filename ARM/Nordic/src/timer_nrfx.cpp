@@ -221,6 +221,13 @@ extern "C" bool nRFxSleepLfClockRunning(void);
 // Use 8,604 ticks provisionally until the next hardware retest.
 #define NRF_SDELAY_COLD_DEFAULT_TICKS 8604
 #define NRF_SDELAY_WARM_DEFAULT_TICKS 0
+#elif defined(NRF52840_XXAA)
+// nRF52840 DK: cold/reuse sDelay(1) measured 1,250,500/1,250,506 us
+// with zero compensation; warm measured 1,000,125 us.
+// Subtract the ~250.5 ms LFCLK cold-start overhead (8,208 LF ticks).
+// This default is provisional until hardware is rerun.
+#define NRF_SDELAY_COLD_DEFAULT_TICKS 8208
+#define NRF_SDELAY_WARM_DEFAULT_TICKS 0
 #else
 #define NRF_SDELAY_COLD_DEFAULT_TICKS 0
 #define NRF_SDELAY_WARM_DEFAULT_TICKS 0
