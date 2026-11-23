@@ -113,6 +113,34 @@ after LF-source restoration. This remains an independent clock-source issue.
 not repeated in this session. Rebuild and rerun CoreClockTest to assess its
 output; the existing GRTC timing discrepancy is still under investigation.
 
+## GRTC low-frequency source selection (November 23, 2026)
+
+The nRF54L15 datasheet specifies that GRTC CLKCFG.CLKSEL must be
+chosen **before** the GRTC is started. The SYSCOUNTER runs at a
+nominal 1 MHz while awake; its low-frequency reference is used
+during sleep. Previously the IOsonata GRTC driver started the counter
+without explicitly choosing its LF source, allowing the reset-default
+system LFCLK choice to remain.
+
+The nRF54L GRTC driver now uses the board-described low-frequency
+oscillator in the one-time, stopped-counter start path:
+
+- XTAL: direct GRTC LFXO source
+- RC: direct GRTC LFLPRC source
+- Any other source: return failure rather than silently select an
+  unsupported GRTC source
+
+If the counter was already started (for example by MPSL/SoftDevice),
+the driver preserves that clock source and its running counter.
+This choice is intentionally fixed once GRTC starts; changing the
+system LFCLK with the generic clock API must not reconfigure GRTC.
+
+The next nRF54L15 CoreClockTest must compare all four GRTC groups to
+an independent HF Timer both before and after system LF source
+selection, and must verify bare-metal and separate BLE/MPSL startup.
+Do not assume this change resolves the remaining timing discrepancy
+until actual hardware output confirms it.
+
 ## Managed clean-build commands
 
 The shared Nordic headless Eclipse/CDT build script now includes both nRF54L

@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include "timer_nrfx.h"
 #include "coredev/interrupt.h"
+#include "coredev/system_core_clock.h"
 
 // GRTC IRQ_3 and CC 7-11 are reserved by MPSL
 #define MPSL_RESERVED_NB_CC		5	// 7-11 are reserved for MPSL
@@ -135,6 +136,8 @@ static bool nRFxGrtcEnable(TimerDev_t * const pTimer)
 {
 	nRFGrtcData_t *pRtc;
 	uint32_t state;
+	uint32_t clkCfg;
+	uint32_t clkSel;
 	int devno;
 
 	if (pTimer == nullptr)
@@ -154,10 +157,29 @@ static bool nRFxGrtcEnable(TimerDev_t * const pTimer)
 		return false;
 	}
 
-	if ((NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk) == 0)
+	if ((NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk) == 0U)
 	{
-		NRF_GRTC->MODE |= GRTC_MODE_SYSCOUNTEREN_Msk | GRTC_MODE_AUTOEN_CpuActive;
-		NRF_GRTC->TASKS_START = 1;
+		// GRTC clock selection is latched at the first START and cannot
+		// be changed while running. Use the board's oscillator choice.
+		// An existing GRTC owner is never reconfigured by this driver.
+		switch (GetLowFreqOscType())
+		{
+			case OSC_TYPE_XTAL:
+				clkSel = GRTC_CLKCFG_CLKSEL_LFXO;
+				break;
+			case OSC_TYPE_RC:
+				clkSel = GRTC_CLKCFG_CLKSEL_LFLPRC;
+				break;
+			default:
+				EnableInterrupt(state);
+				return false;
+		}
+		clkCfg = NRF_GRTC->CLKCFG & ~GRTC_CLKCFG_CLKSEL_Msk;
+		clkCfg |= clkSel << GRTC_CLKCFG_CLKSEL_Pos;
+		NRF_GRTC->CLKCFG = clkCfg;
+		NRF_GRTC->MODE |= GRTC_MODE_SYSCOUNTEREN_Msk |
+			GRTC_MODE_AUTOEN_CpuActive;
+		NRF_GRTC->TASKS_START = 1U;
 	}
 
 	s_bGrtcEnabled[devno] = true;

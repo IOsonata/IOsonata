@@ -47,6 +47,25 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertNotIn("GrtcSleepClaim", source)
         self.assertNotIn("GrtcSleepRelease", source)
 
+    def test_grtc_selects_board_lf_source_only_before_start(self):
+        source = self.grtc
+        start = source.index("static bool nRFxGrtcEnable(")
+        end = source.index("// The triggers are kept", start)
+        enable = source[start:end]
+
+        self.assertIn('#include "coredev/system_core_clock.h"', source)
+        self.assertIn("if ((NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk) == 0U)", enable)
+        self.assertIn("switch (GetLowFreqOscType())", enable)
+        self.assertIn("case OSC_TYPE_XTAL:", enable)
+        self.assertIn("clkSel = GRTC_CLKCFG_CLKSEL_LFXO;", enable)
+        self.assertIn("case OSC_TYPE_RC:", enable)
+        self.assertIn("clkSel = GRTC_CLKCFG_CLKSEL_LFLPRC;", enable)
+        self.assertIn("NRF_GRTC->CLKCFG = clkCfg;", enable)
+        self.assertLess(enable.index("NRF_GRTC->CLKCFG = clkCfg;"),
+                        enable.index("NRF_GRTC->TASKS_START = 1U;"))
+        self.assertNotIn("NRF_GRTC->TASKS_STOP", enable)
+        self.assertNotIn("SystemLowFreqClockSelect(", source)
+
     def test_released_handle_cannot_reenable_grtc(self):
         source = self.grtc
         start = source.index("static bool nRFxGrtcEnable(")
