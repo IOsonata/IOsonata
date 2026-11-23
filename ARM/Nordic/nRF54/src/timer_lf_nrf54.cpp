@@ -97,6 +97,27 @@ static bool s_bGrtcAutoSelected[TIMER_NRFX_RTC_MAX];
 // disabled GRTC group; pTimer in each group is only its active dispatch handle.
 static TimerDev_t *s_pGrtcOwner[TIMER_NRFX_RTC_MAX];
 
+// Reject stale handles after automatic release or sequential rebinding.
+// Ownership must be checked before accessing any per-group GRTC state.
+static nRFGrtcData_t *nRFxGrtcOwned(TimerDev_t * const pTimer)
+{
+	nRFGrtcData_t *pRtc;
+	int devno;
+
+	if (pTimer == nullptr)
+	{
+		return nullptr;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX)
+	{
+		return nullptr;
+	}
+	pRtc = &s_nRfxGrtcData[devno];
+
+	return pRtc->pTimer == pTimer ? pRtc : nullptr;
+}
+
 // Interrupt of a timer: GRTC_0_IRQn to GRTC_3_IRQn are consecutive, one per
 // INTEN register group, the DevNo
 static inline IRQn_Type nRFxGrtcIrqNo(int DevNo)
@@ -230,25 +251,38 @@ static inline __attribute__((always_inline)) uint64_t nRFxGrtcSysCounter(volatil
 // Rollover, and the armed triggers restart their period from it.
 static void nRFxGrtcReset(TimerDev_t * const pTimer)
 {
-	nRFGrtcData_t &rtc = s_nRfxGrtcData[pTimer->DevNo];
-	uint32_t state = DisableInterrupt();
-	uint32_t inten = rtc.pInt[0];
-	uint64_t now = nRFxGrtcSysCounter(rtc.pSysCnt);
+	nRFGrtcData_t *pRtc;
+	uint32_t state;
+	uint32_t inten;
+	uint64_t now;
+	int i;
+	int idx;
+
+	state = DisableInterrupt();
+	pRtc = nRFxGrtcOwned(pTimer);
+	if (pRtc == nullptr)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	inten = pRtc->pInt[0];
+	now = nRFxGrtcSysCounter(pRtc->pSysCnt);
 
 	pTimer->Rollover = 0ULL - now;
 
-	for (int i = 0; i < rtc.MaxNbTrigEvt; i++)
+	for (i = 0; i < pRtc->MaxNbTrigEvt; i++)
 	{
-		int idx = rtc.StartCCIdx + i;
+		idx = pRtc->StartCCIdx + i;
 
-		if (rtc.Trigger[i].nsPeriod == 0 || (inten & (1U << idx)) == 0U)
+		if (pRtc->Trigger[i].nsPeriod == 0U ||
+			(inten & (1U << idx)) == 0U)
 		{
 			continue;
 		}
-		rtc.Compare[i] = now + rtc.CC[i];
-		NRF_GRTC->CC[idx].CCL = (uint32_t)rtc.Compare[i];
-		NRF_GRTC->EVENTS_COMPARE[idx] = 0;
-		NRF_GRTC->CC[idx].CCH = (uint32_t)(rtc.Compare[i] >> 32);
+		pRtc->Compare[i] = now + pRtc->CC[i];
+		NRF_GRTC->CC[idx].CCL = (uint32_t)pRtc->Compare[i];
+		NRF_GRTC->EVENTS_COMPARE[idx] = 0U;
+		NRF_GRTC->CC[idx].CCH = (uint32_t)(pRtc->Compare[i] >> 32);
 	}
 
 	EnableInterrupt(state);
@@ -257,51 +291,58 @@ static void nRFxGrtcReset(TimerDev_t * const pTimer)
 // GRTC is fixed at 1MHz.
 static uint32_t nRFxGrtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
+	if (nRFxGrtcOwned(pTimer) == nullptr)
+	{
+		return 0U;
+	}
+	(void)Freq;
 	pTimer->Freq = TIMER_NRFX_RTC_BASE_FREQ;
 
-    // Pre-calculate periods for faster timer counter to time conversion use later
-    pTimer->nsPeriod = (1000000000ULL + (pTimer->Freq >> 1))/ (uint64_t)pTimer->Freq;     // Period in nsec
+	// Pre-calculate periods for faster timer counter to time conversion.
+	pTimer->nsPeriod = (1000000000ULL + (pTimer->Freq >> 1)) /
+		(uint64_t)pTimer->Freq;
 
-    return pTimer->Freq;
+	return pTimer->Freq;
 }
 
 // SYSCOUNTER (52 bits at 1 MHz, 142 years), counted from Reset once called
 static uint64_t nRFxGrtcGetTickCount(TimerDev_t * const pTimer)
 {
-	return nRFxGrtcSysCounter(&NRF_GRTC->SYSCOUNTER[pTimer->DevNo]) + pTimer->Rollover;
+	nRFGrtcData_t *pRtc;
+
+	pRtc = nRFxGrtcOwned(pTimer);
+	if (pRtc == nullptr)
+	{
+		return 0ULL;
+	}
+	return nRFxGrtcSysCounter(pRtc->pSysCnt) + pTimer->Rollover;
 }
 
 static int nRFxGrtcGetMaxTrigger(TimerDev_t * const pTimer)
 {
-	return s_nRfxGrtcData[pTimer->DevNo].MaxNbTrigEvt;
+	nRFGrtcData_t *pRtc;
+
+	pRtc = nRFxGrtcOwned(pTimer);
+	return pRtc != nullptr ? pRtc->MaxNbTrigEvt : 0;
 }
 
-static uint64_t nRFxGrtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
-                              	  	 TimerTrigEvtHandler_t Handler, void *pContext)
+static uint64_t nRFxGrtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo,
+	uint64_t nsPeriod, TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t Handler,
+	void *pContext)
 {
-	nRFGrtcData_t &rtc = s_nRfxGrtcData[pTimer->DevNo];
-
-    if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt || nsPeriod == 0)
-    {
-        return 0;
-    }
-
-	TimerTrig_t &trig = rtc.Trigger[TrigNo];
-
-	// Each CC owns its compare independently; never replace an active one.
-	if (trig.nsPeriod != 0)
-	{
-		return 0;
-	}
-
-	// The period starts at this SYSCOUNTER read, the compare is set from it:
-	// a compare value already passed when written matches at once, none is
-	// lost, the interrupts can stay on.
-	uint64_t start = nRFxGrtcSysCounter(rtc.pSysCnt);
-
-	// Ticks of 1 us, closest, 1 at least. A 32 bit division up to 4.29 s.
+	nRFGrtcData_t *pRtc;
+	TimerTrig_t *pTrig;
+	uint64_t start;
 	uint64_t cc;
+	uint64_t period;
+	uint32_t state;
+	int idx;
 
+	if (nsPeriod == 0U)
+	{
+		return 0ULL;
+	}
+	// GRTC tick is 1 us. Use a 32-bit divide where possible.
 	if (nsPeriod <= 0xFFFFFFFFULL - 500U)
 	{
 		cc = ((uint32_t)nsPeriod + 500U) / 1000U;
@@ -310,82 +351,105 @@ static uint64_t nRFxGrtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uin
 	{
 		cc = (nsPeriod + 500U) / 1000U;
 	}
-
-    if (cc == 0)
-    {
-    	cc = 1;
-    }
-
-    int idx = rtc.StartCCIdx + TrigNo;
-
-	// CCL disables the channel: an event left from before is cleared before
-	// CCH enables it again
-	start += cc;
-	rtc.Compare[TrigNo] = start;
-	NRF_GRTC->CC[idx].CCL = (uint32_t)start;
-	NRF_GRTC->EVENTS_COMPARE[idx] = 0;
-	NRF_GRTC->CC[idx].CCH = (uint32_t)(start >> 32);
-
-	// Period in nanoseconds, ticks of 1 us
-    uint64_t period = pTimer->nsPeriod * cc;
-
-	// The trigger is set before its interrupt
-    trig.Type = Type;
-    trig.nsPeriod = period;
-    trig.Handler = Handler;
-    trig.pContext = pContext;
-    rtc.CC[TrigNo] = cc;
-
-	// Its interrupt, on in the NVIC only while the timer is enabled
-	rtc.pInt[1] = 1U << idx;
-	if (s_bGrtcEnabled[rtc.DevNo])
+	if (cc == 0U)
 	{
-		NVIC_EnableIRQ(nRFxGrtcIrqNo(rtc.DevNo));
+		cc = 1U;
 	}
 
-    return period; // Return real period in nsec
+	state = DisableInterrupt();
+	pRtc = nRFxGrtcOwned(pTimer);
+	if (pRtc == nullptr || TrigNo < 0 || TrigNo >= pRtc->MaxNbTrigEvt)
+	{
+		EnableInterrupt(state);
+		return 0ULL;
+	}
+	pTrig = &pRtc->Trigger[TrigNo];
+	// Never replace a compare belonging to an already armed trigger.
+	if (pTrig->nsPeriod != 0U)
+	{
+		EnableInterrupt(state);
+		return 0ULL;
+	}
+
+	start = nRFxGrtcSysCounter(pRtc->pSysCnt) + cc;
+	idx = pRtc->StartCCIdx + TrigNo;
+	pRtc->Compare[TrigNo] = start;
+	// Writing CCL disables the channel; writing CCH arms it again.
+	NRF_GRTC->CC[idx].CCL = (uint32_t)start;
+	NRF_GRTC->EVENTS_COMPARE[idx] = 0U;
+	NRF_GRTC->CC[idx].CCH = (uint32_t)(start >> 32);
+
+	period = pTimer->nsPeriod * cc;
+	pTrig->Type = Type;
+	pTrig->nsPeriod = period;
+	pTrig->Handler = Handler;
+	pTrig->pContext = pContext;
+	pRtc->CC[TrigNo] = cc;
+	pRtc->pInt[1] = 1U << idx;
+	if (s_bGrtcEnabled[pRtc->DevNo])
+	{
+		NVIC_EnableIRQ(nRFxGrtcIrqNo(pRtc->DevNo));
+	}
+	EnableInterrupt(state);
+
+	return period;
 }
 
 static void nRFxGrtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
-	nRFGrtcData_t &rtc = s_nRfxGrtcData[pTimer->DevNo];
+	nRFGrtcData_t *pRtc;
+	uint32_t state;
+	int idx;
 
-	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
-        return;
-
-    int idx = rtc.StartCCIdx + TrigNo;
-
-	// Interrupt off first: the interrupt handler only looks at the compares
-	// with their interrupt set
-	rtc.pInt[2] = 1U << idx;
-	if ((rtc.pInt[0] & nRFxGrtcCCMask(rtc)) == 0U)
+	state = DisableInterrupt();
+	pRtc = nRFxGrtcOwned(pTimer);
+	if (pRtc == nullptr || TrigNo < 0 || TrigNo >= pRtc->MaxNbTrigEvt)
 	{
-		NVIC_DisableIRQ(nRFxGrtcIrqNo(rtc.DevNo));
-		NVIC_ClearPendingIRQ(nRFxGrtcIrqNo(rtc.DevNo));
+		EnableInterrupt(state);
+		return;
 	}
+	idx = pRtc->StartCCIdx + TrigNo;
 
-    NRF_GRTC->CC[idx].CCEN = 0;
-    NRF_GRTC->EVENTS_COMPARE[idx] = 0;
+	pRtc->pInt[2] = 1U << idx;
+	if ((pRtc->pInt[0] & nRFxGrtcCCMask(*pRtc)) == 0U)
+	{
+		NVIC_DisableIRQ(nRFxGrtcIrqNo(pRtc->DevNo));
+		NVIC_ClearPendingIRQ(nRFxGrtcIrqNo(pRtc->DevNo));
+	}
+	NRF_GRTC->CC[idx].CCEN = 0U;
+	NRF_GRTC->EVENTS_COMPARE[idx] = 0U;
 
-    rtc.CC[TrigNo] = 0;
-    rtc.Trigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
-    rtc.Trigger[TrigNo].Handler = NULL;
-    rtc.Trigger[TrigNo].pContext = NULL;
-    rtc.Trigger[TrigNo].nsPeriod = 0;
+	pRtc->CC[TrigNo] = 0U;
+	pRtc->Compare[TrigNo] = 0U;
+	pRtc->Trigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
+	pRtc->Trigger[TrigNo].Handler = nullptr;
+	pRtc->Trigger[TrigNo].pContext = nullptr;
+	pRtc->Trigger[TrigNo].nsPeriod = 0U;
+	EnableInterrupt(state);
 }
 
 static int nRFxGrtcFindAvailTrigger(TimerDev_t * const pTimer)
 {
-	nRFGrtcData_t &rtc = s_nRfxGrtcData[pTimer->DevNo];
-	uint32_t mask = 1;
-	int32_t i = rtc.MaxNbTrigEvt;
+	nRFGrtcData_t *pRtc;
+	uint32_t state;
+	int i;
 
-	for (int i = 0; i < rtc.MaxNbTrigEvt; i++)
+	state = DisableInterrupt();
+	pRtc = nRFxGrtcOwned(pTimer);
+	if (pRtc == nullptr)
 	{
-		if (rtc.Trigger[i].nsPeriod == 0)
-			return i;
+		EnableInterrupt(state);
+		return -1;
 	}
-
+	for (i = 0; i < pRtc->MaxNbTrigEvt; i++)
+	{
+		if (pRtc->Trigger[i].nsPeriod == 0U)
+		{
+			EnableInterrupt(state);
+			return i;
+		}
+	}
+	EnableInterrupt(state);
 	return -1;
 }
 
