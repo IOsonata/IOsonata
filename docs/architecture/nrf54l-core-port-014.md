@@ -191,7 +191,11 @@ before any application/GRTC timer initialization. This is limited to secure
 normal clock initialization. The routine uses Nordic's
 `nrf_ficr_hfxo_cap_calculate` and `nrf_ficr_lfxo_cap_calculate` to derive
 capacitor settings from the board's `LoadCap` in 0.1-pF units (converted
-to femtofarads). The earlier hand-written slope and offset calculations
+to femtofarads). For nrfx versions before 4.7.0, which do not
+declare these functions, the oscillator source provides compatible signed
+FICR-trim arithmetic using the same units and rounding. It keeps the
+board's fractional-pF settings; the legacy integer-pF macros are not
+used. The earlier hand-written slope and offset calculations
 were incorrect and were removed. Settings are written only if different
 and the corresponding oscillator is not already active; no clock is
 started or stopped by this call.

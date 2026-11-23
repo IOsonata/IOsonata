@@ -53,6 +53,72 @@ __WEAK McuOsc_t g_McuOsc = {
 	.bUSBClk = false
 };
 
+// nrfx before 4.7.0 does not declare the FICR capacitance helpers.
+// Match Nordic's signed trim decoding and femtofarad calculations.
+#if !defined(FICR_HFXO_CAP_CALCULATE) || !defined(FICR_LFXO_CAP_CALCULATE)
+static int32_t nRF54LTrimSlope(uint32_t Trim, uint32_t Mask, uint32_t Shift)
+{
+	uint32_t field;
+	uint32_t mask;
+	uint32_t sign;
+
+	field = (Trim & Mask) >> Shift;
+	mask = Mask >> Shift;
+	sign = mask - (mask >> 1);
+
+	return (int32_t)(field ^ sign) - (int32_t)sign;
+}
+#endif
+
+#if !defined(FICR_HFXO_CAP_CALCULATE)
+static uint32_t nRF54LHfxoCapCalculate(uint32_t CapFf)
+{
+	uint32_t trim;
+	uint32_t offset;
+	int32_t slope;
+	int64_t scaled;
+
+	trim = NRF_FICR->XOSC32MTRIM;
+	slope = nRF54LTrimSlope(trim, FICR_XOSC32MTRIM_SLOPE_Msk,
+		FICR_XOSC32MTRIM_SLOPE_Pos);
+	offset = (trim & FICR_XOSC32MTRIM_OFFSET_Msk) >>
+		FICR_XOSC32MTRIM_OFFSET_Pos;
+	scaled = ((int64_t)CapFf - 5500LL) * (slope + 791) +
+		(int64_t)(offset << 2) * 1000LL;
+	if (scaled <= 0LL)
+	{
+		return 0U;
+	}
+	scaled >>= 8;
+
+	return (uint32_t)((scaled + 500LL) / 1000LL);
+}
+#endif
+
+#if !defined(FICR_LFXO_CAP_CALCULATE)
+static uint32_t nRF54LLfxoCapCalculate(uint32_t CapFf)
+{
+	uint32_t trim;
+	uint32_t offset;
+	int32_t slope;
+	int64_t scaled;
+
+	trim = NRF_FICR->XOSC32KTRIM;
+	slope = nRF54LTrimSlope(trim, FICR_XOSC32KTRIM_SLOPE_Msk,
+		FICR_XOSC32KTRIM_SLOPE_Pos);
+	offset = (trim & FICR_XOSC32KTRIM_OFFSET_Msk) >>
+		FICR_XOSC32KTRIM_OFFSET_Pos;
+	scaled = (2LL * CapFf - 12000LL) * (slope + 392) +
+		(int64_t)(offset << 3) * 1000LL;
+	if (scaled <= 0LL)
+	{
+		return 0U;
+	}
+
+	return (uint32_t)((scaled + 256000LL) / 512000LL);
+}
+#endif
+
 void SystemOscInit(void)
 {
 	uint32_t hfCap;
@@ -68,8 +134,13 @@ void SystemOscInit(void)
 		hfCap = 0U;
 		if (g_McuOsc.CoreOsc.LoadCap != 0U)
 		{
+#if defined(FICR_HFXO_CAP_CALCULATE)
 			hfCap = nrf_ficr_hfxo_cap_calculate(NRF_FICR,
 				g_McuOsc.CoreOsc.LoadCap * 100U);
+#else
+			hfCap = nRF54LHfxoCapCalculate(
+				g_McuOsc.CoreOsc.LoadCap * 100U);
+#endif
 		}
 
 		// Do not modify an already-running HFXO owned by a bootloader
@@ -90,8 +161,13 @@ void SystemOscInit(void)
 		lfCap = 0U;
 		if (g_McuOsc.LowPwrOsc.LoadCap != 0U)
 		{
+#if defined(FICR_LFXO_CAP_CALCULATE)
 			lfCap = nrf_ficr_lfxo_cap_calculate(NRF_FICR,
 				g_McuOsc.LowPwrOsc.LoadCap * 100U);
+#else
+			lfCap = nRF54LLfxoCapCalculate(
+				g_McuOsc.LowPwrOsc.LoadCap * 100U);
+#endif
 		}
 
 		// GRTC can run directly from LFXO while system LFCLK is off.
