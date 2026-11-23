@@ -51,7 +51,7 @@ class Nrf54lCorePort(unittest.TestCase):
         system = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
         oscillator = (ROOT / "ARM/Nordic/nRF54/src/osc_nrf54l.c").read_text()
         reset = (ROOT / "ARM/src/ResetEntry.c").read_text()
-        for family in ("nRF54L15", "nRF54LM20x"):
+        for family in ("nRF54L15", "nRF54LM20A", "nRF54LM20B"):
             project = (ROOT / "ARM/Nordic/nRF54" / family /
                        "lib/ioc/.project").read_text()
             self.assertIn("src/osc_nrf54l.c", project)
@@ -214,21 +214,31 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", lm20a)
         self.assertEqual((1433700 + 1433521) // 2 - 433611, 999999)
 
-    def test_lm20_managed_project_uses_same_variant(self):
-        base = ROOT / "ARM/Nordic/nRF54/nRF54LM20x"
-        for relative in ("lib/ioc/.cproject",
-                         "exemples/CoreClockTest/ioc/.cproject",
-                         "exemples/CorePowerTest/ioc/.cproject"):
-            with self.subTest(project=relative):
-                project = (base / relative).read_text()
-                self.assertIn('value="NRF54LM20A_XXAA"', project)
-                self.assertNotIn('value="NRF54LM20B_XXAA"', project)
-                if relative.startswith("lib/"):
-                    # Four managed configs, each with C and C++ definitions.
-                    self.assertEqual(project.count('value="NRF54LM20A_XXAA"'), 8)
+    def test_lm20_managed_projects_use_their_target_variant(self):
+        # nRF54LM20A and nRF54LM20B are separate targets. Every managed
+        # project of a target defines that target's MCU and no other.
+        for variant, other in (("A", "B"), ("B", "A")):
+            base = ROOT / ("ARM/Nordic/nRF54/nRF54LM20" + variant)
+            own = 'value="NRF54LM20%s_XXAA"' % variant
+            foreign = 'value="NRF54LM20%s_XXAA"' % other
+            projects = sorted(base.glob("exemples/*/ioc/.cproject"))
+            self.assertEqual(len(projects), 40)
+            projects.append(base / "lib/ioc/.cproject")
+            for path in projects:
+                with self.subTest(project=str(path.relative_to(ROOT))):
+                    project = path.read_text()
+                    self.assertIn(own, project)
+                    self.assertNotIn(foreign, project)
+                    self.assertIn("IOsonata_nRF54LM20" + variant, project)
+                    self.assertNotIn("IOsonata_nRF54LM20" + other, project)
+                    self.assertNotIn("gcc_nrf54lm20%s_" % other.lower(), project)
+            # Four managed library configs, each with C and C++ definitions.
+            library = (base / "lib/ioc/.cproject").read_text()
+            self.assertEqual(library.count(own), 8)
+        self.assertFalse((ROOT / "ARM/Nordic/nRF54/nRF54LM20x").exists())
 
     def test_both_managed_libraries_link_backends(self):
-        for mcu in ("nRF54L15", "nRF54LM20x"):
+        for mcu in ("nRF54L15", "nRF54LM20A", "nRF54LM20B"):
             project = (ROOT / "ARM/Nordic/nRF54" / mcu /
                        "lib/ioc/.project").read_text()
             for filename in ("timer_lf_nrf54.cpp", "timer_nrfx.cpp",

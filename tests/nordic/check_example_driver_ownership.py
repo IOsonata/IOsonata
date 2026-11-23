@@ -35,7 +35,8 @@ class DemoDriverOwnership(unittest.TestCase):
 			"nRF53/nRF5340_App",
 			"nRF53/nRF5340_Net",
 			"nRF54/nRF54L15",
-			"nRF54/nRF54LM20x",
+			"nRF54/nRF54LM20A",
+			"nRF54/nRF54LM20B",
 		)
 		for board in boards:
 			path = ROOT / "ARM/Nordic" / board / "exemples/CoreClockTest/src/board.h"

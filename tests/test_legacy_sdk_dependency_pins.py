@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 NRF52 = ROOT / "ARM" / "Nordic" / "nRF52"
-LM20 = ROOT / "ARM" / "Nordic" / "nRF54" / "nRF54LM20x"
+NRF54 = ROOT / "ARM" / "Nordic" / "nRF54"
 LVGL_REV = "69aa421acd78e0d3809200b9bc1f21c8586f5cf0"
 TINYUSB_REV = "064afa3774cbbb2093d6af9805bdaa15b4e0f751"
 
@@ -40,16 +40,18 @@ class LegacySdkDependencyTests(unittest.TestCase):
                     self.assertFalse(any(v.endswith("/external/lvgl") for v in include_values))
 
     def test_tinyusb_lm20_uses_isolated_iso_revision(self):
-        project = LM20 / "exemples" / "TinyUsbComboStress" / "ioc"
-        links = [
-            link.findtext("locationURI", "")
-            for link in ET.parse(project / ".project").findall(".//linkedResources/link")
-        ]
-        self.assertGreaterEqual(sum("external/tinyusb_lm20/" in uri for uri in links), 6)
-        self.assertFalse(any("external/tinyusb/" in uri for uri in links))
-        settings = (project / ".cproject").read_text()
-        self.assertIn("external/tinyusb_lm20/", settings)
-        self.assertNotIn("external/tinyusb/", settings)
+        for target in ("nRF54LM20A", "nRF54LM20B"):
+            with self.subTest(target=target):
+                project = NRF54 / target / "exemples" / "TinyUsbComboStress" / "ioc"
+                links = [
+                    link.findtext("locationURI", "")
+                    for link in ET.parse(project / ".project").findall(".//linkedResources/link")
+                ]
+                self.assertGreaterEqual(sum("external/tinyusb_lm20/" in uri for uri in links), 6)
+                self.assertFalse(any("external/tinyusb/" in uri for uri in links))
+                settings = (project / ".cproject").read_text()
+                self.assertIn("external/tinyusb_lm20/", settings)
+                self.assertNotIn("external/tinyusb/", settings)
 
     def test_installer_clones_both_exact_commits(self):
         for system, suffix in (("linux", ".sh"), ("macos", ".sh"), ("win", ".ps1")):
