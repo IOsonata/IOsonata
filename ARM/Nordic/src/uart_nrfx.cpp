@@ -59,6 +59,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <stdarg.h>
 
 #include "nrf.h"
@@ -179,16 +180,25 @@ typedef struct __nRF_UART_Dev {
 #if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)
 	uint32_t TxDmaLen;
 #endif
-#if defined(NRF54L_SERIES)
-	bool bTxStopPending;		// TX END -> STOP -> TXSTOPPED handoff
-#endif
-	uint8_t RxFifoMem[NRFX_UART_CFIFO_SIZE];
-	uint8_t TxFifoMem[NRFX_UART_CFIFO_SIZE];
+	// CFifo_t begins with atomic 32-bit indices. Both embedded buffers
+	// must remain word aligned even if another byte-sized state is added.
+	alignas(4) uint8_t RxFifoMem[NRFX_UART_CFIFO_SIZE];
+	alignas(4) uint8_t TxFifoMem[NRFX_UART_CFIFO_SIZE];
 	uint8_t RxDmaMem[NRFX_UART_RXDMA_SIZE];
 	uint8_t TxDmaMem[NRFX_UART_TXDMA_SIZE];
 	bool bPeiTxPrepared;		// TX EasyDMA reserved for hardware PEI
+#if defined(NRF54L_SERIES)
+	bool bTxStopPending;		// TX END -> STOP -> TXSTOPPED handoff
+#endif
 } nRFUartDev_t;
 #pragma pack(pop)
+
+// Misaligned CFifo_t indices fault on Cortex-M33 atomic operations.
+// The compiler must reject any future change that shifts these buffers.
+static_assert(offsetof(nRFUartDev_t, RxFifoMem) % alignof(CFifo_t) == 0U,
+	"Nordic UART RX FIFO header must be word aligned");
+static_assert(offsetof(nRFUartDev_t, TxFifoMem) % alignof(CFifo_t) == 0U,
+	"Nordic UART TX FIFO header must be word aligned");
 
 alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #if defined(NRF54L_SERIES) || defined(NRF71_SERIES)

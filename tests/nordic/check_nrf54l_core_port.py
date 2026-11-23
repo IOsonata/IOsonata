@@ -122,6 +122,25 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("s_nRFxUARTDev[devno].bTxStopPending = false;", uart)
         self.assertIn("#else\n\t// TXSTOPPED is not a DMA completion event.", uart)
 
+    def test_nrf54l_uart_fifo_alignment(self):
+        source = (ROOT / "ARM/Nordic/src/uart_nrfx.cpp").read_text()
+        start = source.index("typedef struct __nRF_UART_Dev {")
+        end = source.index("} nRFUartDev_t;", start)
+        structure = source[start:end]
+
+        # A byte-sized DMA state ahead of the FIFO headers moves atomic
+        # PutIdx/GetIdx off their required 32-bit alignment on Cortex-M33.
+        self.assertIn("alignas(4) uint8_t RxFifoMem[NRFX_UART_CFIFO_SIZE];", structure)
+        self.assertIn("alignas(4) uint8_t TxFifoMem[NRFX_UART_CFIFO_SIZE];", structure)
+        self.assertLess(structure.index("uint8_t TxDmaMem["),
+                        structure.index("bool bTxStopPending;"))
+        self.assertIn(
+            "static_assert(offsetof(nRFUartDev_t, RxFifoMem) % alignof(CFifo_t) == 0U",
+            source)
+        self.assertIn(
+            "static_assert(offsetof(nRFUartDev_t, TxFifoMem) % alignof(CFifo_t) == 0U",
+            source)
+
     def test_sdelay_uses_generic_timer_and_grtc(self):
         source = self.timer
         self.assertIn("defined(NRF54L_SERIES)", source)
@@ -143,7 +162,7 @@ class Nrf54lCorePort(unittest.TestCase):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
         self.assertIn("#if defined(NRF54L15_XXAA)", source)
         self.assertIn("if (SystemCoreClock == 128000000UL)", source)
-        self.assertIn("8000640UL, 3000120UL", source)
+        self.assertIn("8000400UL, 3000150UL", source)
         self.assertIn("16000000UL, 3000000UL", source)
 
     def test_both_managed_libraries_link_backends(self):
