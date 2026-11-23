@@ -161,7 +161,7 @@ class Nrf54lCorePort(unittest.TestCase):
     def test_sdelay_uses_generic_timer_and_grtc(self):
         source = self.timer
         self.assertIn("defined(NRF54L_SERIES)", source)
-        self.assertIn("warmClock = true;", source)
+        self.assertIn("warmClock = nRFxGrtcSleepClockWarm();", source)
         self.assertIn("cfg.DevNo = -1;", source)
         self.assertIn("TimerInit(&s_SleepTimer, &cfg)", source)
         self.assertIn("TimerDisableTrigger(&s_SleepTimer, 0);", source)
