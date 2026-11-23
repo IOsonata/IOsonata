@@ -198,7 +198,7 @@ int TimerGetHighFreqDevNo()
 	defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK)
 
 // TimerInit selects an unused LF timer for DevNo=-1; TimerDisable
-// returns only automatically selected timers to the timer backend.
+// returns only automatically selected timers to the timer driver.
 extern "C" bool nRFxSleepLfClockRunning(void);
 
 // Signed end-to-end compensation in LF ticks. Positive values shorten
@@ -369,7 +369,7 @@ extern "C" bool sDelay(uint32_t Seconds)
 		__ISB();
 	}
 	// Always return a successfully initialized automatic timer to the
-	// backend, including a zero-frequency or trigger-setup failure.
+	// driver, including a zero-frequency or trigger-setup failure.
 	if (initialized)
 	{
 		TimerDisableTrigger(&s_SleepTimer, 0);

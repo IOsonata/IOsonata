@@ -385,7 +385,7 @@ void *SystemRamStart(void);
  * @return	SYSTEM_RESET_xxx reasons, ORed
  */
 /**
- * @brief Capabilities supported by the target's power-management backend.
+ * @brief Capabilities supported by the target's power-management implementation.
  *
  * Availability is a property of the MCU/core, not a compile-time selection
  * of which CorePowerTest phase to run. Applications normally use these APIs

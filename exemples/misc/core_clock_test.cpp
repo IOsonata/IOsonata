@@ -193,7 +193,7 @@ static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event)
 	}
 }
 
-// The Nordic DMA backend raises TX_FIFO_EMPTY only after the final byte
+// The DMA UART driver raises TX_FIFO_EMPTY only after the final byte
 // completes. Keep the diagnostic independent of UART FIFO internals.
 static int CoreClockTestUartEvent(DevIntrf_t *pDev, DEVINTRF_EVT Event,
 	uint8_t *pBuffer, int Length)

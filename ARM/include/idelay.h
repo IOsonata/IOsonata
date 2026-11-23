@@ -176,7 +176,7 @@ static inline void msDelay(uint32_t ms)
 /** @} End of group Utilities */
 
 // Compatibility with existing MCU systems and managed-project include paths.
-// The implementation lives in the System Core calibration header.
+// The implementation is in system_core_clock_calibration.h.
 #include "system_core_clock_calibration.h"
 
 #endif

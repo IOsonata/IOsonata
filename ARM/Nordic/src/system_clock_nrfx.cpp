@@ -853,7 +853,7 @@ static bool nRFxLfclkFinishStart(uint32_t Src)
 		// A higher-priority LFXO request from the other core can supply
 		// this LFCLK even though this controller requested LFRC.
 		// On nRF5340, such an override prevents LFRC calibration DONE
-		// (anomaly 137); calibration must not gate LFCLK availability.
+		// (anomaly 137); calibration must not block LFCLK availability.
 		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
 		{
 			return false;
