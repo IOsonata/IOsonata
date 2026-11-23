@@ -92,6 +92,7 @@ alignas(4) static nRFGrtcData_t s_nRfxGrtcData[TIMER_NRFX_RTC_MAX] = {
 // running, Disable never stops it: the radio stack (MPSL, SoftDevice) uses it
 // too and can start it after this driver did.
 static bool s_bGrtcEnabled[TIMER_NRFX_RTC_MAX];
+static bool s_bGrtcAutoSelected[TIMER_NRFX_RTC_MAX];
 
 // Interrupt of a timer: GRTC_0_IRQn to GRTC_3_IRQn are consecutive, one per
 // INTEN register group, the DevNo
@@ -133,10 +134,29 @@ static bool nRFxGrtcEnable(TimerDev_t * const pTimer)
 // keeps running, the tick count too.
 static void nRFxGrtcDisable(TimerDev_t * const pTimer)
 {
-	s_bGrtcEnabled[pTimer->DevNo] = false;
+	uint32_t state;
+	int devno;
 
-	NVIC_DisableIRQ(nRFxGrtcIrqNo(pTimer->DevNo));
-	NVIC_ClearPendingIRQ(nRFxGrtcIrqNo(pTimer->DevNo));
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX ||
+		s_nRfxGrtcData[devno].pTimer != pTimer)
+	{
+		return;
+	}
+	s_bGrtcEnabled[devno] = false;
+	NVIC_DisableIRQ(nRFxGrtcIrqNo(devno));
+	NVIC_ClearPendingIRQ(nRFxGrtcIrqNo(devno));
+
+	// Only an automatically selected temporary timer is returned to the
+	// pool. Explicitly initialized but disabled timers retain ownership.
+	if (s_bGrtcAutoSelected[devno])
+	{
+		state = DisableInterrupt();
+		s_nRfxGrtcData[devno].pInt[2] = nRFxGrtcCCMask(s_nRfxGrtcData[devno]);
+		s_nRfxGrtcData[devno].pTimer = nullptr;
+		s_bGrtcAutoSelected[devno] = false;
+		EnableInterrupt(state);
+	}
 }
 
 // SYSCOUNTER, SYSCOUNTERL read before SYSCOUNTERH. Read again while BUSY
@@ -346,22 +366,71 @@ bool nRFxGrtcEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_EX
 
 bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
-	// Any frequency, the GRTC runs at 1 MHz
-    if (pCfg->DevNo < 0 || pCfg->DevNo >= TIMER_NRFX_RTC_MAX)
-    {
-    	return false;
-    }
+	TimerCfg_t selected;
+	int devno;
+	int candidate;
+	bool automatic;
 
-    pTimer->DevNo = pCfg->DevNo;
+	if (pTimer == nullptr || pCfg == nullptr ||
+		pCfg->DevNo < -1 || pCfg->DevNo >= TIMER_NRFX_RTC_MAX)
+	{
+		return false;
+	}
+	// The last GRTC interrupt group and CC7..11 belong to MPSL.
+	// DevNo=-1 selects a free application group, never the MPSL group.
+	automatic = pCfg->DevNo == -1;
+	selected = *pCfg;
+	if (automatic)
+	{
+		selected.DevNo = -1;
+		for (candidate = TIMER_NRFX_RTC_MAX - 2; candidate >= 0;
+			candidate--)
+		{
+			if (s_nRfxGrtcData[candidate].pTimer == nullptr &&
+				!s_bGrtcEnabled[candidate])
+			{
+				selected.DevNo = candidate;
+				break;
+			}
+		}
+		if (selected.DevNo < 0)
+		{
+			return false;
+		}
+	}
+	devno = selected.DevNo;
+	if (s_nRfxGrtcData[devno].pTimer != nullptr &&
+		s_nRfxGrtcData[devno].pTimer != pTimer)
+	{
+		return false;
+	}
+	if (s_bGrtcEnabled[devno] &&
+		s_nRfxGrtcData[devno].pTimer != pTimer)
+	{
+		return false;
+	}
+	if (s_nRfxGrtcData[devno].pTimer == pTimer)
+	{
+		// A reinitialization must not silently destroy active triggers.
+		for (int i = 0; i < s_nRfxGrtcData[devno].MaxNbTrigEvt; i++)
+		{
+			if (s_nRfxGrtcData[devno].Trigger[i].nsPeriod != 0U)
+			{
+				return false;
+			}
+		}
+	}
+    pTimer->DevNo = devno;
     pTimer->EvtHandler = pCfg->EvtHandler;
 	nRFGrtcData_t &rtc = s_nRfxGrtcData[pTimer->DevNo];
 //	NRF_GRTC_Type *reg = s_nRfxGrtcData[pTimer->DevNo].pReg;
 
-	rtc.pInt = &NRF_GRTC->INTEN0 + pCfg->DevNo * 4;
+	rtc.pInt = &NRF_GRTC->INTEN0 + devno * 4;
 	rtc.pSysCnt = &NRF_GRTC->SYSCOUNTER[pCfg->DevNo];
     memset(rtc.Trigger, 0, sizeof(rtc.Trigger));
 
     rtc.pTimer = pTimer;
+	s_bGrtcAutoSelected[devno] = automatic;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 
@@ -382,7 +451,7 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->ExecuteTask = nullptr;
 
 	// Interrupt priority, the interrupt enabled with a trigger
-	NVIC_SetPriority(nRFxGrtcIrqNo(pCfg->DevNo), pCfg->IntPrio);
+	NVIC_SetPriority(nRFxGrtcIrqNo(devno), pCfg->IntPrio);
 
     nRFxGrtcSetFrequency(pTimer, pCfg->Freq);
 
