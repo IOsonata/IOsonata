@@ -766,3 +766,28 @@ confirm 100-ms `msDelay`/`nsDelay`, all 11 timers and zero
 failures. Then verify normal default 128-MHz boot. The 64-MHz
 measurement run itself was expected to fail with the old fallback
 factor; do not count it as a passing 64-MHz full test.
+
+## Temporary 64-MHz validation build (Debug only)
+
+The nRF54LM20A **Debug** Eclipse managed configurations of
+`lib/ioc/.cproject` and `exemples/CoreClockTest/ioc/.cproject`
+temporarily define `NRF_CONFIG_CPU_FREQ_MHZ=64` for both C and C++.
+The library's Debug_SDC/Release/Release_SDC and CoreClockTest Release
+remain unchanged. `SystemInit()` still defaults to 128 MHz in the
+absence of an override; nRF54LM20B and all other Nordic targets are
+untouched. Commit history marks these Debug changes as TEMP and they
+must be removed **after** the hardware results are recorded.
+
+Clean-build nRF54LM20A library Debug first, followed by CoreClockTest
+Debug, flash the latter and check `Startup CPU 64000000 Hz`.
+Expected: `msDelay(100)` and `nsDelay(100 ms)` each approximately
+100,000 us, GRTC and HF timer matrix passing, and
+`CoreClockTest complete: 0 failures`. The earlier 64-MHz measurement
+with the provisional divisor showed ~50 ms `msDelay(100)` and
+30 follow-on timer/callback failures, all attributable to the wrong
+microsecond factor.
+
+**Not yet hardware validated:** source/managed-metadata inspection only.
+After the corrected 64-MHz run, restore the Debug configurations and
+clean-rebuild at default 128 MHz to avoid linking stale 64-MHz
+objects into later tests.
