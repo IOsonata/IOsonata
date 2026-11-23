@@ -513,3 +513,20 @@ cold `sDelay(1)` on multiple resets before accepting this compensation.
 All 11 timer devices and trigger/ownership checks passed in both provided
 runs. The previous serial-link limitation and 64-MHz endpoint calibration
 are independent open issues.
+
+## LM20x managed-project variant mismatch (November 23, 2026)
+
+The follow-up CoreClockTest still showed 1.436/1.444 seconds for cold
+`sDelay(1)` despite the LM20A compensation commit. Repository inspection
+identified the cause: all four LM20x managed-library configurations defined
+`NRF54LM20B_XXAA` for both C and C++ sources, while CoreClockTest and
+CorePowerTest define `NRF54LM20A_XXAA`. As a result the library compiled
+out the LM20A-only cold correction. The library configurations are now
+aligned with the LM20A examples (eight macro entries), and a regression test
+checks the project definitions. This does not establish LM20B validation;
+any future LM20B build must use a matching B-specific library configuration.
+
+**Required hardware check:** clean-rebuild the library as well as the
+CoreClockTest application so an old B-compiled static library cannot remain
+linked. Run fresh-reset cold/warm/reuse `sDelay(1)`, full timer matrix, and
+CorePowerTest. Hardware confirmation of the fixed cold path is pending.
