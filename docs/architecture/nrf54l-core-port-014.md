@@ -482,3 +482,17 @@ Source-level inspection of the nine main ownership, allocation, sleep and
 managed-project invariants passed. The Python regression script has not been
 executed in this session. Neither source inspection nor Python assertions are
 a substitute for a managed build or hardware validation.
+
+## nRF54LM20A microsecond-delay correction (November 23, 2026)
+
+At 128 MHz, an LM20A hardware run measured approximately 125 ms for
+`msDelay(250)`, while `nsDelay` and GRTC-based `sDelay` were accurate.
+The 128-MHz microsecond divisor is provisionally corrected from 8,000,640
+to 4,000,320 (31,997,440 us-loop iterations/s). The nanosecond divisor
+remains 3,000,150. Neither the 64-MHz LM20A endpoint nor LM20B has
+been hardware calibrated; LM20B retains its separate provisional constants.
+
+This is a source-level correction **pending hardware verification**. Clean-build
+LM20A CoreClockTest and check 100-ms delay against the HF reference, followed
+by the complete timer matrix and CorePowerTest. Do not modify the PRBS-tested
+UART driver to address the independent serial-output issue.
