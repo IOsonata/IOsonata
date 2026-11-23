@@ -836,3 +836,28 @@ assistant. Before merge, clean-build Debug and Release configurations
 of both LM20A and LM20B library and Core test managed projects and
 verify each linker line uses the matching library archive. LM20B
 hardware remains unvalidated.
+
+## nRF54L15 managed example Release library path audit
+
+The nRF54L15 Eclipse managed example metadata was audited for the same
+Release-to-Debug library search path regression previously found on
+nRF54LM20A/B. Confirmed: CoreClockTest and CorePowerTest Release linked
+`../../../../lib/ioc/Debug` instead of Release. Other BLE/UART examples
+had mixed Debug and Release search paths under their Release configuration.
+
+The affected nRF54L15 example projects have been updated so their
+Release linker search paths use `../../../../lib/ioc/Release`. Debug
+paths remain Debug, and already-correct projects (including TimerDemo)
+were unchanged. The nRF54L15 library managed project itself has four
+separate configurations (Debug, Debug_SDC, Release, Release_SDC), with
+no example archive search path to repair.
+
+The source regression `tests/nordic/check_nrf54l_core_port.py` now
+enumerates existing nRF54L15 `exemples/*/ioc/.cproject` files and
+rejects any Debug/Release cross-linking within their configurations.
+It also continues checking the separate LM20A/B targets.
+
+This was a metadata repair, not a clock/PLL or delay-factor change.
+Actual Eclipse managed Debug/Release builds and the new Python check
+have not yet been executed in this environment. Validate the
+linker command in each configuration before acceptance.
