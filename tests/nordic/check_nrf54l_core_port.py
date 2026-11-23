@@ -35,6 +35,10 @@ class Nrf54lCorePort(unittest.TestCase):
 
         self.assertIn("s_bGrtcAutoSelected[devno]", source)
         self.assertIn("pRtc->pTimer = nullptr;", source)
+        self.assertIn("s_pGrtcOwner[devno] = nullptr;", source)
+        self.assertIn("s_pGrtcOwner[devno] = pTimer;", source)
+        self.assertIn("s_pGrtcOwner[candidate] == nullptr", source)
+        self.assertIn("s_pGrtcOwner[devno] != pTimer", source)
         self.assertIn("state = DisableInterrupt();", source)
         self.assertIn("pRtc->pInt[2] = nRFxGrtcCCMask(*pRtc);", source)
         self.assertIn("NRF_GRTC->CC[idx].CCEN = 0U;", source)
@@ -71,6 +75,13 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("SCB_SCR_SLEEPDEEP_Msk", source)
         self.assertIn("__WFI();", source)
         self.assertIn("SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_TIMER_WAKE", source)
+
+    def test_l15_measured_128mhz_delay_factors(self):
+        source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
+        self.assertIn("#if defined(NRF54L15_XXAA)", source)
+        self.assertIn("if (SystemCoreClock == 128000000UL)", source)
+        self.assertIn("8000640UL, 3000120UL", source)
+        self.assertIn("16000000UL, 3000000UL", source)
 
     def test_both_managed_libraries_link_backends(self):
         for mcu in ("nRF54L15", "nRF54LM20x"):
