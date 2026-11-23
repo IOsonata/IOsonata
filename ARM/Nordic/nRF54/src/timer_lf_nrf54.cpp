@@ -446,13 +446,27 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		}
 	}
 	devno = selected.DevNo;
+	// Generic Timer clients may reuse one handle sequentially after
+	// disabling the previous device. Never detach a live GRTC or one
+	// with armed compare events when moving that handle.
 	for (candidate = 0; candidate < TIMER_NRFX_RTC_MAX; candidate++)
 	{
 		if (candidate != devno &&
 			s_nRfxGrtcData[candidate].pTimer == pTimer)
 		{
-			EnableInterrupt(state);
-			return false;
+			if (s_bGrtcEnabled[candidate])
+			{
+				EnableInterrupt(state);
+				return false;
+			}
+			for (int i = 0; i < s_nRfxGrtcData[candidate].MaxNbTrigEvt; i++)
+			{
+				if (s_nRfxGrtcData[candidate].Trigger[i].nsPeriod != 0U)
+				{
+					EnableInterrupt(state);
+					return false;
+				}
+			}
 		}
 	}
 	if (s_nRfxGrtcData[devno].pTimer != nullptr &&
