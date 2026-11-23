@@ -124,6 +124,20 @@ void SystemCoreClockUpdate(void)
 		(void)ArmDelayClockSetDivisors(SystemCoreClock,
 			16000000UL, 3000000UL);
 	}
+#elif defined(NRF54LM20A_XXAA)
+	// CoreClockTest, nRF54LM20A at 128 MHz: 15,998,720 us loops/s and
+	// 42,664,532 ns loops/s. Do not reuse nRF54L15's us divisor.
+	// The 64-MHz factors and the nRF54LM20B remain unmeasured.
+	if (SystemCoreClock == 128000000UL)
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			8000640UL, 3000150UL);
+	}
+	else
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock,
+			16000000UL, 3000000UL);
+	}
 #else
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		16000000UL, 3000000UL);

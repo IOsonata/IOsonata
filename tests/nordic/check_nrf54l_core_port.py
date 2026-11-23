@@ -182,6 +182,28 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("8000400UL, 3000150UL", source)
         self.assertIn("16000000UL, 3000000UL", source)
 
+    def test_lm20a_measured_128mhz_delay_factors(self):
+        source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
+        self.assertIn("#elif defined(NRF54LM20A_XXAA)", source)
+        start = source.index("#elif defined(NRF54LM20A_XXAA)")
+        end = source.index("\n#else\n", start)
+        lm20 = source[start:end]
+        self.assertIn("if (SystemCoreClock == 128000000UL)", lm20)
+        self.assertIn("8000640UL, 3000150UL", lm20)
+        self.assertIn("16000000UL, 3000000UL", lm20)
+        self.assertIn("42,664,532 ns loops/s", lm20)
+        # Both calibrated factor divisors are derived from the
+        # independent 128-MHz HF Timer measurements on the LM20A.
+        cpu_hz = 128000000
+        us_factor = cpu_hz * 1000000 // 8000640
+        ns_factor = cpu_hz * 1000000 // 3000150
+        self.assertEqual(us_factor, 15998720)
+        self.assertLessEqual(abs(ns_factor - 42664532), 1)
+        # nRF54L15 remains independently calibrated.
+        l15 = source[source.index("#if defined(NRF54L15_XXAA)"):start]
+        self.assertIn("8000400UL, 3000150UL", l15)
+        self.assertNotIn("8000640UL", l15)
+
     def test_both_managed_libraries_link_backends(self):
         for mcu in ("nRF54L15", "nRF54LM20x"):
             project = (ROOT / "ARM/Nordic/nRF54" / mcu /

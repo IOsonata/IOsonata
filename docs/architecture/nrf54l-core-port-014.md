@@ -287,13 +287,31 @@ if that is the physical device, without replacing the A support.
 Nordic development hardware compatibility:
 https://docs.nordicsemi.com/r/bundle/comp_matrix_nrf54lm20a/page/comp/nrf54lm20a/nrf54lm20a_ic_rev_comp_with_dev_hw.html
 
-The nRF54LM20x startup still uses the uncalibrated generic CPU
-delay divisors, unlike the measured 128 MHz nRF54L15 factors.
-Run the generic `CoreClockTest` on the actual LM20 target and measure
-the delay calibration at its real startup CPU frequency before
-changing any production factors. Do not copy the L15 factors on
-assumption. Also verify that its board-provided `g_McuOsc`
-crystal load-capacitance settings are correct.
+The first nRF54LM20A 128-MHz `CoreClockTest` log reported
+`CoreClockTest complete: 30 failures`. Its generic 128-MHz delay
+divisor ran `msDelay(100)` for about 50,004 us, while `nsDelay`
+was about 100,004 us and cold/warm/reuse `sDelay(1)` was accurate.
+The resulting 30 failures were 15 `msDelay` timer-duration failures
+and 15 continuous-trigger callback-count failures (four GRTC groups
+in the LFRC phase and all eleven timer devices after LF restoration).
+All measured `nsDelay` timer durations and GRTC/HF timer ownership
+checks passed. No timer, UART or GRTC timing change is warranted by
+these failures.
+
+The HF Timer measured 15,998,720 us-loop iterations per second and
+42,664,532 ns-loop iterations per second at 128 MHz. nRF54LM20A
+now uses its independently measured `ArmDelayClockSetDivisors`
+values **8,000,640 (us)** and **3,000,150 (ns)** at 128 MHz.
+This matches the measured loop rates to within one iteration per
+second. The independently calibrated nRF54L15 remains unchanged.
+The 64-MHz LM20A factors and LM20B factors have not been measured;
+both retain the existing uncalibrated fallback as applicable.
+Do not copy another target's numbers without a hardware measurement.
+
+The corrected firmware still requires a managed Release clean build
+and full hardware rerun with `CoreClockTest complete: 0 failures`.
+Also verify that the board's `g_McuOsc` crystal load capacitances
+match its hardware before signing off the power/clock implementation.
 
 For a verified nRF54LM20A board, clean-build the managed Release
 library and both Core tests:
