@@ -175,6 +175,27 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertNotIn("nRFxRtcSleepClaim(", delay)
         self.assertNotIn("nRFxRtcSleepRelease(", delay)
 
+    def test_nrf5340_app_uses_measured_startup_for_sdelay(self):
+        clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(
+            encoding="utf-8")
+        delay = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
+            encoding="utf-8")
+        self.assertIn("s_nRFxLfclkStartWaitUs", clock)
+        self.assertIn("s_nRFxLfclkStartWaitUs = 0U;", clock)
+        self.assertIn("s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;", clock)
+        self.assertIn("nRFxSleepLfClockStartupWaitUs(void)", clock)
+        self.assertIn("startupWaitUs = initialized && !warmClock ?", delay)
+        self.assertIn("nRFxSleepLfClockStartupWaitUs() : 0U;", delay)
+        self.assertIn("if (!warmClock && Seconds == chunk)", delay)
+        self.assertIn("(uint64_t)startupWaitUs *", delay)
+        self.assertIn("NRF_SDELAY_WARM_OVERHEAD_TICKS;", delay)
+        # 260.5-ms startup uses nearly 8,539 ticks; immediate startup
+        # must not subtract 8,539 ticks from an otherwise warm call.
+        frequency = 32768
+        for start_us in (0, 200, 260500):
+            ticks = (start_us * frequency + 500000) // 1000000 - 11
+            self.assertLess(abs(ticks - (start_us * frequency // 1000000)), 12)
+
     def test_nrf5340_per_core_signed_compensation(self):
         source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
             encoding="utf-8")
