@@ -29,6 +29,9 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("candidate != devno && s_nRfxGrtcData[candidate].pTimer == pTimer", source)
         self.assertIn("if (s_bGrtcEnabled[candidate])", source)
         self.assertIn("s_nRfxGrtcData[candidate].Trigger[i].nsPeriod != 0U", source)
+        self.assertIn("s_nRfxGrtcData[candidate].pTimer = nullptr;", source)
+        self.assertIn("s_nRfxGrtcData[candidate].pInt[2] =", source)
+
 
         self.assertIn("s_bGrtcAutoSelected[devno]", source)
         self.assertIn("pRtc->pTimer = nullptr;", source)
