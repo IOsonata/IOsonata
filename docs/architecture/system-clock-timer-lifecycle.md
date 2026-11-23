@@ -388,7 +388,7 @@ clock and shutdown checks.
 ## Nordic oscillator declaration and selection
 
 `g_McuOsc` declares board hardware support. Nordic keeps the temporary
-HF/LF selected source in the System Core backend without modifying that
+HF/LF selected source in the System Core implementation without modifying that
 declaration. RC is internal; external XTAL/TCXO selections are accepted only
 when the board has declared that oscillator type and its frequency.
 
@@ -507,7 +507,7 @@ compile the assembly fallback.
 
 Compile-time DWT selection may differ between translation units because
 the compiler sees different target CMSIS definitions and include order.
-Until all ARM translation units consistently select the DWT backend, the
+Until all ARM translation units consistently select the DWT delay path, the
 MCU System Core must **always** initialize and refresh the assembly-loop
 fallback factors, even if its own translation unit compiles DWT delays.
 The nRF5340 application core does so at startup and at every 128/64 MHz
@@ -517,7 +517,7 @@ not require loop-factor calibration.
 
 ## CPU clock changes and delay factors
 
-The existing `ARM/include/idelay.h` chooses the delay backend at compile
+The existing `ARM/include/idelay.h` chooses the delay method at compile
 time: DWT CYCCNT where available, otherwise the calibrated assembly loops.
 DWT delays count CPU cycles directly, handle 32-bit counter wraparound in
 bounded chunks, and use the current `SystemCoreClock`. Neither path requires

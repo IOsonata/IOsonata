@@ -1,7 +1,7 @@
 # nRF5340 CorePowerTest runtime validation
 
 CorePowerTest is one generic firmware image per MCU. It queries the
-power backend's `SystemPowerCapabilitiesGet` mask at runtime and runs
+power implementation's `SystemPowerCapabilitiesGet` mask at runtime and runs
 every supported check. Board headers contain only physical UART, GPIO
 and reserved RAM resources. They do not select System OFF or standby.
 
@@ -19,7 +19,7 @@ reason and retained/nonretained RAM; no single execution can continue
 after actual System OFF. On Net the unsupported phases print UNSUPPORTED.
 
 The generic capability API is a port service. Other MCU targets need
-their own backend capability implementation to receive exhaustive runtime
+their own capability implementation to receive exhaustive runtime
 coverage. A missing capability API is reported explicitly, never guessed.
 Compatibility wrappers retain older Eclipse project source links until
 those projects are migrated.
