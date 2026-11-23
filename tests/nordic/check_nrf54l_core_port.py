@@ -214,6 +214,19 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", lm20a)
         self.assertEqual((1433700 + 1433521) // 2 - 433611, 999999)
 
+    def test_lm20_managed_project_uses_same_variant(self):
+        base = ROOT / "ARM/Nordic/nRF54/nRF54LM20x"
+        for relative in ("lib/ioc/.cproject",
+                         "exemples/CoreClockTest/ioc/.cproject",
+                         "exemples/CorePowerTest/ioc/.cproject"):
+            with self.subTest(project=relative):
+                project = (base / relative).read_text()
+                self.assertIn('value="NRF54LM20A_XXAA"', project)
+                self.assertNotIn('value="NRF54LM20B_XXAA"', project)
+                if relative.startswith("lib/"):
+                    # Four managed configs, each with C and C++ definitions.
+                    self.assertEqual(project.count('value="NRF54LM20A_XXAA"'), 8)
+
     def test_both_managed_libraries_link_backends(self):
         for mcu in ("nRF54L15", "nRF54LM20x"):
             project = (ROOT / "ARM/Nordic/nRF54" / mcu /
