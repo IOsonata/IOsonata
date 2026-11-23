@@ -77,6 +77,20 @@ have been rebuilt and rerun.
 **The first hardware run is not accepted:** the described fixes are
 committed but have not been validated by a subsequent hardware run.
 
+## UART mode correction
+
+The shared `CoreClockTest` defaults to polling unless a board opts into
+interrupt/DMA mode. The nRF54L15 and nRF54LM20x configurations previously
+omitted both board macros, so nRF54L UARTE forced EasyDMA while leaving
+`bIntMode` disabled. Both boards now select
+`CORE_CLOCK_TEST_UART_INT=true` and
+`CORE_CLOCK_TEST_UART_DMA=true`; the same missing overrides were
+corrected for nRF5340 App and Net. nRF52 configurations already had both.
+
+The generic test's existing `DEVINTRF_EVT_TX_FIFO_EMPTY` callback
+continues to control the flush check; no direct UART hardware access was
+added to the test. Build and real-board revalidation remain mandatory.
+
 ## Managed clean-build commands
 
 The shared Nordic headless Eclipse/CDT build script now includes both nRF54L
