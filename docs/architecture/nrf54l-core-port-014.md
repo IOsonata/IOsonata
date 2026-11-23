@@ -643,3 +643,26 @@ not establish broad operating-temperature cold-start margins, LM20A
 coexistence, or clean managed build matrices. Keep these separate from the
 successful bare-metal hardware results. Do not merge this branch into main
 based on LM20A validation alone.
+
+## nRF54LM20A measured delay-divisor follow-up (November 23, 2026)
+
+After updating the nRF54LM20A 128-MHz microsecond divisor to the
+CoreClockTest-measured 8,000,320 (15,999,360 loops/s), two complete
+hardware CoreClockTest runs report **zero failures**. Both measure
+`msDelay(100)` and `nsDelay(100 ms)` at exactly 100,000 us against the
+HF timer. The nanosecond divisor remains 3,000,150. The two cold
+`sDelay(1)` results are 998,125 and 1,004,740 us (within 0.474%),
+with warm 999,998 us and reuse 999,997 us in both runs.
+
+All 11 timer devices, GRTC/HF references, clock switching/restoration,
+one-shot/continuous callbacks, trigger reuse, and timer contention
+checks pass. Under LFRC, GRTC and HF-reference 250-ms results differ by
+approximately 0.1–0.4%; after restoring the configured LF source they
+agree closely. Optional CPU low-power and RC calibration operations
+remain unsupported or not successful, not reported as test failures.
+
+**Acceptance:** nRF54LM20A busy-loop delays and clock/timer operations
+are confirmed at 128 MHz using the measured divisor. This is additional
+hardware evidence following the earlier four-run clock test and the
+five-boot CorePowerTest capture. It does not validate 64-MHz scaling,
+nRF54LM20B, BLE/MPSL coexistence or the managed build matrix.
