@@ -22,7 +22,9 @@ are unchanged and MCU-independent. UART default is 1,000,000 baud.
   application-available GRTC interrupt group. MPSL's final group and
   compare channels 7-11 are not automatically selected.
 - Explicit GRTC Timer handles retain ownership after `TimerDisable`.
-  An auto-selected temporary Timer returns its group on Disable.
+  An auto-selected temporary Timer returns its group on Disable. Selection
+  and reservation are interrupt-safe; release disables its interrupt group,
+  clears the group's compare channels/events, and invalidates the old handle.
   Reinitialization cannot replace a different live Timer handle.
 - `sDelay()` uses that generic TimerInit/EnableTrigger/DisableTrigger/Disable
   sequence. GRTC runs at 1 MHz, independently of the nRF52/nRF53 LFCLK
@@ -59,5 +61,7 @@ merge to main until managed builds and real-board acceptance pass.
 
 `python3 tests/nordic/check_nrf54l_core_port.py`
 
-This test inspects source and managed-project links. It is not a substitute
-for compiling or exercising the hardware.
+Source-level inspection of the nine main ownership, allocation, sleep and
+managed-project invariants passed. The Python regression script has not been
+executed in this session. Neither source inspection nor Python assertions are
+a substitute for a managed build or hardware validation.
