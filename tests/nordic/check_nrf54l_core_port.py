@@ -182,18 +182,33 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("8000400UL, 3000150UL", source)
         self.assertIn("16000000UL, 3000000UL", source)
 
-    def test_lm20a_128mhz_delay_factor_correction(self):
+    def test_lm20a_two_point_delay_interpolation(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
         start = source.index("#elif defined(NRF54LM20A_XXAA)")
         end = source.index("#elif defined(NRF54LM20B_XXAA)", start)
         lm20a = source[start:end]
-        # Measured on hardware: msDelay(100) read 99,996 us with 8,000,640.
-        self.assertIn("8000320UL, 3000150UL", lm20a)
-        self.assertNotIn("8000640UL", lm20a)
-        self.assertIn("16000000UL, 3000000UL", lm20a)
-        self.assertNotIn("4000320UL, 3000150UL", lm20a)
+        self.assertIn("64000000UL, 7998400UL, 21331413UL", lm20a)
+        self.assertIn("128000000UL, 15999360UL, 42664533UL", lm20a)
+        self.assertIn("ArmDelayClockInterpolate(SystemCoreClock,", lm20a)
+        self.assertNotIn("16000000UL, 3000000UL", lm20a)
+        self.assertEqual(64000000 * 1000000 // 8001600, 7998400)
         self.assertEqual(128000000 * 1000000 // 8000320, 15999360)
-        self.assertEqual(15998720 * 100000 // 99996, 15999359)
+        # Verify interpolation arithmetic at the midpoint (96 MHz).
+        us_mid = (7998400 + 15999360 + 1) // 2
+        ns_mid = (21331413 + 42664533 + 1) // 2
+        self.assertEqual(us_mid, 11998880)
+        self.assertEqual(ns_mid, 31997973)
+
+    def test_lm20a_startup_default_restored_to_128mhz(self):
+        source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
+        init = source[source.index("void SystemInit(void)"):]
+        self.assertIn("NRF_CONFIG_CPU_FREQ_MHZ", init)
+        self.assertIn("OSCILLATORS_PLL_FREQ_FREQ_CK64M", init)
+        self.assertIn("OSCILLATORS_PLL_FREQ_FREQ_CK128M", init)
+        self.assertNotIn("TEMPORARY: LM20A 64-MHz", init)
+        self.assertIn('''#else
+                NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
+            #endif''', init)
 
     def test_lm20b_remains_unmeasured(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
