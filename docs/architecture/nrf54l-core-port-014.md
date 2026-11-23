@@ -310,11 +310,39 @@ Official references:
 Do not change the GPIO pin mappings, the wake implementation or the
 PRBS-tested UART driver on the basis of this debugger-only difference.
 
-**Remaining verification:** After the standalone button wake, capture
-the next boot's RESETREAS/decoded reset reason, System OFF reset-on-wake
-check and retention results. Button-triggered startup alone does not
-verify these post-wake assertions; BLE/MPSL coexistence and nRF54LM20x
-remain separate.
+**Standalone post-wake verification (November 23, 2026):**
+The newer CorePowerTest capture contains 35 complete boot/test cycles,
+each reporting zero failures. In every cycle the three automatic timer
+standby wakes, CPU/peripheral clock and UART-rate restoration, static/stack
+RAM checks, and wake-pin configuration/rearm pass: 105/105 standby wakes.
+
+The decoded reset reasons must be distinguished rather than counting every
+boot after a System OFF prompt as a pin wake:
+
+| Decoded reason | IOsonata meaning | Observed boots |
+| --- | --- | ---: |
+| `0x00000100` | `SYSTEM_RESET_WAKE_PIN` (System OFF pin wake) | 1 |
+| `0x00000020` | `SYSTEM_RESET_DEBUG` (debug interface reset) | 32 |
+| `0x00000002` | `SYSTEM_RESET_PIN` (reset pin) | 1 |
+| `0x00000008` | `SYSTEM_RESET_SOFT` (software reset) | 1 |
+
+On the `0x00000100` boot the test explicitly reported
+`System OFF reset-on-wake: PASS`,
+`RAM retention after System OFF: PASS`, and
+`RAM non-retention after System OFF: PASS`
+(`0x00000000 failures, 0x0000001a checks`). The other 34 boots
+reported `0x00000017 checks`, as the reset-on-wake and retention-readback
+assertions correctly ran only when the previous reset was a recognized
+System OFF wake. Thus at least **one complete System OFF + button wake +
+RAM-retention cycle is validated**, not 35 such cycles.
+
+The `SYSTEM_RESET_DEBUG` reasons do not by themselves establish whether
+the debugger was attached at that instant or what component asserted the
+debug reset. Avoid assigning them to GPIO failure or UART. To isolate
+the remaining reset-origin anomaly, run with no active debug interface
+and preferably only power plus USB-UART connected, then capture successive
+`0x00000100` boots and post-wake retention results. nRF54LM20x and
+BLE/MPSL coexistence remain independent tests.
 
 ## Hardware acceptance - follow-up required
 
@@ -329,18 +357,20 @@ For **each** nRF54L15 and nRF54LM20x target, run:
    resumable standby timer wake (all three cycles), clock/UART/RAM
    restoration, wake-pin validation and System OFF button wake/reset, where
    the board exposes them. nRF54L15 DK and IBK standalone button wake
-   was reported working; the post-wake reset reason and retention checks
-   remain to be captured. Require the full post-wake zero-failure summary.
+   was reported working. One subsequent `0x00000100` boot verified
+   `System OFF reset-on-wake` and both RAM retention/non-retention checks.
+   Distinguish debug-origin resets from pin-wake resets on further runs.
 3. Reboot and repeat, paying attention to GRTC group ownership and BLE/MPSL
    coexistence. MPSL-enabled builds are a separate configuration from
    bare-metal acceptance.
 
 The nRF54L15 bare-metal GRTC group ownership and interrupt operations
 have now been exercised by three complete CoreClockTest hardware runs.
-This does **not** validate the nRF54LM20x target, CorePowerTest
-standby/System OFF behavior, BLE/MPSL coexistence, or every required
-managed build. Do not merge to main until the remaining acceptance
-checks are complete.
+The subsequent nRF54L15 CorePowerTest capture also verifies 105 timer-wake
+cycles and one full System OFF pin-wake/RAM-retention cycle. This does
+**not** validate the nRF54LM20x target, repeated independent pin-wake
+reset origins, BLE/MPSL coexistence or every required managed build.
+Do not merge to main until the remaining acceptance checks are complete.
 
 ## Source-level check
 
