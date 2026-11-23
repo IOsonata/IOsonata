@@ -31,11 +31,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/semihost_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/semihost_intrf.h</locationURI>
-		</link>
-		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -141,6 +136,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
 		</link>
 		<link>
+			<name>include/idelay.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/idelay.h</locationURI>
+		</link>
+		<link>
 			<name>include/intelhex.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
@@ -229,6 +229,11 @@
 			<name>include/rftag</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/semihost_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/semihost_intrf.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors</name>
@@ -1711,11 +1716,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/timer.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/coredev/system_clock_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/system_clock_nrfx.cpp</locationURI>
@@ -1724,6 +1724,11 @@
 			<name>src/coredev/system_power_nrfx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/system_power_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer_hf_nrfx.cpp</name>
