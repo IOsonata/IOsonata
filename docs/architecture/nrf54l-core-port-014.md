@@ -684,3 +684,49 @@ Both summaries report `evicted=0` and an empty SysLog FIFO, with
 UART submission attempts, not proven wire-byte losses. Unsupported reduced
 CPU power mode is not a test failure. No driver change or additional power
 calibration is indicated by these results.
+
+## CPU frequency endpoint calibration: boot-only Nordic versus runtime-scalable MCUs
+
+The generic CoreClockTest calibration design measures the fastest and
+slowest *selectable* CPU frequencies using the same delay APIs and an
+independent HF timer (DWT when available). MCU implementations that support
+**safe runtime CPU frequency changes**, such as certain STM32 families,
+should visit both endpoints in one run, retain their measured factors in
+System Core, and interpolate the us/ns loop rates upon subsequent frequency
+changes. The generic implementation currently has
+`ArmDelayClockInterpolate()`, but that does not by itself prove a target
+has installed measured endpoints or uses interpolation at runtime.
+
+The Nordic nRF54LM20A/B clock is different: the product specification
+lists a 64/128-MHz `PLL.FREQ` CPU frequency selection **on boot**.
+nRF54L clock management on this branch deliberately rejects
+`SYSTEM_POWER_MODE_LOW_POWER`: a live `PLL.FREQ` write is **not**
+an acceptable substitute for an explicitly supported runtime transition.
+`SystemCoreClockSelect()` on Nordic selects a clock source, not a CPU
+frequency, and CoreClockTest therefore correctly observed only one
+128-MHz operating point in its hardware runs.
+
+To measure the 64-MHz endpoint, create an independently booted,
+matching-library-and-application **64-MHz calibration build** of
+CoreClockTest for each MCU variant, using its existing
+`NRF_CONFIG_CPU_FREQ_MHZ=64` startup selection. Do not mix a
+128-MHz-prebuilt library with a 64-MHz application; clean-build both and
+check `PLL.CURRENTFREQ` / `SystemCoreClockGet()` at startup. Measure
+both loops with the same HF reference, record 64-MHz and 128-MHz
+factors separately for LM20A and LM20B, and validate delay accuracy.
+These are two boot-selected configurations, not an application-switchable
+low-power CPU speed. The existing 128-MHz results do not determine the
+64-MHz factors without hardware measurement.
+
+**Acceptance distinction:** two-point calibration is mandatory for an
+MCU with supported runtime CPU scaling. For a boot-only selection, it
+requires two separately booted calibration configurations, and
+production selects the calibrated factor matching its startup speed;
+runtime interpolation is not applicable until a safe switching mechanism
+is specified by the silicon vendor and implemented/validated in System
+Core. Any nRF54L low-power-mode support must be backed by documented
+hardware behavior, not by an untested live PLL modification.
+
+Nordic references:
+- https://docs.nordicsemi.com/r/bundle/ps_nrf54lm20a/
+- https://docs.nordicsemi.com/r/bundle/ps_nrf54lm20a/page/clock.html-concept_rp5_fgp_bs
