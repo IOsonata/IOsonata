@@ -37,6 +37,18 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertNotIn("GrtcSleepClaim", source)
         self.assertNotIn("GrtcSleepRelease", source)
 
+    def test_released_handle_cannot_reenable_grtc(self):
+        source = self.grtc
+        start = source.index("static bool nRFxGrtcEnable(")
+        end = source.index("// The triggers are kept", start)
+        enable = source[start:end]
+        self.assertIn("if (pTimer == nullptr)", enable)
+        self.assertIn("if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX)", enable)
+        self.assertIn("state = DisableInterrupt();", enable)
+        self.assertIn("if (pRtc->pTimer != pTimer)", enable)
+        self.assertIn("EnableInterrupt(state);", enable)
+        self.assertIn("return false;", enable)
+
     def test_sdelay_uses_generic_timer_and_grtc(self):
         source = self.timer
         self.assertIn("defined(NRF54L_SERIES)", source)
