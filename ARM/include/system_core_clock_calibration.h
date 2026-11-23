@@ -309,6 +309,9 @@ static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
 	uint32_t oldNs;
 	uint32_t cpuHz;
 	bool success;
+#if defined(__GNUC__) && ARM_DELAY_CAL_DWT_AVAILABLE
+	bool prepared;
+#endif
 
 	if (pPoint == NULL)
 	{
@@ -327,8 +330,6 @@ static inline bool DelayCalibrationMeasure(DelayCalibrationPoint_t *pPoint)
 	measured.CpuHz = 0U;
 	measured.Measured = false;
 #if defined(__GNUC__) && ARM_DELAY_CAL_DWT_AVAILABLE
-	bool prepared;
-
 	prepared = SystemDelayDwtPrepare == NULL ||
 		SystemDelayDwtPrepare();
 	success = prepared && ArmDelayCalibrate(&measured, cpuHz);
