@@ -49,8 +49,8 @@ while `nsDelay(100 ms)` measured 100,004 us. All 11 timer devices
 accordingly showed approximately 125 ms for the 250 ms msDelay test
 and only two callbacks in the 110 ms continuous-trigger sample.
 
-The measured 128 MHz nRF54L15 divisor is now 8,000,640 (us) and
-3,000,120 (ns), in `ARM/Nordic/nRF54/src/system_nrf54l.c`.
+The measured 128 MHz nRF54L15 divisor is now 8,000,400 (us) and
+3,000,150 (ns), in `ARM/Nordic/nRF54/src/system_nrf54l.c`.
 It applies only to NRF54L15_XXAA at 128 MHz; 64 MHz and
 nRF54LM20 remain pending separate hardware calibration.
 
@@ -171,6 +171,14 @@ production until these checks pass.
 
 ## nRF54L oscillator startup configuration (November 23, 2026)
 
+The IOsonata `system_nrf54l.c` vendor portion was compared against
+Nordic **nrfx v4.7.1 (MDK 9.2.2)** and already matches. The local
+IOsonata changes are retained: PLL startup, instruction-cache enable,
+`SystemCoreClockGet`, 128-MHz nRF54L15 delay calibration, and
+`SystemOscInit`. No wholesale nrfx replacement or external dependency
+update is required for this startup correction.
+
+
 The shared ARM ResetEntry copies initialized data, clears BSS and calls
 SystemInit before entering the application. The nRF54L system initializes
 FICR trims and the CPU clock, but did not invoke the already-existing
@@ -180,17 +188,20 @@ calculations were not being applied by IOsonata startup.
 
 SystemInit now calls SystemOscInit **after vendor trim initialization** and
 before any application/GRTC timer initialization. This is limited to secure
-normal clock initialization. SystemOscInit checks the present capacitor
-registers and skips a write if the desired value is already present; this
-avoids redundant writes when settings have been retained across a reset.
-No oscillator is started or stopped by this call.
+normal clock initialization. The routine uses Nordic's
+`nrf_ficr_hfxo_cap_calculate` and `nrf_ficr_lfxo_cap_calculate` to derive
+capacitor settings from the board's `LoadCap` in 0.1-pF units (converted
+to femtofarads). The earlier hand-written slope and offset calculations
+were incorrect and were removed. Settings are written only if different
+and the corresponding oscillator is not already active; no clock is
+started or stopped by this call.
 
 Nordic documents that updating XOSC32KI.INTCAP after GRTC has requested
 LFXO can increase supply current. The configuration must precede the first
 GRTC LFXO request. An inherited bootloader/MPSL clock that is already
-running before the application SystemInit is a separate ownership case:
-these changes do **not** claim to safely reconfigure an already-running
-crystal if the retained capacitance differs.
+running before the application SystemInit retains its settings: the routine
+does not overwrite capacitance while HFXO, system LFXO, or a directly
+GRTC-owned LFXO is active.
 
 **Board requirement:** The weak g_McuOsc default in osc_nrf54l.c describes
 the Nordic DK. Production IBK-NRF54L15 and other boards must provide

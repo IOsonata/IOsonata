@@ -64,9 +64,20 @@ class Nrf54lCorePort(unittest.TestCase):
                         system.index("/*lint --flb"))
         self.assertLess(reset.index("memset((void *)&__bss_start__"),
                         reset.index("SystemInit();"))
-        self.assertIn("NRF_OSCILLATORS->XOSC32M.CONFIG.INTCAP != intcap", oscillator)
-        self.assertIn("NRF_OSCILLATORS->XOSC32KI.INTCAP != intcap", oscillator)
-        self.assertIn("NRF_OSCILLATORS->XOSC32KI.INTCAP = intcap;", oscillator)
+        self.assertIn('#include "hal/nrf_ficr.h"', oscillator)
+        self.assertIn("nrf_ficr_hfxo_cap_calculate(NRF_FICR,", oscillator)
+        self.assertIn("nrf_ficr_lfxo_cap_calculate(NRF_FICR,", oscillator)
+        self.assertIn("g_McuOsc.CoreOsc.LoadCap * 100U", oscillator)
+        self.assertIn("g_McuOsc.LowPwrOsc.LoadCap * 100U", oscillator)
+        self.assertIn("g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL", oscillator)
+        self.assertIn("g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL", oscillator)
+        self.assertIn("NRF_CLOCK_S->XO.STAT & CLOCK_XO_STAT_STATE_Msk", oscillator)
+        self.assertIn("NRF_CLOCK_S->LFCLK.STAT", oscillator)
+        self.assertIn("NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk", oscillator)
+        self.assertIn("NRF_GRTC->CLKCFG & GRTC_CLKCFG_CLKSEL_Msk", oscillator)
+        self.assertIn("if (!lfRunning && NRF_OSCILLATORS->XOSC32KI.INTCAP != lfCap)", oscillator)
+        self.assertIn("NRF_OSCILLATORS->XOSC32KI.INTCAP = lfCap;", oscillator)
+        self.assertNotIn("slope = ((-(slope>>8))<<8) | slope", oscillator)
         self.assertIn("NRF_GRTC->TASKS_START = 1U;", self.grtc)
 
     def test_grtc_selects_board_lf_source_only_before_start(self):
