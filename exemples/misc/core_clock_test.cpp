@@ -59,6 +59,11 @@ SOFTWARE.
 #define CORE_CLOCK_TEST_UART_DMA false
 #endif
 
+// Boards with limited flash can run the clock checks without timer measurements.
+#ifndef CORE_CLOCK_TEST_TIMERS
+#define CORE_CLOCK_TEST_TIMERS 1
+#endif
+
 #define CLOCK_TEST_CYCLES	3U
 
 // The generic API is declared for every target. A weak reference lets the
@@ -678,6 +683,11 @@ static void CoreClockTestDelayCalibrationRecord(void)
 {
 	DelayCalibrationPoint_t sample;
 
+	if (!CORE_CLOCK_TEST_TIMERS)
+	{
+		return;
+	}
+
 	sample = {};
 
 	if (!CoreClockTestDelaySample(&sample))
@@ -1138,7 +1148,10 @@ int main(void)
 	CoreClockTestSharedClockTest();
 	CoreClockTestPowerMode();
 	CoreClockTestDelayCalibrationRecord();
-	CoreClockTestSleepDelay();
+	if (CORE_CLOCK_TEST_TIMERS)
+	{
+		CoreClockTestSleepDelay();
+	}
 	initialCoreSource = GetHighFreqOscType();
 	initialCoreFreq = GetHighFreqOscFreq();
 	initialLfSource = GetLowFreqOscType();
@@ -1236,12 +1249,15 @@ int main(void)
 				if (cycle == CLOCK_TEST_CYCLES)
 				{
 					CoreClockTestCalibrationTest();
-					CoreClockTestPrint("LF RC timer timing test\r\n");
-
-					for (timerDevNo = 0;
-						timerDevNo < TimerGetLowFreqDevCount(); timerDevNo++)
+					if (CORE_CLOCK_TEST_TIMERS)
 					{
-						CoreClockTestTimer(timerDevNo);
+						CoreClockTestPrint("LF RC timer timing test\r\n");
+
+						for (timerDevNo = 0;
+							timerDevNo < TimerGetLowFreqDevCount(); timerDevNo++)
+						{
+							CoreClockTestTimer(timerDevNo);
+						}
 					}
 				}
 			}
@@ -1274,27 +1290,34 @@ int main(void)
 	{
 		CoreClockTestResult("Peripheral clock domains present", false);
 	}
-	CoreClockTestPrint("Restored LF source timer timing test\r\n");
-
-	// Timer implementations expose their device counts through the generic API.
-	// Test every advertised device rather than a board-selected instance.
-	lowTimerCount = TimerGetLowFreqDevCount();
-	highTimerCount = TimerGetHighFreqDevCount();
-	timerCount = lowTimerCount + highTimerCount;
-
-	if (timerCount == 0)
+	if (CORE_CLOCK_TEST_TIMERS)
 	{
-		CoreClockTestResult("Timer devices available", false);
-	}
+		CoreClockTestPrint("Restored LF source timer timing test\r\n");
 
-	for (timerDevNo = 0; timerDevNo < timerCount; timerDevNo++)
-	{
-		CoreClockTestTimer(timerDevNo);
+		// Timer implementations expose their device counts through the generic API.
+		// Test every advertised device rather than a board-selected instance.
+		lowTimerCount = TimerGetLowFreqDevCount();
+		highTimerCount = TimerGetHighFreqDevCount();
+		timerCount = lowTimerCount + highTimerCount;
+
+		if (timerCount == 0)
+		{
+			CoreClockTestResult("Timer devices available", false);
+		}
+
+		for (timerDevNo = 0; timerDevNo < timerCount; timerDevNo++)
+		{
+			CoreClockTestTimer(timerDevNo);
+		}
+		CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);
+		CoreClockTestSleepDelayOwnership(lowTimerCount);
+		CoreClockTestTimerPowerOff();
+		CoreClockTestDelayCalibrationReport();
 	}
-	CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);
-	CoreClockTestSleepDelayOwnership(lowTimerCount);
-	CoreClockTestTimerPowerOff();
-	CoreClockTestDelayCalibrationReport();
+	else
+	{
+		CoreClockTestPrint("Timer and delay measurements omitted from this build\r\n");
+	}
 	CoreClockTestFlush();
 	CoreClockTestPrint("CoreClockTest complete: %u failures\r\n", s_Failures);
 	CoreClockTestFlush();

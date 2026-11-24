@@ -16,7 +16,8 @@ false on these ports.
 
 Arm GCC linked CoreClockTest and CorePowerTest in Debug and Release for
 SAMD21, SAM4LCxC, SAM4LSxC and SAM4E16E using the project sources and
-linker scripts. Both full test programs exceed the SAMD11D14AM flash region.
+linker scripts. The SAMD11D14AM Release CoreClockTest fits with the board's timer and
+delay tests disabled. Its full CoreClockTest and CorePowerTest exceed flash.
 Register models cover clock requests, timer power-down and shared-clock
 preservation. Board verification of the new running modes, delay accuracy
 and wake behavior remains open.

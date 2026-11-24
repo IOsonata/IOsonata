@@ -7,6 +7,14 @@
 > Use the generic test output and capability reporting to determine supported
 > functionality; build and hardware validation remain target-specific.
 
+## SAMD11D14AM Release
+
+The 16 KiB build exercises shared HF/LF clocks, oscillator selection and
+restoration, peripheral clock dividers, and CPU running modes over the EDBG
+UART. The board sets `CORE_CLOCK_TEST_TIMERS=0`. The completion count covers
+the enabled checks. Timer triggers, concurrent timers, timer power-off and
+delay calibration and accuracy are outside this image.
+
 ## Historical demo notes (pre-migration)
 
 # SAMD11 ClockDemo

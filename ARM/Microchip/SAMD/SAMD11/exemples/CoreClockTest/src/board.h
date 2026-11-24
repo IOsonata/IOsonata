@@ -55,10 +55,10 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// Clock selection is the only ClockDemo mode. Use PowerOffDemo for SW0 wake.
-// Leave the optional UART RX prompt off until the flash-limited build is checked.
-
-// LF selection omitted because a running DFLL/DPLL may own its reference.
+// Fit the clock checks in 16 KiB.
+#ifndef CORE_CLOCK_TEST_TIMERS
+#define CORE_CLOCK_TEST_TIMERS 0
+#endif
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif // __BOARD_H__
