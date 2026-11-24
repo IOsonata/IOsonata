@@ -354,8 +354,7 @@ uint32_t SystemPeriphClockGet(int Idx);
  * 				   have more than 1 peripheral clock settings.
  * @param	Freq : Clock frequency in Hz.
  *
- * @return	Actual frequency set in Hz.
- * 			0 - Failed
+ * @return	Actual peripheral clock frequency in Hz, the best match available.
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq);
 

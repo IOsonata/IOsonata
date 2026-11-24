@@ -1384,13 +1384,8 @@ static bool SamdClockBusy(bool LowFreq)
 	return false;
 }
 
-uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+static void SamdPeriphClockSet(int Idx, uint32_t Freq)
 {
-	if (Idx < 0 || Idx >= GCLK_GEN_NUM || Freq == 0U || __get_IPSR() != 0U)
-	{
-		return 0U;
-	}
-	uint32_t state = DisableInterrupt();
 	uint32_t ctrl = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, (uint32_t)Idx);
 	uint32_t saved = SamdGclkGenRead(&GCLK_REGS->GCLK_GENDIV, (uint32_t)Idx);
 	uint32_t actual = 0U;
@@ -1398,20 +1393,18 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	if (ctrl == UINT32_MAX || saved == UINT32_MAX ||
 		(ctrl & GCLK_GENCTRL_GENEN_Msk) == 0U)
 	{
-		EnableInterrupt(state);
-		return 0U;
+		return;
 	}
 	uint32_t input = SamdSourceFreq((ctrl & GCLK_GENCTRL_SRC_Msk) >> GCLK_GENCTRL_SRC_Pos);
 	if (input == 0U)
 	{
-		EnableInterrupt(state);
-		return 0U;
+		return;
 	}
 	uint32_t maximum = Idx == 1 ? 65535U : Idx == 2 ? 31U : 255U;
 	uint32_t best = 1U;
 	uint32_t error = UINT32_MAX;
 	bool binary = false;
-	uint32_t first = input / Freq;
+	uint32_t first = Freq ? input / Freq : maximum;
 	uint32_t minimum = Idx == SAMD_GCLK_MAIN ?
 		(input + SAMD_MAIN_FREQ_MAX - 1U) / SAMD_MAIN_FREQ_MAX : 1U;
 	if (first < minimum)
@@ -1464,8 +1457,7 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 			uint32_t value = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, gen);
 			if (value == UINT32_MAX)
 			{
-				EnableInterrupt(state);
-				return 0U;
+				return;
 			}
 			busy = ((value & GCLK_GENCTRL_GENEN_Msk) != 0U &&
 				 (value & GCLK_GENCTRL_SRC_Msk) == GCLK_GENCTRL_SRC_GCLKGEN1);
@@ -1483,23 +1475,13 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 				 SYSCTRL_DPLLCTRLB_REFCLK_GCLK);
 			if (value == UINT32_MAX)
 			{
-				EnableInterrupt(state);
-				return 0U;
+				return;
 			}
 			busy = ((reference || (value & GCLK_CLKCTRL_CLKEN_Msk) != 0U) &&
 				 (value & GCLK_CLKCTRL_GEN_Msk) == GCLK_CLKCTRL_GEN(Idx) &&
 				 SamdTimerClockBusy(channel));
 		}
-		if (busy)
-		{
-			// An active consumer fixes the achievable rate at the current divider.
-			actual = SamdGclkGenFreq((uint32_t)Idx);
-		}
-		else if (Idx == SAMD_GCLK_MAIN && SamdClockBusy(false))
-		{
-			actual = 0U;
-		}
-		else
+		if (!busy && (Idx != SAMD_GCLK_MAIN || !SamdClockBusy(false)))
 		{
 			bool ready = true;
 			if (modeChange)
@@ -1517,17 +1499,30 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 			if (ready)
 			{
 				GCLK_REGS->GCLK_GENDIV = GCLK_GENDIV_ID(Idx) | GCLK_GENDIV_DIV(best);
-				ready = SamdGclkSync();
-			}
-			if (!ready || SamdGclkGenFreq((uint32_t)Idx) != actual)
-			{
-				actual = 0U;
+				(void)SamdGclkSync();
 			}
 			SystemCoreClockUpdate();
 		}
 	}
+}
+
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+{
+	uint32_t state;
+	uint32_t rate;
+
+	if (Idx < 0 || Idx >= GCLK_GEN_NUM)
+	{
+		return 0U;
+	}
+	state = DisableInterrupt();
+	if (__get_IPSR() == 0U)
+	{
+		SamdPeriphClockSet(Idx, Freq);
+	}
+	rate = SamdGclkGenFreq((uint32_t)Idx);
 	EnableInterrupt(state);
-	return actual;
+	return rate;
 }
 
 // Full clock tree setup again. The caller stops the clock consumers first
