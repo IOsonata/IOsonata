@@ -86,24 +86,54 @@ The file is shared by the nRF9160 and nRF91x1 libraries; the values come
 from one nRF9160 run and are not yet measured on an nRF91x1. Rerun
 CoreClockTest to confirm both delays at 100,000 us.
 
+## nRF9160 CoreClockTest hardware sign-off
+
+Two consecutive nRF9160 CoreClockTest executions from the latest hardware
+UART log completed with **0 failures** after the LFRC Disable/Enable cache
+correction in commit `220472dd`. This closes the previously recorded four,
+then two, LFRC timer accuracy failures for this tested board and build.
+
+| Check | First run | Second run |
+| --- | --- | --- |
+| Final CoreClockTest result | 0 failures | 0 failures |
+| Measured/report LFRC timer rate | 44,730 Hz | 44,740 Hz |
+| RTC0 LFRC msDelay/nsDelay, 250 ms | PASS/PASS | PASS/PASS |
+| RTC1 LFRC msDelay/nsDelay, 250 ms | PASS/PASS | PASS/PASS |
+| RTC0/RTC1 LFXO and HF timer matrix | PASS | PASS |
+| sDelay cold/warm/reuse | PASS/PASS/PASS | PASS/PASS/PASS |
+| HF/LF ownership and RTC trigger lifecycle | PASS | PASS |
+
+Independent HF timer measurements of the running LFRC were approximately
+44.75–44.80 kHz; the RTC timer reports an independently sampled ~44.73–44.74
+kHz and both 250-ms delays now remain within the unchanged 2% accuracy
+requirement. The configured LFXO measures approximately 32,768 Hz. The
+64-MHz CPU, 16-MHz peripheral clock and delay-loop calibrations pass.
+
+**Scope:** This demonstrates compensation of RTC elapsed time and trigger
+periods under the measured hardware conditions; it does not trim the RC
+oscillator, establish LFRC frequency compliance with the datasheet, or
+prove long-term accuracy under temperature variation. A more accurate time
+reference should continue to use LFXO. It is not evidence of modem-active
+clock control, System ON wake, or System OFF GPIO wake.
+
 ## Remaining validation
 
 1. Run source tests: `python3 tests/nordic/check_nrf91_power_clock_014.py`.
 2. Run Debug and Release managed builds for `nrf9160` and `nrf91x1`
    through `tests/nordic/build_managed_power_clock.py`.
-3. Run CoreClockTest on nRF9160 using the updated code and inspect
-   LFXO cold/warm `sDelay`, ownership and LFRC timing separately.
-4. Validate the new nRF91 LFRC software rate measurement. Run both
-   RTC0/RTC1 on LFRC in CoreClockTest, compare the reported calibrated
-   timer frequency with its independent raw RTC tick-rate diagnostic,
-   and require all four 250-ms/2%-tolerance checks to PASS. Confirm
-   the active LFCLKSTAT source is RC during RC tests and LFXO after
-   restoration. Repeated RC selections must remeasure the rate.
-   The earlier four failures remain evidence until hardware retest.
-5. Run CorePowerTest on nRF9160 and nRF91x1, including timer wake,
-   GPIO/System OFF wake, retention, UART restoration, and reset reasons.
-   A bare-metal System OFF test does not validate modem-active shutdown.
-6. Preserve all previously validated nRF52, nRF5340 and nRF54L behavior.
+3. nRF9160 CoreClockTest hardware run: **complete, 2/2 runs with
+   zero failures**, including both LFRC RTCs, crystal-source RTCs,
+   16-MHz timers, sDelay, shared clocks and the Disable/Enable lifecycle.
+   Verify the LFCLKSTAT source explicitly if investigating physical LFRC
+   datasheet tolerance; the UART timing result does not read it directly.
+4. Run CoreClockTest on nRF91x1 hardware. The nRF9160 result does not
+   establish that other nRF91 variants are validated.
+5. Run CorePowerTest on nRF9160 and nRF91x1, including System ON timer
+   wake, GPIO/System OFF wake, retention registers, UART restoration,
+   reset reasons and repeated cycles. A bare-metal System OFF test does
+   not validate modem-active shutdown.
+6. Preserve all previously validated nRF52, nRF5340 and nRF54L behavior
+   and verify both debug/release managed configurations.
 
 No default watchdog is enabled. No target-specific code belongs in the
 shared CoreClockTest or CorePowerTest examples.
