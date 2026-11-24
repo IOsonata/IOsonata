@@ -158,8 +158,11 @@ Each board completed three standby cycles per boot. The wake tests checked
 CPU and peripheral clocks, UART rate, and static and stack RAM after
 resume. All six System OFF wakes reported reset reason 0x00000100.
 
-The UART logs do not identify Debug or Release. The managed build matrix
-for both configurations and hardware testing with the modem active remain open.
+The IOcomposer Debug and Release managed builds passed for both targets.
+Each configuration built the target library, CoreClockTest and CorePowerTest.
+Both tests linked the matching target library from lib/ioc/Debug or
+lib/ioc/Release. The UART logs do not identify the build configuration.
+System OFF with the modem active still requires hardware validation.
 
 ## LFRC rate compensation implementation
 
