@@ -506,6 +506,7 @@ bool Re01TmrInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	pTimerData->IntPrio = pCfg->IntPrio;
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
 	pTimerData->pTimer->EvtHandler = pCfg->EvtHandler;
+	pTimerData->pTimer->PowerOff = nullptr;
 	pTimerData->pTimer->Disable = Re01TmrDisable;
 	pTimerData->pTimer->Enable = Re01TmrEnable;
 	pTimerData->pTimer->Reset = Re01TmrReset;

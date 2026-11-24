@@ -605,7 +605,8 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 						d.Timer=t; t->DevNo=d.No; t->Freq=plan.Frequency;
 						t->nsPeriod=(1000000000ULL+t->Freq/2U)/t->Freq;
 						t->Rollover=0; t->LastCount=0; t->EvtHandler=cfg->EvtHandler;
-						t->Disable=Disable; t->Enable=Enable; t->Reset=Reset; t->GetTickCount=GetCount;
+						t->PowerOff = nullptr;
+						t->Disable = Disable; t->Enable=Enable; t->Reset=Reset; t->GetTickCount=GetCount;
 						t->SetFrequency=Frequency; t->GetMaxTrigger=MaxTrigger; t->FindAvailTrigger=FindTrigger;
 						t->DisableTrigger=TriggerDisable; t->EnableTrigger=TriggerEnable;
 						t->DisableExtTrigger=ExtDisable; t->EnableExtTrigger=ExtEnable;

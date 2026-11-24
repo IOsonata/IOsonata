@@ -518,6 +518,40 @@ extern "C" void TC6_Handler(void) { Sam4eTimerIRQ(6); }
 extern "C" void TC7_Handler(void) { Sam4eTimerIRQ(7); }
 extern "C" void TC8_Handler(void) { Sam4eTimerIRQ(8); }
 
+// A final hardware release. Disable stops counting but retains the TC
+// channel owner, while PowerOff makes that channel available to Init.
+static bool Sam4ePowerOff(TimerDev_t *pTimer)
+{
+	Sam4eTimerData_t *pData;
+	uint32_t state;
+	int i;
+	int devno;
+
+	pData = Sam4eData(pTimer);
+	if (pData == NULL)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	devno = pTimer->DevNo;
+	Sam4eRun(pData, false);
+	pData->pReg->TC_IDR = 0xFFFFFFFFUL;
+	(void)pData->pReg->TC_SR;
+	NVIC_DisableIRQ(pData->Irq);
+	NVIC_ClearPendingIRQ(pData->Irq);
+	for (i = 0; i < SAM4E_TIMER_TRIGGERS; i++)
+	{
+		pData->Trigger[i].Active = false;
+	}
+	SAM4E_PMC->PMC_PCDR0 = 1UL << (ID_TC0 + devno);
+	pData->pTimer = NULL;
+	pTimer->PowerOff = NULL;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	EnableInterrupt(state);
+	return true;
+}
+
 bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 {
 	Sam4eTimerData_t *pData;
@@ -564,6 +598,7 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Disable = Sam4eDisable;
+	pTimer->PowerOff = Sam4ePowerOff;
 	pTimer->Enable = Sam4eEnable;
 	pTimer->Reset = Sam4eReset;
 	pTimer->GetTickCount = Sam4eCount;

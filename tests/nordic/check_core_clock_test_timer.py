@@ -371,5 +371,23 @@ class NordicSleepDelay(unittest.TestCase):
 
 
 
+
+    def test_generic_timer_power_off_transfers_hardware_ownership(self):
+        source = TEST.read_text(encoding="utf-8")
+        begin = source.index("static void CoreClockTestTimerPowerOff(void)")
+        end = source.index("int main(void)", begin)
+        test = source[begin:end]
+        self.assertIn("TimerGetHighFreqDevNo()", test)
+        self.assertIn("s_RetainedTimer.PowerOff == nullptr", test)
+        self.assertIn("TimerPowerOff(&s_RetainedTimer);", test)
+        self.assertIn("TimerInit(&s_PowerOffTimer, &cfg);", test)
+        self.assertIn("TimerPowerOff(&s_PowerOffTimer);", test)
+        self.assertIn("!TimerPowerOff(&s_PowerOffTimer)", test)
+        self.assertLess(test.index("TimerPowerOff(&s_RetainedTimer);"),
+            test.index("TimerInit(&s_PowerOffTimer, &cfg);"))
+        self.assertIn("CoreClockTestTimerPowerOff();", source)
+        self.assertNotIn("NRF91_SERIES", test)
+
+
 if __name__ == "__main__":
     unittest.main()

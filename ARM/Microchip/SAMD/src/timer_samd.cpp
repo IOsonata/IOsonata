@@ -1232,6 +1232,36 @@ static void SamdTimerReleaseBinding(TimerDev_t *pTimer, int DevNo)
 	}
 }
 
+// PowerOff is a final release, not a clock-gated Disable. The SAMD
+// driver already has a shared hardware-release routine for RTC/TC/TCC.
+static bool SamdTimerPowerOff(TimerDev_t * const pTimer)
+{
+	SamdTimerData_t *pData;
+
+	if (pTimer == NULL)
+	{
+		return false;
+	}
+	if (s_SamdSysTickOwner == pTimer)
+	{
+		pTimer->Disable(pTimer);
+		s_SamdSysTickOwner = NULL;
+	}
+	else
+	{
+		pData = SamdTimerGet(pTimer);
+		if (pData == NULL)
+		{
+			return false;
+		}
+		SamdTimerRelease(pData);
+	}
+	pTimer->PowerOff = NULL;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	return true;
+}
+
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer != NULL && pCfg != NULL && pCfg->DevNo == SAMD_SYSTICK_TIMER_DEVNO)
@@ -1255,6 +1285,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			return false;
 		}
 		pTimer->DevNo = pCfg->DevNo;
+		pTimer->PowerOff = SamdTimerPowerOff;
 		s_SamdSysTickOwner = pTimer;
 
 		return true;
@@ -1341,6 +1372,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Disable = SamdTimerDisable;
+	pTimer->PowerOff = SamdTimerPowerOff;
 	pTimer->Enable = SamdTimerEnable;
 	pTimer->Reset = SamdTimerReset;
 	pTimer->GetTickCount = SamdTimerGetTickCount;

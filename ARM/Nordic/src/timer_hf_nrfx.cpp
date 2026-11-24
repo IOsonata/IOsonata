@@ -694,6 +694,74 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 	// The count and the triggers are kept, Enable resumes them
 }
 
+// Full shutdown is distinct from Disable. Disable retains the binding,
+// while PowerOff makes the hardware TIMER available to another handle.
+// PEI routes must be disconnected by their owner before releasing it.
+static bool nRFxTimerPowerOff(TimerDev_t * const pTimer)
+{
+	const nRFTimerData_t *pData;
+	NRF_TIMER_Type *reg;
+	uint32_t state;
+	int devno;
+	int i;
+
+	if (pTimer == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	if (devno < 0 || devno >= TIMER_NRFX_HF_MAX)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	if (s_pnRFxTimerDev[devno] != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	pData = &s_nRFxTimerData[devno];
+	reg = pData->pReg;
+	if (reg->MODE != TIMER_MODE_MODE_Timer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	for (i = 0; i < pData->MaxNbTrigEvt; i++)
+	{
+		if (pData->pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			pData->pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+	}
+	if (s_bTimerEnabled[devno])
+	{
+		nRFxTimerDisable(pTimer);
+	}
+	reg->TASKS_STOP = 1U;
+	reg->INTENCLR = 0xFFFFFFFFUL;
+	reg->SHORTS = 0U;
+	for (i = 0; i <= pData->CountCC; i++)
+	{
+		reg->EVENTS_COMPARE[i] = 0U;
+	}
+	NVIC_DisableIRQ(pData->IrqNo);
+	NVIC_ClearPendingIRQ(pData->IrqNo);
+	memset(pData->pTrigger, 0,
+		pData->MaxNbTrigEvt * sizeof(TimerTrig_t));
+	memset(pData->pCC, 0,
+		pData->MaxNbTrigEvt * sizeof(uint32_t));
+	s_bnRFxTimerHwClear[devno] = false;
+	s_pnRFxTimerDev[devno] = nullptr;
+	pTimer->PowerOff = nullptr;
+	pTimer->Freq = 0U;
+	pTimer->DevNo = -1;
+	EnableInterrupt(state);
+	return true;
+}
+
 // Clears the counter and the tick count. The armed triggers restart their
 // period from the clear.
 static void nRFxTimerReset(TimerDev_t * const pTimer)
@@ -1226,6 +1294,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	memset(tdata.pTrigger, 0, tdata.MaxNbTrigEvt * sizeof(TimerTrig_t));
 
 	pTimer->Disable = nRFxTimerDisable;
+	pTimer->PowerOff = nRFxTimerPowerOff;
 	pTimer->Enable = nRFxTimerEnable;
 	pTimer->Reset = nRFxTimerReset;
 	pTimer->GetTickCount = nRFxTimerGetTickCount;
@@ -1260,6 +1329,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		// No hardware ownership was acquired: do not leave a stale
 		// handle that permanently blocks a later successful init.
 		s_pnRFxTimerDev[devno] = nullptr;
+		pTimer->PowerOff = nullptr;
 #endif
 		return false;
 	}

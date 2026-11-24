@@ -311,3 +311,29 @@ The previously reported two zero-failure hardware runs predated
 the stricter HF ownership check; do not use them as validation
 of this specific update.
 
+
+## TimerPowerOff generic lifecycle
+
+The generic IOsonata TimerPowerOff() API has been added to the C and
+C++ Timer interface. Unlike TimerDisable(), it is a final ownership
+release. A successful call stops the underlying timer, clears
+locally owned triggers and IRQs, drops its clock request and releases
+the device association. A different TimerDev_t can then use TimerInit
+on the same physical timer. Live PEI bindings are refused until
+their event routes are unbound. Repeated PowerOff on the old handle
+returns false.
+
+The nRF91 RTC and HF TIMER drivers provide this callback, and the
+generic CoreClockTest now exercises an ownership transfer on its
+previously retained first high-frequency timer. The test runs on every
+MCU with TimerPowerOff support; it has no nRF91-specific conditionals.
+Other Nordic, Microchip and STM32 implementations are tracked in
+`docs/architecture/timer-power-off.md`, while unported backends
+explicitly return unsupported.
+
+This is a new hardware validation boundary. The earlier nRF9160
+CoreClockTest and CorePowerTest zero-failure logs predate this API.
+Rebuild the managed nRF9160 Release library and rerun CoreClockTest,
+including the new PowerOff ownership-transfer and repeated-release
+checks before signing off the new lifecycle. Preserve LFRC measurement,
+HF/LF shared clock ownership and sDelay results.

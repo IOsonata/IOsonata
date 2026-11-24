@@ -102,6 +102,7 @@ static const UARTCfg_t s_UartCfg = {
 static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
 static TimerDev_t s_RetainedTimer;
+static TimerDev_t s_PowerOffTimer;
 static volatile uint32_t s_InterruptCount;
 static volatile uint32_t s_TriggerCount;
 static uint32_t s_LfTimerInitMask;
@@ -1055,6 +1056,50 @@ static void CoreClockTestConcurrentTimerTest(int LowCount, int HighCount)
 	TimerDisable(&s_RetainedTimer);
 }
 
+// Verify that PowerOff releases a physical TIMER for another handle.
+// Keep the entire test generic; drivers that cannot safely power off
+// report UNSUPPORTED instead of pretending to transfer ownership.
+static void CoreClockTestTimerPowerOff(void)
+{
+	TimerCfg_t cfg;
+	int devno;
+	bool released;
+	bool initialized;
+	bool poweredOff;
+
+	devno = TimerGetHighFreqDevNo();
+	if (devno < 0 || TimerGetHighFreqDevCount() == 0 ||
+		s_RetainedTimer.DevNo != devno ||
+		s_RetainedTimer.PowerOff == nullptr)
+	{
+		CoreClockTestPrint("Timer PowerOff: UNSUPPORTED\r\n");
+		return;
+	}
+
+	cfg = s_TimerCfg;
+	cfg.DevNo = devno;
+	cfg.EvtHandler = nullptr;
+	released = TimerPowerOff(&s_RetainedTimer);
+	CoreClockTestResult("Timer PowerOff owner release", released);
+	if (!released)
+	{
+		return;
+	}
+	initialized = TimerInit(&s_PowerOffTimer, &cfg);
+	CoreClockTestResult("Timer init after PowerOff", initialized);
+	if (!initialized)
+	{
+		return;
+	}
+	poweredOff = TimerPowerOff(&s_PowerOffTimer);
+	CoreClockTestResult("Timer active PowerOff", poweredOff);
+	if (poweredOff)
+	{
+		CoreClockTestResult("Timer repeated PowerOff rejected",
+			!TimerPowerOff(&s_PowerOffTimer));
+	}
+}
+
 int main(void)
 {
 	unsigned cycle;
@@ -1244,6 +1289,7 @@ int main(void)
 	}
 	CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);
 	CoreClockTestSleepDelayOwnership(lowTimerCount);
+	CoreClockTestTimerPowerOff();
 	CoreClockTestDelayCalibrationReport();
 	CoreClockTestFlush();
 	CoreClockTestPrint("CoreClockTest complete: %u failures\r\n", s_Failures);

@@ -256,6 +256,11 @@ struct __Timer_Device {
 	 * @return  true - Success
 	 */
 	bool (*EnableExtTrigger)(TimerDev_t * const pTimerDev, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense);
+
+	// Full peripheral shutdown. Unlike Disable, this releases ownership
+	// so a different TimerDev_t may subsequently initialize the device.
+	// Drivers without this capability leave the callback NULL.
+	bool (*PowerOff)(TimerDev_t * const pTimerDev);
 };
 
 #pragma pack(pop)
@@ -291,6 +296,23 @@ int TimerGetHighFreqDevNo(void);
  * @param	pTimer	: Pointer to Timer device private data (timer handle)
  */
 static inline void TimerDisable(TimerDev_t * const pTimer) { pTimer->Disable(pTimer); }
+
+/**
+ * @brief Shut down a timer and release its hardware ownership.
+ *
+ * Disable only stops the counter and may release its clock request.
+ * PowerOff additionally removes trigger/IRQ resources and releases
+ * the timer for another handle. After success the caller must Init
+ * again before using the timer. A backend that cannot safely release
+ * its resources returns false without claiming success.
+ *
+ * @return true if the timer is fully powered off and ownership released.
+ */
+static inline bool TimerPowerOff(TimerDev_t * const pTimer)
+{
+	return pTimer != NULL && pTimer->PowerOff != NULL ?
+		pTimer->PowerOff(pTimer) : false;
+}
 
 /**
  * @brief   Turn on timer.
@@ -522,6 +544,7 @@ public:
 		vTimer.pObj = this;
 		vTimer.GetTaskEndpoint = NULL;
 		vTimer.ExecuteTask = NULL;
+		vTimer.PowerOff = NULL;
 	}
 	virtual ~Timer() {}
 
@@ -560,6 +583,9 @@ public:
      * re-enable timer instead of full initialization sequence
      */
     virtual void Disable() { vTimer.Disable(&vTimer); }
+
+	/** @brief Power off and release the timer's hardware ownership. */
+	virtual bool PowerOff() { return TimerPowerOff(&vTimer); }
 
     /**
      * @brief   Reset timer.

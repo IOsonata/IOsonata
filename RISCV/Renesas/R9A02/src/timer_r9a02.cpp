@@ -669,6 +669,7 @@ static bool R9a02MtimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const 
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
+	pTimer->PowerOff = nullptr;
 	pTimer->Disable = R9a02MtimerDisable;
 	pTimer->Enable = R9a02MtimerEnable;
 	pTimer->Reset = R9a02MtimerReset;
@@ -768,6 +769,7 @@ static bool R9a02TauInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCf
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
+	pTimer->PowerOff = nullptr;
 	pTimer->Disable = R9a02TauDisable;
 	pTimer->Enable = R9a02TauEnable;
 	pTimer->Reset = R9a02TauReset;

@@ -250,6 +250,59 @@ static void nRFxGrtcDisable(TimerDev_t * const pTimer)
 	EnableInterrupt(state);
 }
 
+// Power off this logical GRTC group without disturbing the shared
+// SYSCOUNTER or compare channels owned by other clients (including MPSL).
+static bool nRFxGrtcPowerOff(TimerDev_t * const pTimer)
+{
+	nRFGrtcData_t *pRtc;
+	uint32_t state;
+	int devno;
+	int i;
+	int idx;
+
+	if (pTimer == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	pRtc = &s_nRfxGrtcData[devno];
+	if (pRtc->pTimer != pTimer || s_pGrtcOwner[devno] != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	nRFxGrtcDisable(pTimer);
+	pRtc->pInt[2] = nRFxGrtcCCMask(*pRtc);
+	for (i = 0; i < pRtc->MaxNbTrigEvt; i++)
+	{
+		idx = pRtc->StartCCIdx + i;
+		NRF_GRTC->CC[idx].CCEN = 0U;
+		NRF_GRTC->EVENTS_COMPARE[idx] = 0U;
+		pRtc->CC[i] = 0U;
+		pRtc->Compare[i] = 0U;
+		pRtc->Trigger[i].Type = TIMER_TRIG_TYPE_SINGLE;
+		pRtc->Trigger[i].nsPeriod = 0ULL;
+		pRtc->Trigger[i].Handler = nullptr;
+		pRtc->Trigger[i].pContext = nullptr;
+	}
+	NVIC_DisableIRQ(nRFxGrtcIrqNo(devno));
+	NVIC_ClearPendingIRQ(nRFxGrtcIrqNo(devno));
+	pRtc->pTimer = nullptr;
+	s_pGrtcOwner[devno] = nullptr;
+	s_bGrtcEnabled[devno] = false;
+	s_bGrtcAutoSelected[devno] = false;
+	pTimer->PowerOff = nullptr;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	EnableInterrupt(state);
+	return true;
+}
+
 // SYSCOUNTER, SYSCOUNTERL read before SYSCOUNTERH. Read again while BUSY
 // (value not valid) or OVERFLOW (SYSCOUNTERL overflowed after it was read, the
 // two halves are not from the same count), as nrfy_grtc_sys_counter_get does.
@@ -617,6 +670,7 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 
     pTimer->Disable = nRFxGrtcDisable;
+    pTimer->PowerOff = nRFxGrtcPowerOff;
     pTimer->Enable = nRFxGrtcEnable;
     pTimer->Reset = nRFxGrtcReset;
     pTimer->GetTickCount = nRFxGrtcGetTickCount;

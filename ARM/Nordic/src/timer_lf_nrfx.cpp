@@ -1285,6 +1285,101 @@ bool nRFxRtcEnableExtTrigger(TimerDev_t * const, int, TIMER_EXTTRIG_SENSE)
 	return false;
 }
 
+// Release the RTC's physical ownership, not merely its LFCLK request.
+// A live PEI binding must be disconnected by its caller before shutdown.
+static bool nRFxRtcPowerOff(TimerDev_t * const pTimer)
+{
+	const nRFRtcData_t *pData;
+	NRF_RTC_Type *reg;
+	uint32_t state;
+	int devno;
+	int i;
+
+	if (pTimer == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo;
+	if (devno < 0 || devno >= TIMER_NRFX_RTC_MAX)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	if (s_pnRfxRtcDev[devno] != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	pData = &s_nRfxRtcData[devno];
+	for (i = 0; i < pData->MaxNbTrigEvt; i++)
+	{
+		if (pData->pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			pData->pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+	}
+#if defined(RTC_OPTIONAL_PEI_STATE)
+	if (s_nRfxRtcRaw != nullptr)
+#endif
+	{
+		for (i = 0; i < 2; i++)
+		{
+			if (s_nRfxRtcRaw[devno][i].pPei != nullptr)
+			{
+				EnableInterrupt(state);
+				return false;
+			}
+		}
+	}
+	if (s_bRtcEnabled[devno])
+	{
+		nRFxRtcDisable(pTimer);
+	}
+	reg = pData->pReg;
+	reg->TASKS_STOP = 1U;
+	reg->INTENCLR = 0xFFFFFFFFU;
+	reg->EVTENCLR = 0xFFFFFFFFU;
+	reg->EVENTS_TICK = 0U;
+	reg->EVENTS_OVRFLW = 0U;
+	for (i = 0; i < pData->MaxNbTrigEvt; i++)
+	{
+		reg->EVENTS_COMPARE[i] = 0U;
+		pData->pCC[i] = 0U;
+	}
+	switch (devno)
+	{
+		case 0:
+			NVIC_DisableIRQ(RTC0_IRQn);
+			NVIC_ClearPendingIRQ(RTC0_IRQn);
+			break;
+		case 1:
+			NVIC_DisableIRQ(RTC1_IRQn);
+			NVIC_ClearPendingIRQ(RTC1_IRQn);
+			break;
+#if TIMER_NRFX_RTC_MAX > 2
+		case 2:
+			NVIC_DisableIRQ(RTC2_IRQn);
+			NVIC_ClearPendingIRQ(RTC2_IRQn);
+			break;
+#endif
+	}
+	memset(pData->pTrigger, 0,
+		pData->MaxNbTrigEvt * sizeof(TimerTrig_t));
+	s_bRtcAutoSelected[devno] = false;
+	s_bRtcHwClear[devno] = false;
+#if defined(NRF91_SERIES)
+	s_bRtcResetPending[devno] = false;
+#endif
+	s_pnRfxRtcDev[devno] = nullptr;
+	pTimer->PowerOff = nullptr;
+	pTimer->Freq = 0U;
+	pTimer->DevNo = -1;
+	EnableInterrupt(state);
+	return true;
+}
+
 bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	const nRFRtcData_t *pRtc;
@@ -1404,6 +1499,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 
     pTimer->Disable = nRFxRtcDisable;
+    pTimer->PowerOff = nRFxRtcPowerOff;
     pTimer->Enable = nRFxRtcEnable;
     pTimer->Reset = nRFxRtcReset;
     pTimer->GetTickCount = nRFxRtcGetTickCount;

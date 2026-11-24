@@ -158,6 +158,47 @@ static bool ResetCounter(Sam4l_TimerData_t &d)
 	}
 	return true;
 }
+// Disable keeps an explicit owner; PowerOff stops and releases it.
+static bool PowerOff(TimerDev_t *t)
+{
+	Sam4l_TimerData_t *d;
+	uint32_t state;
+	bool stopped;
+	int n;
+
+	d = Data(t);
+	if (d == nullptr)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	stopped = Run(*d, false);
+	if (!stopped)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	for (n = 0; n < (d->TcReg ? 3 : 1); n++)
+	{
+		(void)Arm(*d, n, false);
+		d->Trigger[n].Active = false;
+	}
+	Irq(*d, false);
+	NVIC_ClearPendingIRQ(d->Irq);
+	if (!d->TcReg)
+	{
+		NVIC_ClearPendingIRQ(AST_OVF_IRQn);
+	}
+	d->Timer = nullptr;
+	d->Healthy = false;
+	d->Running = false;
+	t->PowerOff = nullptr;
+	t->DevNo = -1;
+	t->Freq = 0U;
+	EnableInterrupt(state);
+	return true;
+}
+
 static void Disable(TimerDev_t *t)
 {
 	auto d = Data(t); if (!d) return;
@@ -324,6 +365,7 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	t->DevNo = cfg->DevNo; t->Freq = freq; t->nsPeriod = (1000000000ULL + freq / 2) / freq;
 	t->EvtHandler = cfg->EvtHandler;
 	t->Disable = Disable; t->Enable = Enable; t->Reset = Reset; t->GetTickCount = GetCount;
+	t->PowerOff = PowerOff;
 	t->SetFrequency = Frequency; t->GetMaxTrigger = MaxTrigger; t->FindAvailTrigger = FindTrigger;
 	t->DisableTrigger = TriggerDisable; t->EnableTrigger = TriggerEnable;
 	t->DisableExtTrigger = ExtDisable; t->EnableExtTrigger = ExtEnable;

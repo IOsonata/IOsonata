@@ -639,6 +639,7 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;
+	pTimer->PowerOff = nullptr;
 	pTimer->Disable = Esp32Disable;
 	pTimer->Enable = Esp32Enable;
 	pTimer->Reset = Esp32Reset;

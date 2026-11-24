@@ -364,6 +364,8 @@ bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->pObj = &d;
 
+	pTimer->PowerOff = nullptr;
+
 	pTimer->Disable = SystickDisable;
 	pTimer->Enable = SystickEnable;
 	pTimer->Reset = SystickReset;
