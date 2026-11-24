@@ -1444,7 +1444,6 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	int first;
 	int candidate;
 	int i;
-	uint32_t ccmask;
 
 	// Any frequency, SetFrequency takes the closest one
 	if (pTimer == nullptr || pCfg == nullptr || pCfg->DevNo < -1 ||
@@ -1507,8 +1506,9 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pRtc = &s_nRfxRtcData[pSelectedCfg->DevNo];
 	reg = pRtc->pReg;
 	pOldTimer = s_pnRfxRtcDev[pSelectedCfg->DevNo];
-	// Never replace another initialized handle, even if disabled.
-	if (pOldTimer != nullptr && pOldTimer != pTimer)
+	// An automatically selected RTC may be timing an sDelay call.
+	if (pOldTimer != nullptr && pOldTimer != pTimer &&
+		s_bRtcAutoSelected[pSelectedCfg->DevNo])
 	{
 		return false;
 	}
@@ -1538,6 +1538,10 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		}
 	}
 
+	if (pOldTimer != nullptr && s_bRtcEnabled[pSelectedCfg->DevNo])
+	{
+		nRFxRtcDisable(pOldTimer);
+	}
 	pTimer->DevNo = pSelectedCfg->DevNo;
 	pTimer->EvtHandler = pSelectedCfg->EvtHandler;
 	s_pnRfxRtcData = s_nRfxRtcData;
@@ -1569,11 +1573,14 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
     reg->TASKS_STOP = 1;
     reg->EVENTS_OVRFLW = 0;
 
-	// No compare of an earlier use, the triggers are cleared above
-	ccmask = ((1U << pRtc->MaxNbTrigEvt) - 1U);
-
-	reg->INTENCLR = ccmask << RTC_INTENSET_COMPARE0_Pos;
-	reg->EVTENCLR = ccmask << RTC_EVTEN_COMPARE0_Pos;
+	// Clear interrupt and event settings from the previous configuration.
+	reg->INTENCLR = 0xFFFFFFFFU;
+	reg->EVTENCLR = 0xFFFFFFFFU;
+	reg->EVENTS_TICK = 0U;
+	for (i = 0; i < pRtc->MaxNbTrigEvt; i++)
+	{
+		reg->EVENTS_COMPARE[i] = 0U;
+	}
 
 	// Init interrupt for RTC
 	switch (pSelectedCfg->DevNo)

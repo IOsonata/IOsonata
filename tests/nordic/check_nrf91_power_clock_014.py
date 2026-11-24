@@ -202,16 +202,14 @@ class Nrf91PowerClock(unittest.TestCase):
 			sample.index("enabled = TimerEnable(pTimer)"))
 		self.assertIn("TimerDisable(pTimer);", sample)
 
-	def test_nrf91_hf_timer_exclusive_handle(self):
+	def test_nrf91_hf_timer_reinit(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
 		section = hf[hf.index("bool nRFxTimerInit("):]
-		self.assertIn("s_pnRFxTimerDev[devno] != pTimer", section)
-		self.assertIn("s_nRFxTimerData[devno].pReg->MODE != TIMER_MODE_MODE_Timer", section)
-		self.assertIn("nRFxTimerDisable(pTimer);", section)
-		self.assertLess(section.index("A live PEI endpoint must be unbound"),
-			section.index("Only after checking all live event bindings"))
-		self.assertLess(section.index("s_pnRFxTimerDev[devno] != pTimer"),
-			section.index("s_pnRFxTimerDev[devno] = pTimer;"))
+		self.assertNotIn("s_pnRFxTimerDev[devno] != pTimer", section)
+		self.assertIn("pReg->MODE != TIMER_MODE_MODE_Timer", section)
+		stop = section.index("nRFxTimerDisable(s_pnRFxTimerDev[devno]);")
+		self.assertLess(section.index("TIMER_TRIG_PEI_CONTINUOUS"), stop)
+		self.assertLess(stop, section.index("pTimer->DevNo = pCfg->DevNo;"))
 		self.assertIn("s_pnRFxTimerDev[devno] = nullptr;", section)
 
 	def test_nrf91_timer_frequency_change_rephases_armed_triggers(self):
@@ -300,11 +298,6 @@ class Nrf91PowerClock(unittest.TestCase):
 			self.assertNotEqual(accept_rc, accept_xtal)
 
 	def test_core_clock_test_reuses_retained_hf_timer(self):
-		# nRF9160 TIMER0 (DevNo 2) was already initialized through
-		# s_RetainedTimer during CPU delay calibration and LF RTC timing.
-		# Disable stops it, but the exclusive HF ownership is retained.
-		# The timer matrix must reuse that handle, not claim TIMER0 from
-		# s_Timer and silently weaken the ownership guard.
 		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
 		start = example.index("static void CoreClockTestTimer(int DevNo)")
@@ -316,7 +309,7 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertIn("CoreClockTestTimerTriggers(pTimer);", matrix)
 		self.assertNotIn("NRF91_SERIES", matrix)
 		guard = hf[hf.index("bool nRFxTimerInit("):]
-		self.assertIn("s_pnRFxTimerDev[devno] != pTimer", guard)
+		self.assertNotIn("s_pnRFxTimerDev[devno] != pTimer", guard)
 		self.assertIn("s_bTimerEnabled[devno]", guard)
 		self.assertIn("s_pnRFxTimerDev[devno] = pTimer;", guard)
 

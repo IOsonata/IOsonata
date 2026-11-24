@@ -1301,6 +1301,9 @@ bool nRFxTimerEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_E
 
 bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 {
+	int i;
+	int devno;
+
 	// Any frequency, SetFrequency takes the closest one
 	if (pTimer == nullptr || pCfg == nullptr)
 	{
@@ -1320,29 +1323,20 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		return false;
 	}
 
-	int devno = pCfg->DevNo - TIMER_NRFX_RTC_MAX;
+	devno = pCfg->DevNo - TIMER_NRFX_RTC_MAX;
 #if defined(NRF91_SERIES)
-	// Mirror the RTC driver's ownership rule: a disabled, initialized
-	// TIMER still belongs to its original handle. Never replace it
-	// or take over a TIMER currently configured for counter mode.
-	if ((s_pnRFxTimerDev[devno] != nullptr &&
-		s_pnRFxTimerDev[devno] != pTimer) ||
-		(s_pnRFxTimerDev[devno] == nullptr &&
-		s_nRFxTimerData[devno].pReg->MODE != TIMER_MODE_MODE_Timer))
+	// A TIMER configured as a counter is in use by the counter driver.
+	if (s_nRFxTimerData[devno].pReg->MODE != TIMER_MODE_MODE_Timer)
 	{
 		return false;
 	}
 #endif
-	pTimer->DevNo = pCfg->DevNo;
-	pTimer->EvtHandler = pCfg->EvtHandler;
-	s_pnRFxTimerData = s_nRFxTimerData;
-
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 
 	// A live PEI endpoint must be unbound explicitly before reinitializing
 	// the underlying timer, even if a different Timer object is supplied.
-	for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
+	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
 	{
 		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
 			tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
@@ -1351,13 +1345,15 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		}
 	}
 #if defined(NRF91_SERIES)
-	if (s_pnRFxTimerDev[devno] == pTimer && s_bTimerEnabled[devno])
+	if (s_bTimerEnabled[devno])
 	{
-		// Only after checking all live event bindings may the same
-		// handle release its prior clock before reinitialization.
-		nRFxTimerDisable(pTimer);
+		nRFxTimerDisable(s_pnRFxTimerDev[devno]);
 	}
 #endif
+	pTimer->DevNo = pCfg->DevNo;
+	pTimer->EvtHandler = pCfg->EvtHandler;
+	s_pnRFxTimerData = s_nRFxTimerData;
+
 	s_pnRFxTimerDev[devno] = pTimer;
 	s_bnRFxTimerHwClear[devno] = false;
 	pTimer->Rollover = 0;
@@ -1386,6 +1382,11 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	// No short or interrupt left by a counter that had the TIMER
 	reg->SHORTS = 0;
 	reg->INTENCLR = 0xFFFFFFFFUL;
+
+	for (i = 0; i <= tdata.CountCC; i++)
+	{
+		reg->EVENTS_COMPARE[i] = 0U;
+	}
 
 	// Only support timer mode, 32-bit counter
 	reg->MODE = TIMER_MODE_MODE_Timer;

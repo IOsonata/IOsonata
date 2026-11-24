@@ -235,11 +235,9 @@ The subsequent timer audit found additional **source-level defects**
 not exercised in that hardware run. This batch fixes the following
 on the nRF91 path:
 
-- Exclusive HF TIMER ownership: a second TimerDev_t may not replace
-  the handle already initialized on that physical TIMER, even after
-  Disable. A same-handle reinit preserves PEI bindings and releases
-  its existing clock reference only after safe validation. Counter
-  mode is not silently overwritten.
+- HF TIMER reinitialization: TimerInit accepts an explicitly selected
+  timer that is already configured. It checks PEI connections and
+  counter mode before replacing the configuration.
 - Frequency changes: for nRF91 HF TIMER and RTC, prevalidate all
   armed normal compares against the proposed frequency before
   touching hardware. Successful changes reset the counter origin
@@ -284,33 +282,11 @@ long interval rejection.
 
 ## CoreClockTest TIMER0 handle reuse regression
 
-After the nRF91 exclusive HF TIMER ownership fix, the nRF9160 DK
-CoreClockTest ran with one failure: `Timer device 2` (TIMER0) reported
-`Timer initialization: FAIL`. RTC0/RTC1, TIMER1/TIMER2 and all other
-timing, sDelay and clock checks passed.
-
-This is a generic CoreClockTest handle-lifecycle issue, not a
-failed TIMER0 peripheral. The test first initializes the first HF
-timer as `s_RetainedTimer` for CPU delay calibration, sDelay
-measurements and independent RTC timing. It disables that timer
-between measurements, but correctly retains the device handle.
-The later timer matrix tried to initialize TIMER0 as `s_Timer`,
-which the exclusive ownership guard correctly rejected.
-
-The generic test now uses the already-initialized
-`s_RetainedTimer` handle when its device number matches the timer
-under test. Otherwise it uses `s_Timer`. Both the timer matrix
-and its trigger callback checks operate on that selected handle.
-This adjustment applies identically to every MCU and contains no
-target-specific branching.
-
-Do not remove or relax the HF timer's active/disabled ownership
-guard. This correction has source-level regression coverage but
-still requires an updated nRF9160 CoreClockTest hardware run.
-The previously reported two zero-failure hardware runs predated
-the stricter HF ownership check; do not use them as validation
-of this specific update.
-
+The nRF9160 DK previously reported a TIMER0 initialization failure
+because the driver rejected an explicit TimerInit call when the
+TimerDev_t address changed. The driver now accepts reinitialization
+of an explicitly selected TIMER or RTC. Automatic RTC selection still
+requires a free RTC. Reinitialization on the DK awaits verification.
 
 ## TimerPowerOff and timer device assignment
 
