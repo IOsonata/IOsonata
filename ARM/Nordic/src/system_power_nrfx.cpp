@@ -296,6 +296,13 @@ uint32_t SystemPowerCapabilitiesGet(void)
 
 void SystemPowerOff(void)
 {
+#if defined(NRF9120_XXAA)
+	// The modem must finish shutting down before entering System OFF.
+	if ((SYS_PWR_POWER->POWERSTATUS & POWER_POWERSTATUS_LTEMODEM_Msk) != 0U)
+	{
+		return;
+	}
+#endif
 #ifdef SYS_PWR_MEMCONF
 	// Nordic requires HFXO stopped before System OFF. Refuse shutdown
 	// while an application clock request or the radio still owns it.

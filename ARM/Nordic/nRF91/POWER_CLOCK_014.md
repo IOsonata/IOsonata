@@ -82,9 +82,7 @@ CoreClockTest on the nRF9160 at 64 MHz measured `msDelay(100)` at
 100,010 us and `nsDelay(100 ms)` at 100,011 us with the 16,000,000 and
 3,000,000 divisors, 3,999,600 us loops/s and 21,330,986 ns loops/s.
 `system_nrf91.c` now uses the measured divisors 16,001,600 and 3,000,330.
-The file is shared by the nRF9160 and nRF91x1 libraries; the values come
-from one nRF9160 run and are not yet measured on an nRF91x1. Rerun
-CoreClockTest to confirm both delays at 100,000 us.
+These divisors apply to the nRF9160. The nRF91x1 values are listed below.
 
 ## nRF9160 CoreClockTest hardware sign-off
 
@@ -157,13 +155,12 @@ nRF91x1 CorePowerTest are outside this result.
    16-MHz timers, sDelay, shared clocks and the Disable/Enable lifecycle.
    Verify the LFCLKSTAT source explicitly if investigating physical LFRC
    datasheet tolerance; the UART timing result does not read it directly.
-4. Run CoreClockTest on nRF91x1 hardware. The nRF9160 result does not
-   establish that other nRF91 variants are validated.
+4. Thingy:91 X (nRF9151) completed CoreClockTest twice with zero failures.
 5. nRF9160 CorePowerTest hardware run: **complete**, 4 boots and
    59 checks with zero failures; 12/12 automatic timer wakes and
    3/3 Button 1 System OFF resets passed. No reserved SRAM retention
    region was configured; modem-active System OFF remains untested.
-6. Run nRF91x1 CorePowerTest and CoreClockTest on hardware. Revalidate
+6. Run nRF91x1 CorePowerTest and verify the updated delay divisors. Revalidate
    the shared power and clock paths across its intended MCU variants,
    and verify Debug/Release managed configurations.
 7. Preserve already validated nRF52, nRF5340 and nRF54L behavior and
@@ -311,3 +308,20 @@ PowerOff passed in both runs. The log does not identify the build revision.
 
 See docs/architecture/timer-power-off.md for the other MCU timer
 drivers and the remaining hardware tests.
+
+## nRF91x1 on Thingy:91 X
+
+The nRF9151 measured 3,999,560 us loops/s and 21,330,772 ns loops/s
+at 64 MHz. The nRF91x1 startup uses the reported divisors of 16,001,760
+and 3,000,360. Both clock test runs preceded this update. RTC0 and RTC1
+passed on LFRC and LFXO. TIMER0 through TIMER2 passed at 16 MHz.
+
+CorePowerTest reserves an aligned 8 KiB VMC section outside the modem
+shared memory, initialized data, BSS, heap and stack. Run the test without
+a debugger. After the three standby timer wakes, press Button 1 (P0.26)
+at the System OFF prompt. On restart the test verifies the reset reason
+and checks the retained pattern. Hardware verification is pending.
+
+On nRF91x1, SystemPowerOff returns while POWERSTATUS reports that the
+modem domain is powered. Firmware using the modem must complete modem
+shutdown and any EasyDMA transfers before requesting System OFF.

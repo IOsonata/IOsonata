@@ -65,4 +65,11 @@ SOFTWARE.
 #define WAKE_BUT_PORT		0
 #define WAKE_BUT_PINOP		0
 
+// One VMC RAM section, excluded from startup initialization.
+#define POWER_DEMO_RAM_RET_TEST	1
+#define POWER_DEMO_RAM_RET_SIZE	8192U
+static uint32_t s_RetainedRam[POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t)]
+	__attribute__((section(".noinit.retention"), aligned(POWER_DEMO_RAM_RET_SIZE)));
+#define POWER_DEMO_RAM_RET_ADDR	((uintptr_t)s_RetainedRam)
+
 #endif
