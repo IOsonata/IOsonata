@@ -33,6 +33,11 @@ SECTIONS
 		. = ALIGN(0x2000);
 		__stop_modem_shm = .;
 	} > RAM
+	/* Preserved across startup. Input alignment follows the VMC section size. */
+	.noinit.retention (NOLOAD) :
+	{
+		*(.noinit.retention)
+	} > RAM
 }
 
 ASSERT(__stop_modem_shm <= 0x20020000, "modem shared memory must be in the lower 128 KB of RAM")
