@@ -145,30 +145,21 @@ wake on the nRF9160 DK under the tested conditions. Modem-active
 shutdown, current measurements, optional SRAM retention and the
 nRF91x1 CorePowerTest are outside this result.
 
-## Remaining validation
+## Bare-metal hardware results, November 24
 
-1. Run source tests: `python3 tests/nordic/check_nrf91_power_clock_014.py`.
-2. Run Debug and Release managed builds for `nrf9160` and `nrf91x1`
-   through `tests/nordic/build_managed_power_clock.py`.
-3. nRF9160 CoreClockTest hardware run: **complete, 2/2 runs with
-   zero failures**, including both LFRC RTCs, crystal-source RTCs,
-   16-MHz timers, sDelay, shared clocks and the Disable/Enable lifecycle.
-   Verify the LFCLKSTAT source explicitly if investigating physical LFRC
-   datasheet tolerance; the UART timing result does not read it directly.
-4. Thingy:91 X (nRF9151) completed CoreClockTest twice with zero failures.
-5. nRF9160 CorePowerTest hardware run: **complete**, 4 boots and
-   59 checks with zero failures; 12/12 automatic timer wakes and
-   3/3 Button 1 System OFF resets passed. No reserved SRAM retention
-   region was configured; modem-active System OFF remains untested.
-6. Run nRF91x1 CorePowerTest and verify the updated delay divisors. Revalidate
-   the shared power and clock paths across its intended MCU variants,
-   and verify Debug/Release managed configurations.
-7. Preserve already validated nRF52, nRF5340 and nRF54L behavior and
-   investigate UART TX backpressure separately if it affects throughput.
+| Test | nRF9160 DK | Thingy:91 X (nRF9151) |
+| --- | --- | --- |
+| CoreClockTest | 2 runs, 0 failures | 2 runs, 0 failures with updated delay divisors |
+| CorePowerTest | 94 checks across 4 boots, 0 failures | 94 checks across 4 boots, 0 failures |
+| Button 1 wake from System OFF | 3 wakes on P0.06 | 3 wakes on P0.26 |
+| 8 KiB retained RAM pattern | Passed after all 3 wakes | Passed after all 3 wakes |
 
-No default watchdog is enabled. No target-specific code belongs in the
-shared CoreClockTest or CorePowerTest examples.
+Each board completed three standby cycles per boot. The wake tests checked
+CPU and peripheral clocks, UART rate, and static and stack RAM after
+resume. All six System OFF wakes reported reset reason 0x00000100.
 
+The UART logs do not identify Debug or Release. The managed build matrix
+for both configurations and hardware testing with the modem active remain open.
 
 ## LFRC rate compensation implementation
 
@@ -313,14 +304,14 @@ drivers and the remaining hardware tests.
 
 The nRF9151 measured 3,999,560 us loops/s and 21,330,772 ns loops/s
 at 64 MHz. The nRF91x1 startup uses the reported divisors of 16,001,760
-and 3,000,360. Both clock test runs preceded this update. RTC0 and RTC1
+and 3,000,360. With these divisors the HF timer measured 100,000 us for both 100 ms delays. RTC0 and RTC1
 passed on LFRC and LFXO. TIMER0 through TIMER2 passed at 16 MHz.
 
 CorePowerTest reserves an aligned 8 KiB VMC section outside the modem
 shared memory, initialized data, BSS, heap and stack. Run the test without
 a debugger. After the three standby timer wakes, press Button 1 (P0.26)
 at the System OFF prompt. On restart the test verifies the reset reason
-and checks the retained pattern. Hardware verification is pending.
+and checks the retained pattern.
 
 On nRF91x1, SystemPowerOff returns while POWERSTATUS reports that the
 modem domain is powered. Firmware using the modem must complete modem
