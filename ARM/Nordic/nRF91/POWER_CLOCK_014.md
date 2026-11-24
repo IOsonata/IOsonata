@@ -146,6 +146,7 @@ This covers bare-metal System ON sleep/resume and System OFF/button
 wake on the nRF9160 DK under the tested conditions. Modem-active
 shutdown, current measurements, optional SRAM retention and the
 nRF91x1 CorePowerTest are outside this result.
+
 ## sDelay right after an LFCLK release (2026-11-23)
 
 Two CoreClockTest runs measured the reuse `sDelay(1)`, called right
