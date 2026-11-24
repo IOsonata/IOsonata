@@ -42,5 +42,39 @@ class Nrf91PowerClock(unittest.TestCase):
 				self.assertIn("exemples/misc/core_" + ("clock" if project == "CoreClockTest" else "power") + "_test.cpp", text)
 
 
+	def test_lfclk_start_checks_actual_source(self):
+		src = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
+		start = src.index("static bool nRFxLfclkFinishStart(uint32_t Src)")
+		end = src.index("static bool nRFxLfclkStart(uint32_t Src)", start)
+		section = src[start:end]
+		self.assertIn("#if defined(NRF53_SERIES) || defined(NRF91_SERIES)", section)
+		self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", section)
+		self.assertIn("NRFX_LFCLK_SRC_XTAL", section)
+		self.assertIn("NRFX_LFCLK_SRC_RC", section)
+		self.assertIn("#if defined(NRF53_SERIES)\n\t\t\t(void)nRFxLfclkCalibrate();", section)
+		self.assertIn("#if defined(NRF91_SERIES)", section)
+
+	def test_nrf91_sdelay_uses_shared_lf_timer_and_measured_startup(self):
+		timer = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(encoding="utf-8")
+		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
+		self.assertIn("defined(NRF54L_SERIES) || defined(NRF91_SERIES)", timer)
+		self.assertIn('extern "C" bool nRFxSleepLfClockAccurate(void);', timer)
+		self.assertIn('extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);', timer)
+		self.assertIn('extern "C" bool nRFxSleepLfClockAccurate(void)\n{', clock)
+		self.assertIn("#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)", clock)
+		start = timer.index('extern "C" bool sDelay(uint32_t Seconds)')
+		delay = timer[start:]
+		for call in ("nRFxSleepLfClockAccurate()", "nRFxSleepLfClockStartupWaitUs()",
+					 "TimerInit(&s_SleepTimer", "TimerDisable(&s_SleepTimer)", "__WFE()"):
+			self.assertIn(call, delay)
+		self.assertNotIn("msDelay(", delay)
+		self.assertNotIn("DWT->", delay)
+
+	def test_example_is_generic(self):
+		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
+		self.assertNotIn("NRF91_SERIES", example)
+		self.assertNotIn("NRF9160", example)
+
+
 if __name__ == "__main__":
 	unittest.main()
