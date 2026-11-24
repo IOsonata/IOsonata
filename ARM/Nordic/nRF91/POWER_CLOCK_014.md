@@ -46,6 +46,20 @@ After restoring the crystal source, RTC0/RTC1 measured approximately
 passed. CPU delay calibration and 64 MHz / 16 MHz clock reporting passed.
 That transcript predated the new nRF91 `sDelay()` integration.
 
+## nRF9160 DK CorePowerTest wake button
+
+The nRF9160 DK's default hardware routing connects Button 1 to GPIO P0.06,
+active low. The nRF9160 CorePowerTest board file now defines this button
+as a wake input; the generic test applies the required pull-up resistor,
+configures GPIO SENSE, and verifies wake after System OFF without a debugger.
+Button routing depends on the nRF52840 board-controller firmware, so test
+on the DK with its standard routing. No Thingy:91 button mapping is
+assumed. The existing VCOM0 UART pins are unchanged.
+
+Prior validation of three successive System OFF GPIO wakes on nRF91x1
+applies to that target's earlier bare-metal power demo, not to the
+updated nRF9160 CorePowerTest or to modem-active shutdown.
+
 ## Remaining validation
 
 1. Run source tests: `python3 tests/nordic/check_nrf91_power_clock_014.py`.

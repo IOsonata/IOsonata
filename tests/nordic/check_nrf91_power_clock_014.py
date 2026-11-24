@@ -86,5 +86,20 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertIn('CoreClockTestResult("Delay within 2 percent",', section)
 		self.assertNotIn("NRF91_SERIES", section)
 
+	def test_nrf9160_dk_button_wake_configuration(self):
+		board = (ROOT / "ARM/Nordic/nRF91/nRF9160/exemples/CorePowerTest/src/board.h").read_text(encoding="utf-8")
+		thingy = board[board.index("#if defined(NORDIC_THINGY91)"):board.index("#elif defined(NRF9160_DK)")]
+		dk = board[board.index("#elif defined(NRF9160_DK)"):board.index("#else", board.index("#elif defined(NRF9160_DK)"))]
+		for definition in ("#define WAKE_BUT_PORT\t\t0",
+					"#define WAKE_BUT_PIN\t\t6",
+					"#define WAKE_BUT_PINOP\t\t0"):
+			self.assertIn(definition, dk)
+		self.assertNotIn("WAKE_BUT_PIN", thingy)
+		self.assertNotIn("POWER_DEMO_UART_DMA", board)
+		example = (ROOT / "exemples/misc/core_power_test.cpp").read_text(encoding="utf-8")
+		self.assertIn("SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE)", example)
+		self.assertIn("IOPINRES_PULLDOWN : IOPINRES_PULLUP", example)
+		self.assertIn("SystemPowerOff();", example)
+
 if __name__ == "__main__":
 	unittest.main()

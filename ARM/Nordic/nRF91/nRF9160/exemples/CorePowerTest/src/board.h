@@ -69,6 +69,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_TX_PIN			29
 #define UART_CTS_PIN		26
 #define UART_RTS_PIN		27
+
+// nRF9160 DK Button 1: P0.06, active low, with internal pull-up.
+// The generic CorePowerTest configures the pull-up and GPIO SENSE.
+#define WAKE_BUT_PORT		0
+#define WAKE_BUT_PIN		6
+#define WAKE_BUT_PINOP		0
 #else
 #error "Select the board: NRF9160_DK or NORDIC_THINGY91"
 #endif
@@ -80,8 +86,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
 
-// No wake pin is assumed. Reset or power-cycle to leave power off.
-#define POWER_DEMO_UART_DMA false
-#define POWER_DEMO_UART_OFF 1
+// No wake button is assumed for Thingy:91. Its routing is board dependent.
 
 #endif
