@@ -75,6 +75,16 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertNotIn("NRF91_SERIES", example)
 		self.assertNotIn("NRF9160", example)
 
+	def test_independent_raw_lf_timer_frequency_diagnostics(self):
+		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
+		begin = example.index("static void CoreClockTestTimer(int DevNo)")
+		end = example.index("// Exercise the public Timer trigger API", begin)
+		section = example[begin:end]
+		self.assertIn("TimerGetTickCount(&s_Timer)", section)
+		self.assertIn("TimerGetMicrosecond(&s_RetainedTimer)", section)
+		self.assertIn("Independent LF timer rate:", section)
+		self.assertIn('CoreClockTestResult("Delay within 2 percent",', section)
+		self.assertNotIn("NRF91_SERIES", section)
 
 if __name__ == "__main__":
 	unittest.main()

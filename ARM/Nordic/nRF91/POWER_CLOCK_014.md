@@ -54,8 +54,10 @@ That transcript predated the new nRF91 `sDelay()` integration.
 3. Run CoreClockTest on nRF9160 using the updated code and inspect
    LFXO cold/warm `sDelay`, ownership and LFRC timing separately.
 4. Diagnose LFRC frequency directly against HF timer, including
-   LFCLKSTAT active-source confirmation. Preserve the failing timing
-   result until its cause is established.
+   LFCLKSTAT source confirmation. The generic CoreClockTest now reports
+   raw LF RTC tick rate calculated against the independent HF timer,
+   distinguishing physical oscillator drift from a faulty conversion.
+   Preserve the failing timing result until its cause is established.
 5. Run CorePowerTest on nRF9160 and nRF91x1, including timer wake,
    GPIO/System OFF wake, retention, UART restoration, and reset reasons.
    A bare-metal System OFF test does not validate modem-active shutdown.

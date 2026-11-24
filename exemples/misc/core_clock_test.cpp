@@ -771,6 +771,9 @@ static void CoreClockTestTimer(int DevNo)
 	uint32_t difference;
 	uint32_t hfStart;
 	uint32_t hfElapsed;
+	uint32_t measuredTickRate;
+	uint64_t tickStart;
+	uint64_t tickEnd;
 	TimerCfg_t hfCfg;
 	bool hfReady;
 	bool enabled;
@@ -825,6 +828,7 @@ static void CoreClockTestTimer(int DevNo)
 			}
 			return;
 		}
+		tickStart = hfReady ? TimerGetTickCount(&s_Timer) : 0U;
 		start = TimerGetMicrosecond(&s_Timer);
 		hfStart = hfReady ? TimerGetMicrosecond(&s_RetainedTimer) : 0U;
 		if (delay == 0U)
@@ -836,6 +840,7 @@ static void CoreClockTestTimer(int DevNo)
 			nsDelay(250000000U);
 		}
 		elapsed = TimerGetMicrosecond(&s_Timer) - start;
+		tickEnd = hfReady ? TimerGetTickCount(&s_Timer) : 0U;
 		hfElapsed = hfReady ?
 			TimerGetMicrosecond(&s_RetainedTimer) - hfStart : 0U;
 		TimerDisable(&s_Timer);
@@ -852,6 +857,15 @@ static void CoreClockTestTimer(int DevNo)
 		{
 			CoreClockTestPrint("LF/HF reference: LF %u us, HF %u us\r\n",
 				(unsigned)elapsed, (unsigned)hfElapsed);
+			if (hfElapsed != 0U && tickEnd >= tickStart)
+			{
+				// Raw RTC ticks distinguish oscillator drift from the
+				// Timer tick-to-time conversion. Keep every MCU generic.
+				measuredTickRate = (uint32_t)(((tickEnd - tickStart) *
+					1000000ULL + hfElapsed / 2U) / hfElapsed);
+				CoreClockTestPrint("Independent LF timer rate: %u Hz (nominal %u Hz)\r\n",
+					(unsigned)measuredTickRate, (unsigned)frequency);
+			}
 		}
 	}
 	if (hfReady)
