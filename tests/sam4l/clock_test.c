@@ -328,6 +328,13 @@ int main(void)
 	uint32_t performance = SystemCoreClockGet();
 	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
 	assert(SystemCoreClockGet() == performance / 2U);
+	for (int bus = 0; bus < 4; bus++)
+	{
+		uint32_t held = SystemPeriphClockGet(bus);
+		assert(held != 0U);
+		assert(SystemPeriphClockSet(bus, held / 2U) == held);
+		assert(SystemPeriphClockGet(bus) == held);
+	}
 	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
 	assert(SystemCoreClockGet() == performance);
 	assert(SystemHighFreqClockEnable());
@@ -351,14 +358,15 @@ int main(void)
 			assert(SystemPeriphClockSet(bus, UINT32_MAX) == cpu);
 		}
 		SAM4L_PM->PM_PBAMASK = PM_PBAMASK_SPI;
-		assert(SystemPeriphClockSet(0, cpu / 2U) == 0U);
+		assert(SystemPeriphClockSet(0, cpu / 2U) == cpu);
 		assert(SystemPeriphClockGet(0) == cpu);
 		SAM4L_PM->PM_PBAMASK = 0U;
 		assert(SystemPeriphClockSet(-1, cpu) == 0U);
 		assert(SystemPeriphClockSet(4, cpu) == 0U);
-		assert(SystemPeriphClockSet(0, 0) == 0U);
+		assert(SystemPeriphClockSet(0, 0) == Sam4lMainClockGet() / 256U);
+		assert(SystemPeriphClockSet(0, cpu) == cpu);
 		g_TestIpsr = 1U;
-		assert(SystemPeriphClockSet(0, cpu / 2U) == 0U);
+		assert(SystemPeriphClockSet(0, cpu / 2U) == cpu);
 		g_TestIpsr = 0U;
 		assert(g_TestMask == mask);
 	}

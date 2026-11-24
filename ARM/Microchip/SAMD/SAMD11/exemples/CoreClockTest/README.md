@@ -27,6 +27,15 @@ The test measures 110 ms, counts periodic and one-shot callbacks, then
 disables and powers off the selected timer. Multi-timer checks require
 the full test image on a larger target.
 
+Hardware results for the single-timer Release build:
+
+| DevNo | Peripheral | Elapsed for 110 ms | Periodic callbacks | One-shot and PowerOff |
+| --- | --- | ---: | ---: | --- |
+| 0 | RTC | 110,779 us | 5 | PASS |
+| 3 | TCC0 | 110,272 us | 5 | PASS |
+
+Both runs completed with zero failures.
+
 ### Measure delay factors during porting
 
 In the **CoreClockTest** Release configuration, add

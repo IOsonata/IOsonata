@@ -1382,13 +1382,18 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	uint32_t rate;
 	uint32_t difference;
 
-	if (Idx < 0 || Idx > 3 || Freq == 0U || __get_IPSR() != 0U ||
-		s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER)
+	if (Idx < 0 || Idx > 3)
 	{
 		return 0U;
 	}
 	state = __get_PRIMASK();
 	__disable_irq();
+	if (__get_IPSR() != 0U || s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER)
+	{
+		actual = SystemPeriphClockGet(Idx);
+		__set_PRIMASK(state);
+		return actual;
+	}
 	mainClock = Sam4lMainClockGet();
 	cpu = Sam4lApplyClkDiv(mainClock, SAM4L_PM->PM_CPUSEL);
 	reg = Idx == 0 ? &SAM4L_PM->PM_PBASEL :
@@ -1415,14 +1420,12 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 			best = shift == 0U ? 0U : PM_PBASEL_PBDIV | PM_PBASEL_PBSEL(shift - 1U);
 		}
 	}
-	if (actual != 0U && best != previous)
+	if (actual != 0U && best != previous && !Sam4lCoreClockBusy())
 	{
 		// Clock consumers must be stopped before their bus rate changes.
-		if (Sam4lCoreClockBusy() || !Sam4lWriteDivider(reg, best))
-		{
-			actual = 0U;
-		}
+		(void)Sam4lWriteDivider(reg, best);
 	}
+	actual = SystemPeriphClockGet(Idx);
 	__set_PRIMASK(state);
 	return actual;
 }
