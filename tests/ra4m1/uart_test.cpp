@@ -1203,19 +1203,21 @@ static const uint8_t *s_pRefill;
 
 static int EvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
+	UARTDev_t *uart = (UARTDev_t *)DeviceIntrfGetHandle(pDev);
+
 	switch (EvtId)
 	{
 		case DEVINTRF_EVT_RX_DATA:
 			s_EvtRx++;
-			CHECK(BufferLen == CFifoUsed(pDev->hRxFifo));
+			CHECK(BufferLen == CFifoUsed(uart->hRxFifo));
 			break;
 		case DEVINTRF_EVT_TX_READY:
 			s_EvtTx++;
-			CHECK(BufferLen == CFifoAvail(pDev->hTxFifo));
+			CHECK(BufferLen == CFifoAvail(uart->hTxFifo));
 			if (s_RefillLeft > 0)
 			{
 				// More data from the interrupt, as a stream source would
-				int n = UARTTx(pDev, (uint8_t *)s_pRefill, s_RefillLeft);
+				int n = UARTTx(uart, (uint8_t *)s_pRefill, s_RefillLeft);
 				s_pRefill += n;
 				s_RefillLeft -= n;
 			}
@@ -1831,7 +1833,7 @@ static int LockEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *
 		uint8_t b[16];
 		int n;
 
-		while ((n = pDev->DevIntrf.RxData(&pDev->DevIntrf, b, sizeof(b))) > 0)
+		while ((n = DeviceIntrfRxData(pDev, b, sizeof(b))) > 0)
 		{
 			s_LockRx.insert(s_LockRx.end(), b, b + n);
 			if (s_bLockEcho)
@@ -1846,7 +1848,7 @@ static int LockEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *
 			{
 				b[i] = s_LockEcho[i];
 			}
-			n = pDev->DevIntrf.TxData(&pDev->DevIntrf, b, l);
+			n = DeviceIntrfTxData(pDev, b, l);
 			if (n <= 0)
 			{
 				break;
