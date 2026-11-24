@@ -74,7 +74,6 @@ extern LpcTimer_t g_LpcTimer[];
 extern const int g_LpcTimerCount;
 uint32_t LpcTimerBaseFreq(const LpcTimer_t *pDev);
 void LpcTimerClockEnable(const LpcTimer_t *pDev);
-void LpcTimerClockDisable(const LpcTimer_t *pDev);
 void LpcTimerIrqHandler(LpcTimer_t *pDev);
 
 #endif

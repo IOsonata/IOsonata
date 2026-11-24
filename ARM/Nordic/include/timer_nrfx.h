@@ -60,9 +60,9 @@ SOFTWARE.
 
 /// Low frequency timer using Real Time Counter (RTC) 32768 Hz clock source.
 ///
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 #define TIMER_NRFX_RTC_BASE_FREQ   			1000000	// GRTC is fixed at 1MHz
-#define TIMER_NRFX_RTC_MAX                 	GRTC_GRTC_NINTERRUPTS_SIZE	//!< Number RTC available
+#define TIMER_NRFX_RTC_MAX                 	4	//!< GRTC groups 0..3, CC 0..11
 #define TIMER_NRFX_RTC_MAX_TRIGGER_EVT     	5	//!< Max number of supported counter trigger event
 #else
 #define TIMER_NRFX_RTC_BASE_FREQ   			32768
@@ -114,7 +114,7 @@ extern TimerDev_t *s_pnRFxTimerDev[TIMER_NRFX_HF_MAX];
 // counter.
 void nRFxCounterIrq(int Idx);
 
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 #else
 bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
@@ -137,7 +137,7 @@ bool nRFxTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
  */
 static inline bool nRFxLFTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 	return nRFxGrtcInit(pTimer, pCfg);
 #else
 	return nRFxRtcInit(pTimer, pCfg);

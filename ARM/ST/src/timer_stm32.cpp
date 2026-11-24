@@ -75,37 +75,6 @@ static int Stm32TimerFind(TimerDev_t * const pTimer)
  *
  * @return	true - Success
  */
-// Release the selected TIM/LPTIM using the existing driver-specific
-// shutdown paths; unlike Disable this clears the owner's reservation.
-static bool Stm32TimerPowerOff(TimerDev_t * const pTimer)
-{
-	int devno;
-
-	if (pTimer == nullptr)
-	{
-		return false;
-	}
-	devno = Stm32TimerFind(pTimer);
-	if (devno < 0)
-	{
-		return false;
-	}
-#if ST_LPTIM_CNT > 0
-	if (devno < ST_LPTIM_CNT)
-	{
-		Stm32LptimRelease(devno);
-	}
-	else
-#endif
-	{
-		Stm32TimRelease(devno);
-	}
-	pTimer->PowerOff = nullptr;
-	pTimer->DevNo = -1;
-	pTimer->Freq = 0U;
-	return true;
-}
-
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer == nullptr || pCfg == nullptr)
@@ -131,38 +100,6 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 #if ST_LPTIM_CNT > 0
 		if (devno < ST_LPTIM_CNT)
 		{
-			if (Stm32LptimRunning(devno))
-			{
-				return false;
-			}
-		}
-		else
-#endif
-		{
-			if (Stm32TimRunning(devno))
-			{
-				return false;
-			}
-		}
-	}
-
-	bool ok;
-
-#if ST_LPTIM_CNT > 0
-	if (pCfg->DevNo < ST_LPTIM_CNT)
-	{
-		ok = Stm32LptimInit(pTimer, pCfg);
-	}
-	else
-#endif
-	{
-		ok = Stm32TimInit(pTimer, pCfg);
-	}
-	if (ok && devno >= 0 && devno != pCfg->DevNo)
-	{
-#if ST_LPTIM_CNT > 0
-		if (devno < ST_LPTIM_CNT)
-		{
 			Stm32LptimRelease(devno);
 		}
 		else
@@ -172,11 +109,14 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		}
 	}
 
-	if (ok)
+#if ST_LPTIM_CNT > 0
+	if (pCfg->DevNo < ST_LPTIM_CNT)
 	{
-		pTimer->PowerOff = Stm32TimerPowerOff;
+		return Stm32LptimInit(pTimer, pCfg);
 	}
-	return ok;
+#endif
+
+	return Stm32TimInit(pTimer, pCfg);
 }
 
 // Timer vectors, from Stm32TimerVector of the vector file

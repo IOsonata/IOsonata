@@ -487,7 +487,6 @@ static void timers()
 	assert(t.EnableTrigger(&t, 0, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
 	assert(TMR01->TCORA == cmp && t.FindAvailTrigger(&t) == 0);
 	restore();
-	t.Disable(&t);
 	assert(TimerInit(&t, &cfg)); // reinitialization releases compare routes
 	assert(countRoutes() == 1);
 	t.Disable(&t);
@@ -502,7 +501,6 @@ static void timers()
 	// Above the range: the closest, the highest
 	assert(a.SetFrequency(&a, UINT32_MAX) == 32768 && AGT0->AGTMR2_b.CKS == 0);
 	cfg.Freq = 100000000;
-	a.Disable(&a);
 	assert(TimerInit(&a, &cfg) && a.Freq == 32768);
 	cfg.Freq = 1000000;
 	assert(a.SetFrequency(&a, 1) == 256 && AGT0->AGTMR2_b.CKS == 7);
@@ -510,7 +508,6 @@ static void timers()
 	a.Reset(&a);
 	assert(AGT0->AGT == 0xFFFF && a.Rollover == 0 && a.GetTickCount(&a) == 0);
 	cfg.ClkSrc = TIMER_CLKSRC_HFRC; cfg.Freq = 24000000;
-	a.Disable(&a);
 	assert(TimerInit(&a, &cfg));
 	assert(AGT0->AGTMR1_b.TCK == 0 && a.Freq == 24000000);
 	assert(a.EnableTrigger(&a, 0, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 10000);
@@ -557,8 +554,7 @@ static void timers()
 	assert(a.EnableTrigger(&a, 1, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
 	AGT0->AGTCR |= AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk;
 	timerIrq(g_Re01TimerData[0].IrqMatch[0]);
-	assert(a.Freq != 0 && (timerEvents[0] & TIMER_EVT_TRIGGER(1)));
-	a.Disable(&a);
+	assert(a.Freq == 0 && !a.Enable(&a) && (timerEvents[0] & TIMER_EVT_TRIGGER(1)));
 	AGT0->AGTCR &= ~AGT0_AGTCR_TCSTF_Msk;
 	assert(TimerInit(&a, &cfg)); // the second callback survived first-callback failure
 	assert(a.EnableTrigger(&a, 0, 10000, TIMER_TRIG_TYPE_SINGLE, triggerRearm, &rearmed));
@@ -738,7 +734,6 @@ static void gptTimers()
 		assert(timer.FindAvailTrigger(&timer) == 0 && reg->GTCCRA == deadline);
 		restore();
 		assert(timer.EnableTrigger(&timer, 3, 10000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
-		timer.Disable(&timer);
 		assert(TimerInit(&timer, &cfg) && timer.FindAvailTrigger(&timer) == 0);
 		for (int i = 0; i < 4; i++) assert(dev.IrqMatch[i] == (IRQn_Type)-1 && *cmp[i] == 0);
 		timer.Disable(&timer);

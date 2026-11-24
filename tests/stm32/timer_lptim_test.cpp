@@ -268,7 +268,6 @@ static void TestInit(int k)
 		CHECK(Presc(l) == h.Presc);
 	}
 	cfg.ClkSrc = TIMER_CLKSRC_HFXTAL;
-	t.Disable(&t);
 	CHECK(TimerInit(&t, &cfg) && Sel(l) == 2);
 
 	// HSI not ready
@@ -524,8 +523,6 @@ static void TestBinding(int k)
 	CHECK(TimerInit(&t1, &cfg));
 	CHECK(Stm32LptimFind(&t1) == k);
 
-	CHECK(!TimerInit(&t2, &cfg));
-	t1.Disable(&t1);
 	// Taken by another TimerDev_t: the first one does nothing
 	CHECK(TimerInit(&t2, &cfg));
 	CHECK(Stm32LptimFind(&t1) == -1 && Stm32LptimFind(&t2) == k);
@@ -542,7 +539,6 @@ static void TestBinding(int k)
 	LptIrq(l, LPTIM_ISR_ARRM, 80);
 	CHECK(s_LastTimer == &t2);
 
-	t2.Disable(&t2);
 	// Moved to a TIM: the LPTIM is stopped and released
 	cfg.DevNo = TEST_NB_LPT;
 	CHECK(TimerInit(&t2, &cfg) == false);
@@ -604,8 +600,6 @@ static void TestTwo(void)
 	LptIrq(s_Lpt[0], LPTIM_ISR_CMPM, 330);
 	CHECK(s_LastTimer == &t[0] && s_TrigCnt == 2 && s_Lpt[0].pReg->CMP == 650);
 
-	t[0].Disable(&t[0]);
-	t[1].Disable(&t[1]);
 	// Moved from LPTIM1 to LPTIM2: LPTIM1 released
 	cfg.DevNo = 1;
 	CHECK(TimerInit(&t[0], &cfg));

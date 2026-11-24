@@ -142,7 +142,6 @@ int main(void)
 			before = *pclk;
 			LPC_SC->PCONP = power;
 			memset((void *)reg, 0xA5, sizeof(*reg));
-			reg->TCR = 0;
 			// Sentinel at the PWMC offset on other LPC families: reserved here.
 			*(volatile uint32_t *)((uintptr_t)reg + 0x74U) = 0x5A5A5A5A;
 			assert(timers[d].Init(cfg));
@@ -155,7 +154,6 @@ int main(void)
 			assert(*(volatile uint32_t *)((uintptr_t)reg + 0x74U) == 0x5A5A5A5A);
 			assert(s_Priority[d + 1] == 31);
 			assert(!TimerInit(&other, &cfg));
-			timers[d].Disable();
 		}
 		cfg.IntPrio = INT_MIN;
 		*pclk = (*pclk & ~mask) | (1U << shift);

@@ -746,7 +746,7 @@ static void GrtcIRQHandler(nRFGrtcData_t &rtc)
 
 extern "C" {
 
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 __WEAK void GRTC_0_IRQHandler(void)
 {
 	GrtcIRQHandler(s_nRfxGrtcData[0]);

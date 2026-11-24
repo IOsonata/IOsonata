@@ -391,79 +391,6 @@ static void Disable(TimerDev_t *t)
 	TimerAccess access(*d); if (!access.Ok) return;
 	Rebase(*d,d->Cycle,false); // Pause count; restart active trigger periods on Enable.
 }
-// Stop AGT/GPT, remove its interrupt registrations and return its
-// device number for a later TimerInit. Disable retains these resources.
-static bool PowerOff(TimerDev_t *t)
-{
-	Ra4m1TimerData *d;
-	Ra4m1TimerTrigger *tr;
-	uint32_t mask;
-	uint32_t state;
-	bool gate;
-	unsigned i;
-
-	d = Data(t);
-	if (d == nullptr)
-	{
-		return false;
-	}
-	mask = ModuleBit(*d);
-	{
-		TimerAccess access(*d);
-		if (!access.Ok || !Stop(*d))
-		{
-			return false;
-		}
-		IrqsEnable(*d, false);
-		for (i = 0U; i < d->MaxTrigger; i++)
-		{
-			tr = &d->Trigger[i];
-			tr->Active = false;
-			tr->Generation++;
-			if (tr->Irq >= 0)
-			{
-				NVIC_DisableIRQ(tr->Irq);
-				Ra4m1AcknowledgeInt(tr->Irq);
-				NVIC_ClearPendingIRQ(tr->Irq);
-				Ra4m1UnregisterIntHandler(tr->Irq);
-				tr->Irq = (IRQn_Type)-1;
-			}
-		}
-		if (d->Irq >= 0)
-		{
-			NVIC_DisableIRQ(d->Irq);
-			Ra4m1AcknowledgeInt(d->Irq);
-			NVIC_ClearPendingIRQ(d->Irq);
-			Ra4m1UnregisterIntHandler(d->Irq);
-			d->Irq = (IRQn_Type)-1;
-		}
-	}
-	// Four GPT channels share each GPT module clock. Leave it running
-	// while another initialized GPT in that group needs the clock.
-	state = DisableInterrupt();
-	gate = !d->Agt;
-	for (i = 0U; i < RA4M1_TIMER_COUNT; i++)
-	{
-		if (&s_Timer[i] != d && s_Timer[i].Timer != nullptr &&
-			ModuleBit(s_Timer[i]) == mask)
-		{
-			gate = false;
-		}
-	}
-	if (gate && !ModuleWrite(R_MSTP->MSTPCRD | mask))
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	d->Timer = nullptr;
-	d->Running = false;
-	t->PowerOff = nullptr;
-	t->DevNo = -1;
-	t->Freq = 0U;
-	EnableInterrupt(state);
-	return true;
-}
-
 static bool Enable(TimerDev_t *t)
 {
 	Ra4m1TimerData *d=Data(t); if (!d) return false;
@@ -581,9 +508,9 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	TimerPlan plan={}; bool agt=cfg->DevNo<2;
 	if (!Plan(agt,cfg->ClkSrc,cfg->Freq,plan)) return false;
 	uint32_t state=DisableInterrupt();
-	for (unsigned i=0;i<RA4M1_TIMER_COUNT;++i) if (i != (unsigned)cfg->DevNo && s_Timer[i].Timer == t) {EnableInterrupt(state);return false;}
+	for (unsigned i=0;i<RA4M1_TIMER_COUNT;++i) if (s_Timer[i].Timer==t) {EnableInterrupt(state);return false;}
 	Ra4m1TimerData &d=s_Timer[cfg->DevNo];
-	if (d.Running || d.Fault || (d.Timer != nullptr && !PowerOff(d.Timer))) {EnableInterrupt(state);return false;}
+	if (d.Timer || d.Fault) {EnableInterrupt(state);return false;}
 	// A stopped channel may still belong to a CPU/DTC/DMAC client.
 	uint8_t first=agt ? (uint8_t)(RA4M1_EVTID_AGT0_AGTI+3U*cfg->DevNo) :
 		(uint8_t)(RA4M1_EVTID_GPT0_CCMPA+8U*(cfg->DevNo-2));
@@ -678,8 +605,8 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 						d.Timer=t; t->DevNo=d.No; t->Freq=plan.Frequency;
 						t->nsPeriod=(1000000000ULL+t->Freq/2U)/t->Freq;
 						t->Rollover=0; t->LastCount=0; t->EvtHandler=cfg->EvtHandler;
-						t->PowerOff = PowerOff;
-						t->Disable = Disable; t->Enable=Enable; t->Reset=Reset; t->GetTickCount=GetCount;
+						t->PowerOff = NULL;
+						t->Disable=Disable; t->Enable=Enable; t->Reset=Reset; t->GetTickCount=GetCount;
 						t->SetFrequency=Frequency; t->GetMaxTrigger=MaxTrigger; t->FindAvailTrigger=FindTrigger;
 						t->DisableTrigger=TriggerDisable; t->EnableTrigger=TriggerEnable;
 						t->DisableExtTrigger=ExtDisable; t->EnableExtTrigger=ExtEnable;

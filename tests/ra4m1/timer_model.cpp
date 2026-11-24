@@ -31,7 +31,7 @@ SCB_Type test_scb;
 uint32_t test_primask,test_disabled,test_cleared,test_enabled,test_active,test_pending,test_priority[32];
 uint32_t SystemCoreClock=48000000;
 static uint32_t clocks[4]={48000000,24000000,48000000,48000000};
-McuOsc_t g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false,0};
+McuOsc_t g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false};
 uint32_t SystemCoreClockGet(void){return SystemCoreClock;}
 uint32_t SystemPeriphClockGet(int n){assert(n>=0&&n<4);return clocks[n];}
 #define V(n) Ra4m1DefaultIEL##n
@@ -165,7 +165,7 @@ static void reset_model()
 	mstp=0xFFFFFFFF;prcr=8;src=0;loco=0;sosc=1;fail_address=0;fail_once=start_fail=stop_fail=false;
 	step_on_count=step_on_flags=-1;injected_ticks=step_on_compare_write=0;writes=overflow_calls=last_event=0;last_context=nullptr;
 	SystemCoreClock=48000000;clocks[0]=clocks[2]=clocks[3]=48000000;clocks[1]=24000000;
-	g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false,0};
+	g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false};
 	for(unsigned i=0;i<10;++i)g_Ra4m1TimerError[i]=0;
 }
 static void evt(TimerDev_t *,uint32_t e){assert(!test_primask);last_event=e;if(e==TIMER_EVT_COUNTER_OVR)++overflow_calls;else for(unsigned i=0;i<6;++i)if(e==TIMER_EVT_TRIGGER(i))++event_calls[i];}
@@ -204,18 +204,6 @@ int main()
 	reset_model();CHECK(init(t,2));TimerDev_t other={};CHECK(!init(other,2)&&!init(t,3));
 	CHECK(init(other,3));t.Disable(&t);CHECK(other.Enable(&other)&&!(mstp&clkbit(3)));step(3,31);CHECK(other.GetTickCount(&other)==31);
 	// Raw routes and running hardware must not be taken over.
-	for (int dev = 0; dev < 10; dev++)
-	{
-		reset_model();
-		CHECK(init(t, dev));
-		CHECK(!init(t, dev));
-		t.Disable(&t);
-		CHECK(init(other, dev));
-		CHECK(!t.Enable(&t));
-		CHECK(other.PowerOff(&other));
-		CHECK(!other.Enable(&other));
-		CHECK(init(other, dev));
-	}
 	reset_model();iel[0]=0x57;CHECK(!init(t,2)&&writes==0);
 	reset_model();del[1]=0x1F;CHECK(!init(t,0)&&writes==0);
 	reset_model();gp[0][RA4M1_GTCR/4]=1;mstp&=~clkbit(2);CHECK(!init(t,2)&&gp[0][RA4M1_GTCR/4]==1);

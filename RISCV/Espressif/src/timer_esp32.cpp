@@ -165,22 +165,6 @@ static void Esp32EnableTimerClock(int DevNo)
 #endif
 }
 
-// Stop this Timer Group clock without changing the other group's clock.
-static void Esp32DisableTimerClock(int DevNo)
-{
-#if defined(ESP32C2) || defined(ESP32C3)
-	uint32_t mask;
-
-	mask = 1UL << (DevNo == 0 ? 13 : 15);
-	ESP32_REG32(ESP32_SYSTEM_BASE + 0x10UL) &= ~mask;
-#else
-	uint32_t base;
-
-	base = ESP32_PCR_BASE + ESP32_TIMER_PCR_OFFSET + (uint32_t)DevNo * 12UL;
-	ESP32_REG32(base) &= ~1UL;
-#endif
-}
-
 static Esp32TimerData_t *Esp32Data(TimerDev_t *pTimer)
 {
 	Esp32TimerData_t *pData;
@@ -343,37 +327,6 @@ static void Esp32Disable(TimerDev_t *pTimer)
 	state = DisableInterrupt();
 	Esp32Run(pData, false);
 	EnableInterrupt(state);
-}
-
-// Stop the counter, disconnect its CPU interrupt and release the
-// Timer Group for another TimerDev_t.
-static bool Esp32PowerOff(TimerDev_t *pTimer)
-{
-	Esp32TimerData_t *pData;
-	uint32_t state;
-	int devno;
-
-	pData = Esp32Data(pTimer);
-	if (pData == NULL)
-	{
-		return false;
-	}
-	state = DisableInterrupt();
-	devno = pTimer->DevNo;
-	Esp32Run(pData, false);
-	Esp32Reg(pData->Base, ESP32_T0_INT_CLR) = ESP32_T0_INT_BIT;
-	Esp32DisableSourceIrq(pData->IrqSource, pData->CpuInt);
-	pData->TriggerActive = false;
-	pData->TriggerTicks = 0ULL;
-	pData->Deadline = 0ULL;
-	pData->TriggerInfo = {};
-	pData->pTimer = NULL;
-	Esp32DisableTimerClock(devno);
-	pTimer->PowerOff = NULL;
-	pTimer->DevNo = -1;
-	pTimer->Freq = 0U;
-	EnableInterrupt(state);
-	return true;
 }
 
 static bool Esp32Enable(TimerDev_t *pTimer)
@@ -654,13 +607,13 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pData = &s_Timer[pCfg->DevNo];
 	for (i = 0; i < ESP32_TIMG_COUNT; i++)
 	{
-		if (i != pCfg->DevNo && s_Timer[i].pTimer == pTimer)
+		if (s_Timer[i].pTimer == pTimer)
 		{
 			EnableInterrupt(state);
 			return false;
 		}
 	}
-	if (pData->Running || (pData->pTimer != NULL && !Esp32PowerOff(pData->pTimer)))
+	if (pData->pTimer != NULL)
 	{
 		EnableInterrupt(state);
 		return false;
@@ -686,8 +639,8 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;
-	pTimer->PowerOff = Esp32PowerOff;
 	pTimer->Disable = Esp32Disable;
+	pTimer->PowerOff = NULL;
 	pTimer->Enable = Esp32Enable;
 	pTimer->Reset = Esp32Reset;
 	pTimer->GetTickCount = Esp32Count;

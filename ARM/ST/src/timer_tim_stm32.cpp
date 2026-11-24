@@ -1159,13 +1159,6 @@ static bool StTimIrqUsed(IRQn_Type IrqNo, int Idx)
 	return false;
 }
 
-bool Stm32TimRunning(int DevNo)
-{
-	const auto &info = s_StTimInfo[DevNo - ST_LPTIM_CNT];
-
-	return (*info.pEnReg & info.Mask) && (info.pReg->CR1 & TIM_CR1_CEN);
-}
-
 /**
  * @brief   TIM initialization, called by TimerInit.
  *
@@ -1203,7 +1196,7 @@ bool Stm32TimInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	// Vector replaced by an application handler, or counting without this
 	// driver: used by other code
 	if (Stm32TimerVectorOwned(info->IrqNo) == false || Stm32TimerVectorOwned(info->CcIrqNo) == false ||
-		Stm32TimRunning(pCfg->DevNo))
+		(dev->pTimer == nullptr && (*info->pEnReg & info->Mask) && (reg->CR1 & TIM_CR1_CEN)))
 	{
 		EnableInterrupt(state);
 
@@ -1231,6 +1224,7 @@ bool Stm32TimInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->nsPeriod = (1000000000ULL + (freq >> 1)) / freq;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Disable = StTimDisable;
+	pTimer->PowerOff = NULL;
 	pTimer->Enable = StTimEnable;
 	pTimer->Reset = StTimReset;
 	pTimer->GetTickCount = StTimGetTickCount;

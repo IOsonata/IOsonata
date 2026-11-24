@@ -300,7 +300,7 @@ timing and trigger tests. PowerOff on a disabled timer, Init after
 PowerOff, PowerOff on a running timer, and rejection of a repeated
 PowerOff passed in both runs. The log does not identify the build revision.
 
-See docs/architecture/timer-power-off.md for the other MCU timer
+See docs/architecture/timer-power-off.md for the Nordic timer
 drivers and the remaining hardware tests.
 
 ## nRF91x1 on Thingy:91 X

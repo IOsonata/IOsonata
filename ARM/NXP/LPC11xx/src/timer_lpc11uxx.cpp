@@ -60,12 +60,6 @@ void LpcTimerClockEnable(const LpcTimer_t *pDev)
 	(void)LPC_SYSCON->SYSAHBCLKCTRL;
 }
 
-void LpcTimerClockDisable(const LpcTimer_t *pDev)
-{
-	LPC_SYSCON->SYSAHBCLKCTRL &= ~pDev->ClkMask;
-	(void)LPC_SYSCON->SYSAHBCLKCTRL;
-}
-
 extern "C" void TIMER16_0_IRQHandler(void)
 {
 	LpcTimerIrqHandler(&g_LpcTimer[0]);

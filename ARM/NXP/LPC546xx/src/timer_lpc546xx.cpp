@@ -74,18 +74,6 @@ void LpcTimerClockEnable(const LpcTimer_t *pDev)
 
 }
 
-void LpcTimerClockDisable(const LpcTimer_t *pDev)
-{
-	if (pDev->bAsync)
-	{
-		ASYNC_SYSCON->ASYNCAPBCLKCTRLCLR = pDev->ClkMask;
-	}
-	else
-	{
-		SYSCON->AHBCLKCTRLCLR[1] = pDev->ClkMask;
-	}
-}
-
 extern "C" void CTIMER0_IRQHandler(void)
 {
 	LpcTimerIrqHandler(&g_LpcTimer[2]);

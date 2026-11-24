@@ -59,7 +59,7 @@ SOFTWARE.
 #define NRF_TIMER0			NRF_TIMER0_NS
 #define NRF_TIMER1			NRF_TIMER1_NS
 #define NRF_TIMER2			NRF_TIMER2_NS
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 #define NRF_TIMER0			NRF_TIMER00_S
 #define NRF_TIMER1			NRF_TIMER10_S
 #define NRF_TIMER2			NRF_TIMER20_S
@@ -480,7 +480,7 @@ static void TimerIRQHandler(int DevNo)
 
 extern "C" {
 
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 __WEAK void TIMER00_IRQHandler()
 {
 	TimerIRQHandler(0);
@@ -574,7 +574,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 	switch (devno)
 	{
 		case 0:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER00_IRQn);
 			NVIC_EnableIRQ(TIMER00_IRQn);
 #else
@@ -583,7 +583,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #endif
 			break;
 		case 1:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER10_IRQn);
 			NVIC_EnableIRQ(TIMER10_IRQn);
 #else
@@ -592,7 +592,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #endif
 			break;
 		case 2:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER20_IRQn);
 			NVIC_EnableIRQ(TIMER20_IRQn);
 #else
@@ -602,7 +602,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 			break;
 #if TIMER_NRFX_HF_MAX > 3
 		case 3:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER21_IRQn);
 			NVIC_EnableIRQ(TIMER21_IRQn);
 #else
@@ -611,7 +611,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #endif
 			break;
 		case 4:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER22_IRQn);
 			NVIC_EnableIRQ(TIMER22_IRQn);
 #else
@@ -661,7 +661,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
     switch (devno)
     {
         case 0:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER00_IRQn);
             NVIC_DisableIRQ(TIMER00_IRQn);
 #else
@@ -670,7 +670,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 1:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER10_IRQn);
             NVIC_DisableIRQ(TIMER10_IRQn);
 #else
@@ -679,7 +679,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 2:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER20_IRQn);
             NVIC_DisableIRQ(TIMER20_IRQn);
 #else
@@ -689,7 +689,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
             break;
 #if TIMER_NRFX_HF_MAX > 3
         case 3:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER21_IRQn);
             NVIC_DisableIRQ(TIMER21_IRQn);
 #else
@@ -698,7 +698,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 4:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER22_IRQn);
             NVIC_DisableIRQ(TIMER22_IRQn);
 #else
@@ -939,7 +939,7 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	// Clock before the prescaler. TIMER00 of the nRF54L runs from the CPU
 	// clock.
 	uint32_t base = tdata.MaxFreq;
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 	if (devno == 0)
 	{
 		base = SystemCoreClock;
@@ -1409,7 +1409,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	switch (devno)
 	{
 	case 0:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER00_IRQn);
 		NVIC_SetPriority(TIMER00_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER00_IRQn);
@@ -1420,7 +1420,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 #endif
 		break;
 	case 1:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER10_IRQn);
 		NVIC_SetPriority(TIMER10_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER10_IRQn);
@@ -1431,7 +1431,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 #endif
 		break;
 	case 2:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER20_IRQn);
 		NVIC_SetPriority(TIMER20_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER20_IRQn);
@@ -1443,7 +1443,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		break;
 #if TIMER_NRFX_HF_MAX > 3
 	case 3:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER21_IRQn);
 		NVIC_SetPriority(TIMER21_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER21_IRQn);
@@ -1454,7 +1454,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 #endif
 		break;
 	case 4:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER22_IRQn);
 		NVIC_SetPriority(TIMER22_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER22_IRQn);

@@ -67,16 +67,6 @@ void LpcTimerClockEnable(const LpcTimer_t *pDev)
 	EnableInterrupt(state);
 }
 
-void LpcTimerClockDisable(const LpcTimer_t *pDev)
-{
-	uint32_t state;
-
-	state = DisableInterrupt();
-	LPC_SC->PCONP &= ~pDev->ClkMask;
-	(void)LPC_SC->PCONP;
-	EnableInterrupt(state);
-}
-
 extern "C" void TIMER0_IRQHandler(void)
 {
 	LpcTimerIrqHandler(&g_LpcTimer[0]);
