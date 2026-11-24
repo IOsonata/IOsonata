@@ -222,3 +222,62 @@ The generic CoreClockTest keeps the 2% assertion; no hard-coded
 44720-Hz frequency, synthesized clock, or test waiver is introduced.
 The physical LFRC frequency is not trimmed.
 
+
+## nRF9160 timer lifecycle audit (0.14)
+
+The nRF9160 implements five generic hardware timers: RTC0/RTC1 at
+DevNo 0/1 and TIMER0/TIMER1/TIMER2 at DevNo 2/3/4. Two full
+CoreClockTest runs with zero failures validated both RTCs, all three
+16-MHz TIMERs, interrupt counts, single/continuous callbacks, trigger
+reuse, clock ownership and accurate LFRC/LFXO time conversions.
+
+The subsequent timer audit found additional **source-level defects**
+not exercised in that hardware run. This batch fixes the following
+on the nRF91 path:
+
+- Exclusive HF TIMER ownership: a second TimerDev_t may not replace
+  the handle already initialized on that physical TIMER, even after
+  Disable. A same-handle reinit preserves PEI bindings and releases
+  its existing clock reference only after safe validation. Counter
+  mode is not silently overwritten.
+- Frequency changes: for nRF91 HF TIMER and RTC, prevalidate all
+  armed normal compares against the proposed frequency before
+  touching hardware. Successful changes reset the counter origin
+  and rephase one-shot/continuous compare periods to the new tick
+  frequency. Existing PEI bindings reject frequency changes.
+- RTC reset while LFCLK stopped: after changing frequency on a
+  disabled RTC, defer counter reset and trigger rearm until the
+  next Enable has started the selected LFCLK.
+- Compare bounds: a period that exceeds the 32-bit TIMER or 24-bit
+  RTC hardware compare range fails instead of silently truncating
+  or clamping to a shorter interval.
+- Clock source requests: nRF91 RTC explicit LFRC/LFXTAL requests
+  follow the selected LFCLK source (not an immutable board default).
+  HF TIMER has a fixed peripheral clock and rejects explicit
+  per-timer oscillator source selection.
+
+These are code changes awaiting a managed rebuild and hardware
+regression. The two previously recorded zero-failure CoreClockTest
+runs predate this batch and must not be used to sign off its new
+edge cases.
+
+**Open capabilities / limitations:**
+
+- Extended 32-bit HF timer software rollover is folded on observed
+  counter reads or IRQs; without either for a full counter period,
+  a wrap may be missed. At 16 MHz that period is 268.44 seconds.
+  The 24-bit RTC also requires servicing its overflow interrupt.
+- The generic Timer-to-PEI convenience API currently returns
+  unsupported for nRF91; DPPI routing and event-to-task tests have
+  not been validated. No assumption is made that an nRF52 PPI
+  backend is interchangeable with nRF91 DPPI.
+- The existing shared `counter_nrfx.cpp` implementation is not
+  linked into the nRF9160 managed IOsonata library; Counter-mode
+  behavior has not been validated on this target.
+- Modem-active peripheral ownership and Debug/Release build
+  configurations remain separately unverified.
+
+Do not change generic CoreClockTest source to add nRF91-only
+conditionals. Use the new nRF91 source/model regressions and a
+hardware follow-up for active compares, duplicate handles and
+long interval rejection.

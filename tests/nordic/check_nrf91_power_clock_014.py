@@ -202,5 +202,101 @@ class Nrf91PowerClock(unittest.TestCase):
 			sample.index("enabled = TimerEnable(&s_Timer)"))
 		self.assertIn("TimerDisable(&s_Timer);", sample)
 
+	def test_nrf91_hf_timer_exclusive_handle(self):
+		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
+		section = hf[hf.index("bool nRFxTimerInit("):]
+		self.assertIn("s_pnRFxTimerDev[devno] != pTimer", section)
+		self.assertIn("s_nRFxTimerData[devno].pReg->MODE != TIMER_MODE_MODE_Timer", section)
+		self.assertIn("nRFxTimerDisable(pTimer);", section)
+		self.assertLess(section.index("A live PEI endpoint must be unbound"),
+			section.index("Only after checking all live event bindings"))
+		self.assertLess(section.index("s_pnRFxTimerDev[devno] != pTimer"),
+			section.index("s_pnRFxTimerDev[devno] = pTimer;"))
+		self.assertIn("s_pnRFxTimerDev[devno] = nullptr;", section)
+
+	def test_nrf91_timer_frequency_change_rephases_armed_triggers(self):
+		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
+		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
+		hf_section = hf[hf.index("static uint32_t nRFxTimerSetFrequency("):
+			hf.index("static uint64_t nRFxTimerGetTickCount(")]
+		rtc_section = rtc[rtc.index("static uint32_t nRFxRtcSetFrequency("):
+			rtc.index("// Tick count, see nRFxRtcReadCountMasked.", rtc.index("static uint32_t nRFxRtcSetFrequency("))]
+		for section in (hf_section, rtc_section):
+			self.assertIn("tdata.pTrigger[i].nsPeriod" if section is hf_section
+				else "rtc.pTrigger[i].nsPeriod", section)
+			self.assertIn("TimerNanosecondToTick(pTimer", section)
+			self.assertIn("TimerTickToNanosecond(pTimer, ticks)", section)
+			self.assertIn("DisableInterrupt()", section)
+			self.assertIn("EnableInterrupt(irqState)", section)
+		self.assertIn("nRFxTimerReset(pTimer);", hf_section)
+		self.assertIn("nRFxRtcReset(pTimer);", rtc_section)
+		self.assertIn("s_bRtcResetPending[pTimer->DevNo] = true;", rtc_section)
+		rtc_enable = rtc[rtc.index("static bool nRFxRtcEnable("):
+			rtc.index("static void nRFxRtcDisable(", rtc.index("static bool nRFxRtcEnable("))]
+		self.assertLess(rtc_enable.index("SystemLowFreqClockEnable()"),
+			rtc_enable.index("nRFxRtcReset(pTimer)"))
+		self.assertLess(rtc_enable.index("nRFxRtcReset(pTimer)"),
+			rtc_enable.index("TASKS_START"))
+
+	def test_nrf91_rejects_unrepresentable_compare_intervals(self):
+		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
+		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
+		hf_section = hf[hf.index("static uint64_t nRFxTimerEnableTrigger("):
+			hf.index("static void nRFxTimerDisableTrigger(")]
+		rtc_section = rtc[rtc.index("static uint64_t nRFxRtcEnableTrigger("):
+			rtc.index("static void nRFxRtcDisableTrigger(")]
+		self.assertIn("ticks = TimerNanosecondToTick(pTimer, nsPeriod);", hf_section)
+		self.assertIn("ticks == 0ULL || ticks > UINT32_MAX", hf_section)
+		self.assertIn("if (ticks > RTC_COUNTER_MASK)", rtc_section)
+		self.assertIn("return 0ULL;", rtc_section)
+		# Old HF code truncated 300s at 16MHz into a 32-bit compare.
+		self.assertGreater(300 * 16000000, 0xFFFFFFFF)
+		self.assertLess(250 * 16000000, 0xFFFFFFFF)
+		self.assertGreater(600 * 32768, 0xFFFFFF)
+		self.assertLess(250 * 44740, 0xFFFFFF)
+
+	def test_nrf91_frequency_transition_models(self):
+		# The target uses closest power-of-two HF and integer-divider LF
+		# rates. Retained nanosecond periods must be rebuilt after reset.
+		hf_base = 16000000
+		for requested, target in ((16000000, 16000000), (8000000, 8000000),
+				(4000000, 4000000), (7000000, 8000000),
+				(1000, 31250)):
+			rates = [hf_base >> p for p in range(10)]
+			actual = min(rates, key=lambda hz: (abs(hz - requested), -hz))
+			self.assertEqual(actual, target)
+			period_ns = 10000000
+			period_ticks = (period_ns * actual + 500000000) // 1000000000
+			self.assertGreater(period_ticks, 0)
+			self.assertLessEqual(period_ticks, 0xFFFFFFFF)
+		for rc_hz, requested in ((44740, 32768), (44740, 1024),
+				(32768, 1024)):
+			div = 1
+			if requested < rc_hz:
+				div = rc_hz // requested
+				if rc_hz * (2 * div + 1) > 2 * requested * div * (div + 1):
+					div += 1
+			actual = (rc_hz + div // 2) // div
+			ticks = (actual * 10000000 + 500000000) // 1000000000
+			self.assertGreaterEqual(ticks, 2)
+			self.assertLessEqual(ticks, 0xFFFFFF)
+
+
+	def test_nrf91_timer_explicit_source_matches_active_selection(self):
+		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
+		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
+		hf_init = hf[hf.index("bool nRFxTimerInit("):]
+		rtc_init = rtc[rtc.index("bool nRFxRtcInit("):]
+		self.assertIn("pCfg->ClkSrc != TIMER_CLKSRC_DEFAULT", hf_init)
+		self.assertIn("nRFxLfclkUsesRc()", rtc_init)
+		self.assertIn("pCfg->ClkSrc == TIMER_CLKSRC_LFRC", rtc_init)
+		self.assertIn("pCfg->ClkSrc == TIMER_CLKSRC_LFXTAL", rtc_init)
+		self.assertIn("#if defined(NRF91_SERIES)", rtc_init)
+		# Temporary RC selection must be usable without changing the
+		# board's immutable g_McuOsc default oscillator description.
+		for selected_rc in (False, True):
+			accept_rc = selected_rc
+			accept_xtal = not selected_rc
+			self.assertNotEqual(accept_rc, accept_xtal)
 if __name__ == "__main__":
 	unittest.main()

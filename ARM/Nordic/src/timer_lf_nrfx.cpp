@@ -152,6 +152,11 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 };
 
 static bool s_bRtcEnabled[TIMER_NRFX_RTC_MAX];
+#if defined(NRF91_SERIES)
+// RTC tasks are synchronized by LFCLK. A frequency change while the
+// RTC is disabled must reset/rearm it after LFCLK is enabled again.
+static bool s_bRtcResetPending[TIMER_NRFX_RTC_MAX];
+#endif
 // CLEAR task endpoint given out: a hardware event can clear the counter
 static bool s_bRtcHwClear[TIMER_NRFX_RTC_MAX];
 
@@ -527,6 +532,8 @@ __WEAK void RTC2_IRQHandler()
 }   // extern "C"
 
 
+static void nRFxRtcReset(TimerDev_t * const pTimer);
+
 static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 {
 	if (s_bRtcEnabled[pTimer->DevNo])
@@ -538,6 +545,13 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 	{
 		return false;
 	}
+#if defined(NRF91_SERIES)
+	if (s_bRtcResetPending[pTimer->DevNo])
+	{
+		nRFxRtcReset(pTimer);
+		s_bRtcResetPending[pTimer->DevNo] = false;
+	}
+#endif
 	s_bRtcEnabled[pTimer->DevNo] = true;
 
     switch (pTimer->DevNo)
@@ -685,6 +699,9 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	NRF_RTC_Type *reg = rtc.pReg;
 #if defined(NRF91_SERIES)
 	uint32_t base = nRFxRtcBaseFrequency();
+	uint32_t irqState;
+	uint32_t proposed;
+	uint64_t ticks;
 #else
 	uint32_t base = TIMER_NRFX_RTC_BASE_FREQ;
 #endif
@@ -714,6 +731,28 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 			div++;
 		}
 	}
+#if defined(NRF91_SERIES)
+	// Validate every existing ordinary compare before stopping the
+	// timer or changing PRESCALER. PEI triggers were rejected above.
+	// An unrepresentable interval must leave the original timer intact.
+	proposed = (base + div / 2U) / div;
+	irqState = DisableInterrupt();
+	for (int i = 0; i < rtc.MaxNbTrigEvt; i++)
+	{
+		if (rtc.pTrigger[i].nsPeriod != 0ULL)
+		{
+			ticks = (rtc.pTrigger[i].nsPeriod / 1000000000ULL) *
+				proposed +
+				((rtc.pTrigger[i].nsPeriod % 1000000000ULL) *
+				proposed + 500000000ULL) / 1000000000ULL;
+			if (ticks < RTC_CC_AHEAD_MIN || ticks > RTC_COUNTER_MASK)
+			{
+				EnableInterrupt(irqState);
+				return pTimer->Freq;
+			}
+		}
+	}
+#endif
 
 	reg->TASKS_STOP = 1;
 	for (int timeout = RTC_TASK_WAIT_MAX; timeout > 0; timeout--)
@@ -734,10 +773,38 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	// those are computed from Freq, see TimerTickToTime.
     pTimer->nsPeriod = 1000000000ULL / (uint64_t)pTimer->Freq;     // Period in nsec
 
+#if defined(NRF91_SERIES)
+	// Recompute CC periods using the new rate, then reset the time
+	// origin and rephase all armed compares. On a disabled timer this
+	// reset is deferred until LFCLK is running again.
+	for (int i = 0; i < rtc.MaxNbTrigEvt; i++)
+	{
+		if (rtc.pTrigger[i].nsPeriod != 0ULL)
+		{
+			ticks = TimerNanosecondToTick(pTimer,
+				rtc.pTrigger[i].nsPeriod);
+			rtc.pCC[i] = (uint32_t)ticks;
+			rtc.pTrigger[i].nsPeriod =
+				TimerTickToNanosecond(pTimer, ticks);
+		}
+	}
+	if (s_bRtcEnabled[pTimer->DevNo])
+	{
+		nRFxRtcReset(pTimer);
+		s_bRtcResetPending[pTimer->DevNo] = false;
+		reg->TASKS_START = 1U;
+	}
+	else
+	{
+		s_bRtcResetPending[pTimer->DevNo] = true;
+	}
+	EnableInterrupt(irqState);
+#else
 	if (s_bRtcEnabled[pTimer->DevNo])
 	{
 		reg->TASKS_START = 1;
 	}
+#endif
 
     return pTimer->Freq;
 }
@@ -1102,6 +1169,14 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 		ticks = TimerNanosecondToTick(pTimer, nsPeriod);
 	}
 
+#if defined(NRF91_SERIES)
+	// A 24-bit RTC cannot realize a longer interval. Do not silently
+	// clamp a requested delay to an unrelated, shorter interval.
+	if (ticks > RTC_COUNTER_MASK)
+	{
+		return 0ULL;
+	}
+#endif
 	uint32_t cc = ticks < RTC_CC_AHEAD_MIN ? RTC_CC_AHEAD_MIN :
 				  ticks > RTC_COUNTER_MASK ? RTC_COUNTER_MASK : (uint32_t)ticks;
 
@@ -1230,7 +1305,19 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
-	// RTC uses the configured LFCLK source. No synthesized LFCLK.
+	// RTC uses the selected LFCLK source. The board's g_McuOsc
+	// describes its default hardware and is not modified when an
+	// application temporarily selects LFRC.
+#if defined(NRF91_SERIES)
+	if (pCfg->ClkSrc != TIMER_CLKSRC_DEFAULT &&
+		!((pCfg->ClkSrc == TIMER_CLKSRC_LFRC &&
+			nRFxLfclkUsesRc()) ||
+			(pCfg->ClkSrc == TIMER_CLKSRC_LFXTAL &&
+			!nRFxLfclkUsesRc())))
+	{
+		return false;
+	}
+#else
 	if (pCfg->ClkSrc != TIMER_CLKSRC_DEFAULT &&
 		!((pCfg->ClkSrc == TIMER_CLKSRC_LFRC &&
 			g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC) ||
@@ -1239,6 +1326,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	{
 		return false;
 	}
+#endif
 
 	// DevNo=-1 requests an available LF timer through the normal TimerInit
 	// interface. Keep the radio/stack RTCs out of the candidate set.
@@ -1307,6 +1395,9 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	s_pnRfxRtcData = s_nRfxRtcData;
 	s_pnRfxRtcDev[pSelectedCfg->DevNo] = pTimer;
 	s_bRtcHwClear[pSelectedCfg->DevNo] = false;
+#if defined(NRF91_SERIES)
+	s_bRtcResetPending[pSelectedCfg->DevNo] = false;
+#endif
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	memset(pRtc->pTrigger, 0, pRtc->MaxNbTrigEvt * sizeof(TimerTrig_t));

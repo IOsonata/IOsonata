@@ -736,6 +736,84 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	int i;
+#if defined(NRF91_SERIES)
+	uint32_t base;
+	uint32_t prescaler;
+	uint32_t bestDiff;
+	uint32_t requested;
+	uint32_t proposed;
+	uint32_t irqState;
+	uint64_t ticks;
+	int j;
+
+	base = tdata.MaxFreq;
+	prescaler = 0U;
+	if (Freq != 0U)
+	{
+		bestDiff = UINT32_MAX;
+		for (j = 0; j <= TIMER_NRFX_PRESCALER_MAX; j++)
+		{
+			requested = base >> j;
+			proposed = requested > Freq ? requested - Freq : Freq - requested;
+			if (proposed < bestDiff)
+			{
+				bestDiff = proposed;
+				prescaler = (uint32_t)j;
+			}
+		}
+	}
+	proposed = base >> prescaler;
+
+	// Validate every armed compare before modifying the hardware. A
+	// period that cannot fit the 32-bit counter is rejected rather
+	// than shortened. Do not change a timer bound to PEI.
+	irqState = DisableInterrupt();
+	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
+	{
+		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			EnableInterrupt(irqState);
+			return pTimer->Freq;
+		}
+		if (tdata.pTrigger[i].nsPeriod != 0ULL)
+		{
+			ticks = (tdata.pTrigger[i].nsPeriod / 1000000000ULL) *
+				proposed +
+				((tdata.pTrigger[i].nsPeriod % 1000000000ULL) *
+				proposed + 500000000ULL) / 1000000000ULL;
+			if (ticks == 0ULL || ticks > UINT32_MAX)
+			{
+				EnableInterrupt(irqState);
+				return pTimer->Freq;
+			}
+		}
+	}
+	reg->TASKS_STOP = 1U;
+	reg->PRESCALER = prescaler;
+	pTimer->Freq = proposed;
+	pTimer->nsPeriod = 1000000000ULL / proposed;
+	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
+	{
+		if (tdata.pTrigger[i].nsPeriod != 0ULL)
+		{
+			ticks = TimerNanosecondToTick(pTimer,
+				tdata.pTrigger[i].nsPeriod);
+			tdata.pCC[i] = (uint32_t)ticks;
+			tdata.pTrigger[i].nsPeriod =
+				TimerTickToNanosecond(pTimer, ticks);
+		}
+	}
+	// Changing prescaler resets the time origin and rephases the
+	// existing one-shot/continuous compares to the new tick rate.
+	nRFxTimerReset(pTimer);
+	if (s_bTimerEnabled[devno])
+	{
+		reg->TASKS_START = 1U;
+	}
+	EnableInterrupt(irqState);
+	return pTimer->Freq;
+#else
 
 	// Frequency changes invalidate scheduled compare periods.
 	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
@@ -796,6 +874,7 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	}
 
     return pTimer->Freq;
+#endif
 }
 
 static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
@@ -950,24 +1029,18 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 		return 0;
 	}
 
-	// Ticks as TimerNanosecondToTick, with one 64 bit division instead of two
-	// up to 100 s (nsPeriod * Freq fits 64 bits up to 128 MHz): the period
-	// starts at the capture below, as soon as the ticks are known.
+	// Preserve the full 64-bit tick count until validated. Casting to
+	// uint32_t first would silently wrap long one-shot or periodic
+	// intervals into unrelated, shorter hardware compares.
+	uint64_t ticks;
 	uint32_t cc;
 
-	if (nsPeriod <= 100000000000ULL)
+	ticks = TimerNanosecondToTick(pTimer, nsPeriod);
+	if (ticks == 0ULL || ticks > UINT32_MAX)
 	{
-		cc = (uint32_t)((nsPeriod * pTimer->Freq + 500000000ULL) / 1000000000ULL);
+		return 0ULL;
 	}
-	else
-	{
-		cc = (uint32_t)TimerNanosecondToTick(pTimer, nsPeriod);
-	}
-
-    if (cc <= 0)
-    {
-        return 0;
-    }
+	cc = (uint32_t)ticks;
 
 	// The period starts at the capture. A compare left from before is cleared
 	// first. The counter is captured in this CC and the period added right
@@ -1089,6 +1162,18 @@ bool nRFxTimerEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_E
 bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 {
 	// Any frequency, SetFrequency takes the closest one
+	if (pTimer == nullptr || pCfg == nullptr)
+	{
+		return false;
+	}
+#if defined(NRF91_SERIES)
+	// nRF91 TIMERs use their fixed 16-MHz peripheral clock. There
+	// is no per-TIMER oscillator-source multiplexer to configure.
+	if (pCfg->ClkSrc != TIMER_CLKSRC_DEFAULT)
+	{
+		return false;
+	}
+#endif
 	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX
 			|| pCfg->DevNo >= (TIMER_NRFX_HF_MAX + TIMER_NRFX_RTC_MAX))
 	{
@@ -1096,6 +1181,18 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	}
 
 	int devno = pCfg->DevNo - TIMER_NRFX_RTC_MAX;
+#if defined(NRF91_SERIES)
+	// Mirror the RTC driver's ownership rule: a disabled, initialized
+	// TIMER still belongs to its original handle. Never replace it
+	// or take over a TIMER currently configured for counter mode.
+	if ((s_pnRFxTimerDev[devno] != nullptr &&
+		s_pnRFxTimerDev[devno] != pTimer) ||
+		(s_pnRFxTimerDev[devno] == nullptr &&
+		s_nRFxTimerData[devno].pReg->MODE != TIMER_MODE_MODE_Timer))
+	{
+		return false;
+	}
+#endif
 	pTimer->DevNo = pCfg->DevNo;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	s_pnRFxTimerData = s_nRFxTimerData;
@@ -1113,6 +1210,14 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 			return false;
 		}
 	}
+#if defined(NRF91_SERIES)
+	if (s_pnRFxTimerDev[devno] == pTimer && s_bTimerEnabled[devno])
+	{
+		// Only after checking all live event bindings may the same
+		// handle release its prior clock before reinitialization.
+		nRFxTimerDisable(pTimer);
+	}
+#endif
 	s_pnRFxTimerDev[devno] = pTimer;
 	s_bnRFxTimerHwClear[devno] = false;
 	pTimer->Rollover = 0;
@@ -1151,6 +1256,11 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	// later Enable does not count it again.
 	if (nRFxTimerEnable(pTimer) == false)
 	{
+#if defined(NRF91_SERIES)
+		// No hardware ownership was acquired: do not leave a stale
+		// handle that permanently blocks a later successful init.
+		s_pnRFxTimerDev[devno] = nullptr;
+#endif
 		return false;
 	}
 
