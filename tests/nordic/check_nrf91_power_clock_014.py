@@ -321,5 +321,23 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertIn("s_bTimerEnabled[devno]", guard)
 		self.assertIn("s_pnRFxTimerDev[devno] = pTimer;", guard)
 
+
+	def test_nrf91_poweroff_old_timer_structure(self):
+		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
+		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
+		test = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
+		for src, name, data, owner in (
+			(hf, "nRFxTimerPowerOff", "s_pnRFxTimerDev[devno]", "nRFxTimerOwned"),
+			(rtc, "nRFxRtcPowerOff", "s_pnRfxRtcDev[devno]", "nRFxRtcOwned"),
+		):
+			with self.subTest(timer=name):
+				self.assertIn("static bool " + name + "(", src)
+				self.assertIn(data + " = nullptr;", src)
+				self.assertIn("static bool " + owner + "(", src)
+				self.assertIn("!" + owner + "(pTimer)", src)
+		self.assertIn("TimerPowerOff(&s_RetainedTimer);", test)
+		self.assertIn("TimerInit(&s_PowerOffTimer, &cfg);", test)
+		self.assertNotIn("NRF91_SERIES", test[test.index("static void CoreClockTestTimerPowerOff(void)"):test.index("int main(void)")])
+
 if __name__ == "__main__":
 	unittest.main()

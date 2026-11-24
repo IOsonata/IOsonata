@@ -175,6 +175,37 @@ static void R9a02MtimerDisable(TimerDev_t * const pTimer)
 	EnableInterrupt(state);
 }
 
+// Stop the machine timer and remove its CPU interrupt. Another
+// TimerDev_t can then initialize the machine timer.
+static bool R9a02MtimerPowerOff(TimerDev_t * const pTimer)
+{
+	R9a02TimerDev_t *dev;
+	uintptr_t state;
+
+	if (pTimer == NULL || pTimer->DevNo != R9A02_TIMER_MTIMER_DEVNO)
+	{
+		return false;
+	}
+	dev = &s_R9a02TimerDev[R9A02_TIMER_MTIMER_DEVNO];
+	state = DisableInterrupt();
+	if (dev->pTimer != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	R9A02_CPU_AUX_MACTCR = 0U;
+	R9a02MtimecmpWrite(UINT64_MAX);
+	R9a02UnregisterCoreIntHandler(R9A02_CLIC_ID_MTIP);
+	dev->bRunning = false;
+	dev->bTrigEn = false;
+	dev->pTimer = NULL;
+	pTimer->PowerOff = nullptr;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	EnableInterrupt(state);
+	return true;
+}
+
 static bool R9a02MtimerEnable(TimerDev_t * const pTimer)
 {
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
@@ -409,6 +440,59 @@ static void R9a02TauDisable(TimerDev_t * const pTimer)
 	R9a02TauStop(&s_R9a02TimerDev[pTimer->DevNo]);
 
 	EnableInterrupt(state);
+}
+
+// Stop a TAU channel and remove only its interrupt route. Stop the
+// shared TAU module clock when no other channel has a timer object.
+static bool R9a02TauPowerOff(TimerDev_t * const pTimer)
+{
+	R9a02TimerDev_t *dev;
+	uintptr_t state;
+	uint32_t chan;
+	bool inUse;
+	int i;
+
+	if (pTimer == NULL || pTimer->DevNo < R9A02_TIMER_TAU_DEVNO(0) ||
+		pTimer->DevNo >= R9A02_TIMER_DEV_CNT)
+	{
+		return false;
+	}
+	dev = &s_R9a02TimerDev[pTimer->DevNo];
+	state = DisableInterrupt();
+	if (dev->pTimer != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	chan = dev->Chan;
+	R9a02TauStop(dev);
+	R9A02_TAU->TT = (uint16_t)(1U << chan);
+	R9A02_TAU->TOE = (uint16_t)(R9A02_TAU->TOE & ~(1U << chan));
+	if (dev->IntNo >= 0)
+	{
+		R9a02UnregisterIntHandler(dev->IntNo);
+		dev->IntNo = -1;
+	}
+	dev->bRunning = false;
+	dev->bTrigEn = false;
+	dev->pTimer = NULL;
+	inUse = false;
+	for (i = R9A02_TIMER_TAU_DEVNO(0); i < R9A02_TIMER_DEV_CNT; i++)
+	{
+		if (s_R9a02TimerDev[i].pTimer != NULL)
+		{
+			inUse = true;
+		}
+	}
+	if (!inUse)
+	{
+		R9a02ModuleStop(R9A02_MSTPCR_D, R9A02_MSTPCRD_TAU);
+	}
+	pTimer->PowerOff = nullptr;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	EnableInterrupt(state);
+	return true;
 }
 
 static bool R9a02TauEnable(TimerDev_t * const pTimer)
@@ -669,7 +753,7 @@ static bool R9a02MtimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const 
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
-	pTimer->PowerOff = nullptr;
+	pTimer->PowerOff = R9a02MtimerPowerOff;
 	pTimer->Disable = R9a02MtimerDisable;
 	pTimer->Enable = R9a02MtimerEnable;
 	pTimer->Reset = R9a02MtimerReset;
@@ -769,7 +853,7 @@ static bool R9a02TauInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCf
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
-	pTimer->PowerOff = nullptr;
+	pTimer->PowerOff = R9a02TauPowerOff;
 	pTimer->Disable = R9a02TauDisable;
 	pTimer->Enable = R9a02TauEnable;
 	pTimer->Reset = R9a02TauReset;

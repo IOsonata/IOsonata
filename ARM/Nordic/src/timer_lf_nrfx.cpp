@@ -115,6 +115,19 @@ static TimerTrig_t s_nRfxRtc2Trig[RTC2_CC_NUM];
 
 // Timer device of each timer, set by nRFxRtcInit
 static TimerDev_t *s_pnRfxRtcDev[TIMER_NRFX_RTC_MAX];
+// Check the registered timer before touching its RTC registers.
+static bool nRFxRtcOwned(TimerDev_t *pTimer)
+{
+	int devno;
+
+	if (pTimer == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo;
+	return devno >= 0 && devno < TIMER_NRFX_RTC_MAX &&
+		s_pnRfxRtcDev[devno] == pTimer;
+}
 // A timer initialized with DevNo=-1 is returned to the pool by Disable.
 // Explicitly indexed timers retain their handles across Disable/Enable.
 static bool s_bRtcAutoSelected[TIMER_NRFX_RTC_MAX];
@@ -536,6 +549,10 @@ static void nRFxRtcReset(TimerDev_t * const pTimer);
 
 static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 {
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return false;
+	}
 	if (s_bRtcEnabled[pTimer->DevNo])
 	{
 		return true;
@@ -583,6 +600,10 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 	uint32_t irqState;
 	int devno;
 
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return;
+	}
 	if (!s_bRtcEnabled[pTimer->DevNo])
 	{
 		return;
@@ -649,6 +670,10 @@ static void nRFxRtcClear(NRF_RTC_Type *pReg)
 // restart their period from the clear.
 static void nRFxRtcReset(TimerDev_t * const pTimer)
 {
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return;
+	}
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 	NRF_RTC_Type *reg = rtc.pReg;
 
@@ -695,6 +720,10 @@ static void nRFxRtcReset(TimerDev_t * const pTimer)
 // back, bounded. A disabled RTC stays stopped.
 static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return 0U;
+	}
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 	NRF_RTC_Type *reg = rtc.pReg;
 #if defined(NRF91_SERIES)
@@ -814,6 +843,10 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 // next wrap.
 static uint64_t nRFxRtcGetTickCount(TimerDev_t * const pTimer)
 {
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return 0ULL;
+	}
 	NRF_RTC_Type *reg = s_nRfxRtcData[pTimer->DevNo].pReg;
 	uint32_t count = reg->COUNTER;
 
@@ -829,6 +862,10 @@ static uint64_t nRFxRtcGetTickCount(TimerDev_t * const pTimer)
 // a hardware clear, see nRFxRtcReadCountMasked
 static uint64_t nRFxRtcGetTickCountHwClear(TimerDev_t * const pTimer)
 {
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return 0ULL;
+	}
 	NRF_RTC_Type *reg = s_nRfxRtcData[pTimer->DevNo].pReg;
 
 	return nRFxRtcReadCountMasked(pTimer, reg, reg->COUNTER);
@@ -836,6 +873,10 @@ static uint64_t nRFxRtcGetTickCountHwClear(TimerDev_t * const pTimer)
 
 static int nRFxRtcGetMaxTrigger(TimerDev_t * const pTimer)
 {
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return 0;
+	}
 	return s_nRfxRtcData[pTimer->DevNo].MaxNbTrigEvt;
 }
 
@@ -1141,6 +1182,10 @@ bool nRFxRtcEnablePeiTrigger(TimerDev_t *pTimer, int TrigNo,
 static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                               	  	 TimerTrigEvtHandler_t Handler, void *pContext)
 {
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return 0ULL;
+	}
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 
 	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt || nsPeriod == 0U)
@@ -1217,6 +1262,10 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 
 static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return;
+	}
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 	PeiDev_t *pPei;
 	PeiEndpoint_t endpoint;
@@ -1251,6 +1300,10 @@ static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 
 static int nRFxRtcFindAvailTrigger(TimerDev_t * const pTimer)
 {
+	if (!nRFxRtcOwned(pTimer))
+	{
+		return -1;
+	}
 	for (int i = 0; i < s_nRfxRtcData[pTimer->DevNo].MaxNbTrigEvt; i++)
 	{
 		if (s_nRfxRtcData[pTimer->DevNo].pTrigger[i].nsPeriod == 0U)

@@ -220,6 +220,20 @@ static bool s_bnRFxTimerHwClear[TIMER_NRFX_HF_MAX];
 // initialized.
 const nRFTimerData_t *s_pnRFxTimerData = nullptr;
 
+// Reject an old TimerDev_t after another handle initializes this TIMER.
+static bool nRFxTimerOwned(TimerDev_t *pTimer)
+{
+	int devno;
+
+	if (pTimer == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	return devno >= 0 && devno < TIMER_NRFX_HF_MAX &&
+		s_pnRFxTimerDev[devno] == pTimer;
+}
+
 // Interrupt of a TIMER in counter mode. counter_nrfx.cpp, linked by
 // CounterInit, replaces this empty default.
 __WEAK void nRFxCounterIrq(int Idx)
@@ -535,8 +549,15 @@ __WEAK void TIMER4_IRQHandler()
 
 static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return false;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	reg = s_nRFxTimerData[devno].pReg;
 
 	if (s_bTimerEnabled[devno])
 	{
@@ -618,8 +639,15 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 
 static void nRFxTimerDisable(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	reg = s_nRFxTimerData[devno].pReg;
 
 	if (!s_bTimerEnabled[devno])
 	{
@@ -766,10 +794,18 @@ static bool nRFxTimerPowerOff(TimerDev_t * const pTimer)
 // period from the clear.
 static void nRFxTimerReset(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
+	NRF_TIMER_Type *reg;
+	uint32_t state;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
-	NRF_TIMER_Type *reg = tdata.pReg;
-	uint32_t state = DisableInterrupt();
+	reg = tdata.pReg;
+	state = DisableInterrupt();
 
 	reg->TASKS_CLEAR = 1;
 	pTimer->Rollover = 0;
@@ -800,8 +836,15 @@ static void nRFxTimerReset(TimerDev_t * const pTimer)
 
 static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return 0U;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	reg = s_nRFxTimerData[devno].pReg;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	int i;
 #if defined(NRF91_SERIES)
@@ -947,8 +990,13 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
 static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
 
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return 0ULL;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	return nRFxTimerReadCount(s_nRFxTimerData[devno], devno, pTimer, nullptr);
 }
 
@@ -1080,9 +1128,16 @@ bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                                        TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return 0ULL;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
-	NRF_TIMER_Type *reg = tdata.pReg;
+	reg = tdata.pReg;
 
 	if (TrigNo < 0 || TrigNo >= tdata.MaxNbTrigEvt)
 	{
@@ -1149,9 +1204,16 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 
 static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
-	NRF_TIMER_Type *reg = tdata.pReg;
+	reg = tdata.pReg;
 	PeiDev_t *pei;
 	PeiEvent_t evt;
 	PeiEndpoint_t endpoint;
@@ -1187,7 +1249,13 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 
 static int nRFxTimerFindAvailTrigger(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return -1;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 
 	for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
@@ -1201,6 +1269,10 @@ static int nRFxTimerFindAvailTrigger(TimerDev_t * const pTimer)
 
 static int nRFxTimerGetMaxTrigger(TimerDev_t * const pTimer)
 {
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return 0;
+	}
 	return s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX].MaxNbTrigEvt;
 }
 

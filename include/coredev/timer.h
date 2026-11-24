@@ -257,9 +257,9 @@ struct __Timer_Device {
 	 */
 	bool (*EnableExtTrigger)(TimerDev_t * const pTimerDev, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense);
 
-	// Full peripheral shutdown. Unlike Disable, this releases ownership
-	// so a different TimerDev_t may subsequently initialize the device.
-	// Drivers without this capability leave the callback NULL.
+	// Stop the hardware timer, disable its interrupts and clear its
+	// device assignment. Disable alone keeps the timer assigned.
+	// Drivers without PowerOff support leave this pointer NULL.
 	bool (*PowerOff)(TimerDev_t * const pTimerDev);
 };
 
@@ -298,15 +298,15 @@ int TimerGetHighFreqDevNo(void);
 static inline void TimerDisable(TimerDev_t * const pTimer) { pTimer->Disable(pTimer); }
 
 /**
- * @brief Shut down a timer and release its hardware ownership.
+ * @brief Stop a timer completely and make the device available for Init.
  *
- * Disable only stops the counter and may release its clock request.
- * PowerOff additionally removes trigger/IRQ resources and releases
- * the timer for another handle. After success the caller must Init
- * again before using the timer. A backend that cannot safely release
- * its resources returns false without claiming success.
+ * TimerDisable stops counting but keeps the existing TimerDev_t.
+ * TimerPowerOff stops counting, disables the timer interrupts and
+ * removes that device assignment. A subsequent TimerInit can use a
+ * different TimerDev_t for the same hardware timer.
  *
- * @return true if the timer is fully powered off and ownership released.
+ * @return true when the timer has been stopped and its device freed.
+ *         false if the timer cannot be powered off safely.
  */
 static inline bool TimerPowerOff(TimerDev_t * const pTimer)
 {
@@ -584,7 +584,7 @@ public:
      */
     virtual void Disable() { vTimer.Disable(&vTimer); }
 
-	/** @brief Power off and release the timer's hardware ownership. */
+	/** @brief Stop the timer and free its hardware device. */
 	virtual bool PowerOff() { return TimerPowerOff(&vTimer); }
 
     /**

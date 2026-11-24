@@ -160,8 +160,10 @@ static void SystickSetPrio(int IntPrio)
 
 static bool SystickEnable(TimerDev_t * const pTimer)
 {
-	(void)pTimer;
-
+	if (s_SysTickData.pTimer != pTimer)
+	{
+		return false;
+	}
 	SYSTICK_REG->CTRL = SYSTICK_CTRL_RUNNING;
 
 	return true;
@@ -169,8 +171,10 @@ static bool SystickEnable(TimerDev_t * const pTimer)
 
 static void SystickDisable(TimerDev_t * const pTimer)
 {
-	(void)pTimer;
-
+	if (s_SysTickData.pTimer != pTimer)
+	{
+		return;
+	}
 	SYSTICK_REG->CTRL = SYSTICK_CTRL_STOPPED;
 	SYSTICK_ICSR = SCB_ICSR_PENDSTCLR;
 }
@@ -334,6 +338,38 @@ static bool SystickEnableExtTrig(TimerDev_t * const pTimer, int TrigDevNo, TIMER
 	return false;
 }
 
+// Stop SysTick, remove its interrupt and clear its timer registration.
+static bool SystickPowerOff(TimerDev_t * const pTimer)
+{
+	SysTick_TimerData_t *d;
+	uint32_t state;
+
+	d = &s_SysTickData;
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (pTimer == nullptr || d->pTimer != pTimer)
+	{
+		__set_PRIMASK(state);
+		return false;
+	}
+	SYSTICK_REG->CTRL = 0U;
+	SYSTICK_REG->LOAD = 0U;
+	SYSTICK_REG->VAL = 0U;
+	SYSTICK_ICSR = SCB_ICSR_PENDSTCLR;
+	d->pTimer = nullptr;
+	d->Trigger[0] = {};
+	pTimer->PowerOff = SystickPowerOff;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	__set_PRIMASK(state);
+	return true;
+}
+
+extern "C" bool SysTickTimerPowerOff(TimerDev_t * const pTimer)
+{
+	return SystickPowerOff(pTimer);
+}
+
 bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer == nullptr || pCfg == nullptr || pCfg->bTickInt)
@@ -349,6 +385,14 @@ bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	}
 
 	SysTick_TimerData_t &d = s_SysTickData;
+	// A disabled SysTick remains assigned to its timer until PowerOff.
+	// Do not overwrite another timer's callback or an active system tick.
+	if ((d.pTimer != nullptr && d.pTimer != pTimer) ||
+		(d.pTimer == nullptr &&
+		(SYSTICK_REG->CTRL & SYSTICK_CTRL_ENABLE) != 0U))
+	{
+		return false;
+	}
 
 	// Stopped, interrupt off
 	SYSTICK_REG->CTRL = 0;

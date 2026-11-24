@@ -71,6 +71,97 @@ RE01_TimerData_t g_Re01TimerData[RE01_TIMER_MAXCNT] = {
 	{.DevNo = 8, .pGptReg = (GPT320_Type*)GPT165, .IrqOvr = (IRQn_Type)-1},
 };
 
+// Stop the timer, remove its interrupt handlers and free its device
+// number. Shared GPT module clocks remain enabled while another GPT uses them.
+static bool Re01TimerPowerOff(TimerDev_t * const pTimer)
+{
+	RE01_TimerData_t *dev;
+	uint32_t state;
+	uint32_t mask;
+	bool inUse;
+	int devno;
+	int i;
+
+	dev = Re01TimerData(pTimer);
+	if (dev == NULL)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	devno = pTimer->DevNo;
+	pTimer->Disable(pTimer);
+	if (devno < RE01_TIMER_AGT_CNT)
+	{
+		for (i = 0; i < 100000; i++)
+		{
+			if ((dev->pAgtReg->AGTCR & AGT0_AGTCR_TCSTF_Msk) == 0U)
+			{
+				break;
+			}
+		}
+		if (i == 100000)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+	}
+	for (i = 0; i < pTimer->GetMaxTrigger(pTimer); i++)
+	{
+		pTimer->DisableTrigger(pTimer, i);
+	}
+	for (i = 0; i < RE01_TIMER_CC_MAXCNT; i++)
+	{
+		if (dev->IrqMatch[i] != (IRQn_Type)-1)
+		{
+			Re01UnregisterIntHandler(dev->IrqMatch[i]);
+			dev->IrqMatch[i] = (IRQn_Type)-1;
+		}
+	}
+	if (dev->IrqOvr != (IRQn_Type)-1)
+	{
+		Re01UnregisterIntHandler(dev->IrqOvr);
+		dev->IrqOvr = (IRQn_Type)-1;
+	}
+	mask = 0U;
+	if (devno < RE01_TIMER_AGT_CNT)
+	{
+		mask = 0x8UL >> devno;
+	}
+	else if (devno < RE01_TIMER_GPT_DEVNO)
+	{
+		mask = MSTP_MSTPCRD_MSTPD1_Msk;
+	}
+	else
+	{
+		mask = devno < RE01_TIMER_GPT_DEVNO + 2 ?
+			MSTP_MSTPCRD_MSTPD5_Msk : MSTP_MSTPCRD_MSTPD6_Msk;
+	}
+	inUse = false;
+	for (i = 0; i < RE01_TIMER_MAXCNT; i++)
+	{
+		if (i != devno && g_Re01TimerData[i].pTimer != NULL)
+		{
+			if (devno >= RE01_TIMER_GPT_DEVNO &&
+				i >= RE01_TIMER_GPT_DEVNO &&
+				(i < RE01_TIMER_GPT_DEVNO + 2) ==
+				(devno < RE01_TIMER_GPT_DEVNO + 2))
+			{
+				inUse = true;
+			}
+		}
+	}
+	dev->pTimer = NULL;
+	if (!inUse)
+	{
+		MSTP->MSTPCRD |= mask;
+	}
+	pTimer->PowerOff = nullptr;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	EnableInterrupt(state);
+	return true;
+}
+
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer == NULL || pCfg == NULL)
@@ -146,6 +237,10 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		pTimer->Rollover = 0;
 		pTimer->LastCount = 0;
 		dev->pTimer = NULL;
+	}
+	if (result)
+	{
+		pTimer->PowerOff = Re01TimerPowerOff;
 	}
 	EnableInterrupt(state);
 	return result;

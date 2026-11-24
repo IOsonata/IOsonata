@@ -312,28 +312,29 @@ the stricter HF ownership check; do not use them as validation
 of this specific update.
 
 
-## TimerPowerOff generic lifecycle
+## TimerPowerOff and timer device assignment
 
-The generic IOsonata TimerPowerOff() API has been added to the C and
-C++ Timer interface. Unlike TimerDisable(), it is a final ownership
-release. A successful call stops the underlying timer, clears
-locally owned triggers and IRQs, drops its clock request and releases
-the device association. A different TimerDev_t can then use TimerInit
-on the same physical timer. Live PEI bindings are refused until
-their event routes are unbound. Repeated PowerOff on the old handle
-returns false.
+TimerPowerOff() is a generic IOsonata Timer function. It stops the
+peripheral, disables timer interrupts, clears the compare settings and
+frees the TimerDev_t assignment. TimerDisable() continues to stop
+counting while retaining that assignment.
 
-The nRF91 RTC and HF TIMER drivers provide this callback, and the
-generic CoreClockTest now exercises an ownership transfer on its
-previously retained first high-frequency timer. The test runs on every
-MCU with TimerPowerOff support; it has no nRF91-specific conditionals.
-Other Nordic, Microchip and STM32 implementations are tracked in
-`docs/architecture/timer-power-off.md`, while unported backends
-explicitly return unsupported.
+On nRF91, RTC0/RTC1 and TIMER0/1/2 have PowerOff functions. The
+drivers refuse to remove a timer that still has PEI connections.
+After PowerOff, calls through the old timer structure cannot restart
+the timer or change its settings. A new TimerDev_t can initialize
+that device number.
 
-This is a new hardware validation boundary. The earlier nRF9160
-CoreClockTest and CorePowerTest zero-failure logs predate this API.
-Rebuild the managed nRF9160 Release library and rerun CoreClockTest,
-including the new PowerOff ownership-transfer and repeated-release
-checks before signing off the new lifecycle. Preserve LFRC measurement,
-HF/LF shared clock ownership and sDelay results.
+The same generic CoreClockTest is used across every MCU. It tests
+that the first HF timer can be powered off and initialized again
+with another TimerDev_t. The source file does not contain any
+nRF91-specific code.
+
+The earlier nRF9160 CoreClockTest and CorePowerTest runs predate
+TimerPowerOff and cannot validate it. Rebuild the nRF9160 library
+and repeat the hardware tests, including LFRC/LFXO timer timing,
+HF/LF shared clock requests, sDelay, PowerOff followed by Init
+on another timer structure, and rejection of repeated PowerOff.
+
+See docs/architecture/timer-power-off.md for the other MCU timer
+drivers and the remaining hardware tests.

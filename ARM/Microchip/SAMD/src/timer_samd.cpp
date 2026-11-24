@@ -1244,7 +1244,10 @@ static bool SamdTimerPowerOff(TimerDev_t * const pTimer)
 	}
 	if (s_SamdSysTickOwner == pTimer)
 	{
-		pTimer->Disable(pTimer);
+		if (!SysTickTimerPowerOff(pTimer))
+		{
+			return false;
+		}
 		s_SamdSysTickOwner = NULL;
 	}
 	else

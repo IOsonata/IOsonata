@@ -1,74 +1,106 @@
-# TimerPowerOff: generic timer ownership lifecycle
+# TimerPowerOff
 
-IOsonata uses Init, Enable, Disable and PowerOff vocabulary. TimerPowerOff
-completes the timer lifecycle, and is independent of any MCU family.
+## Timer functions
+
+`TimerInit()` configures a hardware timer and assigns it to a
+`TimerDev_t`. `TimerDisable()` stops counting without removing that
+assignment. `TimerEnable()` resumes the same timer.
+
+`TimerPowerOff()` stops counting, disables the timer interrupts, clears
+the timer's compare settings, removes its device assignment and turns
+off its peripheral clock when that clock is not needed by another
+timer. A subsequent `TimerInit()` may assign the same hardware timer
+to a different `TimerDev_t`.
+
+The generic C and C++ functions are:
 
 ```cpp
-TimerDev_t timer = {};
-TimerCfg_t cfg = {};
-// Configure cfg.DevNo, cfg.ClkSrc, cfg.Freq, cfg.IntPrio.
-if (TimerInit(&timer, &cfg))
+bool TimerPowerOff(TimerDev_t *pTimer);
+bool Timer::PowerOff();
+```
+
+Example:
+
+```cpp
+TimerDev_t timer1 = {};
+TimerDev_t timer2 = {};
+TimerCfg_t cfg = {
+	.DevNo = TimerGetHighFreqDevNo(),
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0U,
+	.IntPrio = 2,
+	.EvtHandler = nullptr,
+};
+if (TimerInit(&timer1, &cfg))
 {
-    TimerDisable(&timer);  // Stops counting, retains ownership.
-    TimerEnable(&timer);   // Resumes the same handle.
-    TimerPowerOff(&timer); // Releases the timer for another handle.
+	TimerDisable(&timer1);
+	TimerEnable(&timer1);
+	if (TimerPowerOff(&timer1))
+	{
+		if (TimerInit(&timer2, &cfg))
+		{
+			TimerPowerOff(&timer2);
+		}
+	}
 }
 ```
 
-## Contract
+`TimerPowerOff()` returns `true` only when the timer has been stopped
+and its device assignment removed. The old `TimerDev_t` must not be
+used again until it has been initialized. A second PowerOff on the
+same structure returns `false`. PowerOff also returns `false` if
+the timer is not initialized or hardware resources cannot safely be
+disconnected.
 
-- `TimerInit` establishes hardware ownership.
-- `TimerDisable` stops the timer but preserves its handle, trigger
-  configuration and right to `TimerEnable` later.
-- `TimerPowerOff` stops counting, releases a clock reference held by
-  the timer, cleans interrupts and locally owned compare triggers,
-  and removes the driver's ownership registration.
-- A successful PowerOff returns true, resets the handle's DevNo to -1
-  and Freq to 0, and requires another TimerInit before further use.
-  A repeated PowerOff without initialization returns false.
-- A failed PowerOff returns false without reporting resources free.
-  Drivers refuse shutdown while a PEI route or other externally owned
-  event-to-task binding cannot safely be disconnected.
-- Timer power-off is not the same as system power-off. Shared clock
-  roots and counters are preserved when owned by another driver.
-- This is a static-allocation API. No heap, Acquire/Release vocabulary,
-  or target-specific application code is required.
+A timer with active PEI event connections must first have those
+connections disconnected. The Nordic RTC/HF TIMER drivers refuse
+PowerOff while such a connection is present. The nRF54L GRTC driver
+frees the selected compare group without stopping the shared
+SYSCOUNTER. Shared peripheral clocks on other MCUs are not stopped
+while another timer still uses them.
 
-The C interface is `bool TimerPowerOff(TimerDev_t *pTimer)`; the C++
-`Timer` wrapper exposes `bool PowerOff()`. Both use the same backend
-callback. An unsupported backend sets the callback to null and the
-generic API returns false instead of pretending the peripheral was
-released.
+TimerPowerOff uses static storage only. It does not allocate memory,
+configure a new oscillator or change the operation of TimerDisable.
 
-## Backend status — release 0.14
+## MCU timer drivers
 
-| Family | TimerPowerOff support |
-| --- | --- |
-| Nordic nRF52/nRF53/nRF91 HF TIMER and RTC | Implemented, PEI routes must be unbound |
-| Nordic nRF54L GRTC | Implemented per logical compare group; shared SYSCOUNTER retained |
-| Microchip SAMD RTC, TC, TCC and SysTick wrapper | Implemented with existing release path |
-| Microchip SAM4E TC | Implemented |
-| Microchip SAM4L AST and TC | Implemented |
-| ST STM32 TIM and LPTIM | Implemented through existing release routines |
-| NXP LPC, Renesas RA4/RE01/R9A02, Espressif ESP32-C, standalone SysTick | API present; backend release pending (returns false) |
+The following source files now contain TimerPowerOff functions.
+**Compiling and testing these changes on hardware remains necessary.**
 
-These are **source-implemented** statuses, not hardware validation. They
-require the normal Debug/Release compile matrix and target testing before
-sign-off. Existing CoreClockTest results do not validate a new PowerOff
-path. Do not weaken exclusive hardware ownership merely to make an
-example's use of two independent timer handles succeed.
+| MCU | Hardware timer | TimerPowerOff implementation |
+| --- | --- | --- |
+| Nordic nRF52, nRF53, nRF91 | RTC, TIMER | Stop, clear interrupts/compares, disable held clocks, clear timer assignment |
+| Nordic nRF54L | GRTC compare groups and TIMER | Free selected compare channels; preserve shared SYSCOUNTER |
+| Microchip SAMD | RTC, TC, TCC, SysTick wrapper | Use existing timer shutdown functions |
+| Microchip SAM4L | AST, TC | Stop timer, disable triggers and IRQs, free device |
+| Microchip SAM4E | TC | Stop timer, disable interrupts and peripheral clock, free device |
+| NXP LPC11xx, LPC17xx, LPC546xx | Hardware TIMER/CTIMER | Stop, disable IRQs, disable timer clock, free device |
+| ST STM32 | TIM, LPTIM | Use existing TIM/LPTIM shutdown functions |
+| Renesas RA4M1 | AGT, GPT | Stop, unregister interrupts, stop unused GPT module clocks, free device |
+| Renesas RE01 | AGT, TMR, GPT | Stop, unregister interrupts, stop unused module clocks, free device |
+| Renesas R9A02G021 | Machine timer, TAU | Stop, unregister interrupt handlers; stop TAU clock when no channel uses it |
+| Espressif ESP32-C | Timer Group | Stop, disconnect CPU interrupt, disable timer clock, free device |
+| ARM SysTick-only timer | SysTick | Stop SysTick, clear pending interrupt and free timer structure |
 
-## nRF9160 validation to add
+The generic CoreClockTest calls the same Timer API on every MCU. Its
+PowerOff checks include initializing the first HF timer through a
+second structure after PowerOff, shutting it down while running and
+rejecting an additional PowerOff.
 
-1. Initialize RTC0, disable it, PowerOff, then initialize it using a
-   different TimerDev_t and verify timer callbacks and LFCLK ownership.
-2. Repeat for TIMER0 and HFXO ownership.
-3. PowerOff an active timer and verify no callbacks after shutdown,
-   then reinitialize and verify compare triggers again.
-4. PowerOff must refuse live PEI bindings. A second PowerOff must
-   return false. Changing a timer handle must not lose other timers.
-5. Verify sDelay and SystemSleep retain correct clock timing after
-   repeated timer PowerOff/Init cycles.
+## Required tests
 
-For nRF91, modem-active timer ownership is a separate validation
-boundary; a bare-metal pass is not proof of modem interaction safety.
+1. Compile the affected MCU libraries in Debug and Release.
+2. Run the generic CoreClockTest on each available development board.
+3. Verify that TimerDisable and TimerEnable retain the timer's count
+   and interrupt settings.
+4. Verify that TimerPowerOff stops callbacks, releases the peripheral
+   clock if appropriate and allows another timer structure to use it.
+5. Verify that powering off one timer does not stop another timer or
+   a peripheral sharing its clock.
+6. For Nordic, verify LFRC/LFXO timing, HF oscillator requests, sDelay
+   and PEI connections separately.
+7. On modem-equipped nRF91 MCUs, verify the application and modem
+   peripheral usage before using timer PowerOff in modem-active code.
+
+A successful source check or prior CoreClockTest run does not replace
+a hardware test of TimerPowerOff.

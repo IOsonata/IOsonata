@@ -44,6 +44,7 @@ static void LpcTimerArm(LpcTimer_t * const pDev, int TrigNo);
 static void LpcTimerResetCounter(LpcTimer_t * const pDev);
 
 static void LpcTimerDisable(TimerDev_t * const pTimer);
+static bool LpcTimerPowerOff(TimerDev_t * const pTimer);
 static bool LpcTimerEnable(TimerDev_t * const pTimer);
 static void LpcTimerReset(TimerDev_t * const pTimer);
 static uint64_t LpcTimerGetTickCount(TimerDev_t * const pTimer);
@@ -266,6 +267,39 @@ static void LpcTimerDisable(TimerDev_t * const pTimer)
 	NVIC_DisableIRQ(dev->IrqNo);
 
 	EnableInterrupt(state);
+}
+
+// Stop CTIMER, clear its interrupts and allow another timer object
+// to initialize the same hardware. Disable alone retains the device.
+static bool LpcTimerPowerOff(TimerDev_t * const pTimer)
+{
+	LpcTimer_t *dev;
+	uint32_t state;
+	int i;
+
+	dev = LpcTimerData(pTimer);
+	if (dev == NULL)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	dev->pReg->TCR = 0U;
+	dev->pReg->MCR = 0U;
+	dev->pReg->CCR = 0U;
+	dev->pReg->IR = 0xFFFFFFFFUL;
+	NVIC_DisableIRQ(dev->IrqNo);
+	NVIC_ClearPendingIRQ(dev->IrqNo);
+	for (i = 0; i < LPC_TIMER_TRIG_MAX; i++)
+	{
+		dev->Trig[i].bActive = false;
+	}
+	dev->pTimer = NULL;
+	LpcTimerClockDisable(dev);
+	pTimer->PowerOff = NULL;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	EnableInterrupt(state);
+	return true;
 }
 
 static bool LpcTimerEnable(TimerDev_t * const pTimer)
@@ -538,7 +572,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
-	pTimer->PowerOff = nullptr;
+	pTimer->PowerOff = LpcTimerPowerOff;
 	pTimer->Disable = LpcTimerDisable;
 	pTimer->Enable = LpcTimerEnable;
 	pTimer->Reset = LpcTimerReset;
