@@ -162,7 +162,7 @@ The IOcomposer Debug and Release managed builds passed for both targets.
 Each configuration built the target library, CoreClockTest and CorePowerTest.
 Both tests linked the matching target library from lib/ioc/Debug or
 lib/ioc/Release. The UART logs do not identify the build configuration.
-System OFF with the modem active still requires hardware validation.
+The Thingy:91 X also passed the powered-modem System OFF test described below.
 
 ## LFRC rate compensation implementation
 
@@ -319,3 +319,9 @@ and checks the retained pattern.
 On nRF91x1, SystemPowerOff returns while POWERSTATUS reports that the
 modem domain is powered. Firmware using the modem must complete modem
 shutdown and any EasyDMA transfers before requesting System OFF.
+
+LteModemInfo verified this on the Thingy:91 X (nRF9151 LACA A1A) with
+modem firmware 2.0.2 and modem library 3.5.0-cellular-4ac4cf80b9cc.
+AT+CFUN? reported 0. With the modem power status bit set, SystemPowerOff
+returned and the modem answered the subsequent AT command. This run
+verified refusal in functional mode 0.
