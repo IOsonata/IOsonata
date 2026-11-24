@@ -60,6 +60,16 @@ Prior validation of three successive System OFF GPIO wakes on nRF91x1
 applies to that target's earlier bare-metal power demo, not to the
 updated nRF9160 CorePowerTest or to modem-active shutdown.
 
+## nRF9160 delay divisors (2026-11-23)
+
+CoreClockTest on the nRF9160 at 64 MHz measured `msDelay(100)` at
+100,010 us and `nsDelay(100 ms)` at 100,011 us with the 16,000,000 and
+3,000,000 divisors, 3,999,600 us loops/s and 21,330,986 ns loops/s.
+`system_nrf91.c` now uses the measured divisors 16,001,600 and 3,000,330.
+The file is shared by the nRF9160 and nRF91x1 libraries; the values come
+from one nRF9160 run and are not yet measured on an nRF91x1. Rerun
+CoreClockTest to confirm both delays at 100,000 us.
+
 ## Remaining validation
 
 1. Run source tests: `python3 tests/nordic/check_nrf91_power_clock_014.py`.

@@ -101,5 +101,14 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertIn("IOPINRES_PULLDOWN : IOPINRES_PULLUP", example)
 		self.assertIn("SystemPowerOff();", example)
 
+	def test_nrf91_measured_delay_divisors(self):
+		# Measured on nRF9160 hardware with CoreClockTest at 64 MHz.
+		src = (ROOT / "ARM/Nordic/nRF91/src/system_nrf91.c").read_text(encoding="utf-8")
+		self.assertIn("16001600UL, 3000330UL", src)
+		self.assertNotIn("16000000UL, 3000000UL", src)
+		self.assertEqual(64000000 * 1000000 // 16001600, 3999600)
+		self.assertEqual(64000000 * 1000000 // 3000330, 21330986)
+
+
 if __name__ == "__main__":
 	unittest.main()
