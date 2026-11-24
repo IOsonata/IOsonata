@@ -53,6 +53,7 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "syslog.h"
 #include "coredev/timer.h"
+#include "coredev/system_core_clock.h"
 #include "modem_nrf91.h"
 
 #include "board.h"
@@ -152,6 +153,24 @@ static void LteModemInfoAt(const char *pCmd)
 	}
 }
 
+#if defined(NRF9120_XXAA) && defined(LTE_MODEM_POWER_OFF_TEST)
+static void LteModemPowerOffTest(void)
+{
+	int res;
+
+	if ((NRF_POWER_NS->POWERSTATUS & POWER_POWERSTATUS_LTEMODEM_Msk) == 0U)
+	{
+		SysLogPrintf(SysLogGet(), "Modem power domain off, System OFF test skipped\r\n");
+		return;
+	}
+
+	SystemPowerOff();
+	res = nrf_modem_at_cmd(s_Resp, sizeof(s_Resp), "AT");
+	SysLogPrintf(SysLogGet(), "System OFF refused with modem powered, modem AT response: %s\r\n",
+		res == 0 ? "PASS" : "FAIL");
+}
+#endif
+
 int main()
 {
 	s_Uart.Init(s_UartCfg);
@@ -179,6 +198,9 @@ int main()
 		LteModemInfoAt("AT+CGSN");			// IMEI
 		LteModemInfoAt("AT%HWVERSION");		// Hardware version
 		LteModemInfoAt("AT+CFUN?");			// Functional mode
+#if defined(NRF9120_XXAA) && defined(LTE_MODEM_POWER_OFF_TEST)
+		LteModemPowerOffTest();
+#endif
 	}
 
 	bool faultshown = false;

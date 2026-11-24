@@ -39,13 +39,23 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
-// Console, UART0 to the interface MCU (VCOM0)
+// Define THINGY91X for its USB bridge. The DK uses VCOM0.
+#if defined(THINGY91X)
+#define UART_RX_PIN			0
+#define UART_TX_PIN			1
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE			115200
+#endif
+#else
+#define UART_RX_PIN			26
+#define UART_TX_PIN			27
+#endif
+
+// Define LTE_MODEM_POWER_OFF_TEST to check System OFF with the modem powered.
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
-#define UART_RX_PIN			26
 #define UART_RX_PINOP		1
 #define UART_TX_PORT		0
-#define UART_TX_PIN			27
 #define UART_TX_PINOP		1
 
 // Timer of the modem waits. The Bluetooth host over the HCI link has no
