@@ -79,6 +79,7 @@ typedef struct {
 
 // One SysTick per Cortex-M core
 static SysTick_TimerData_t s_SysTickData;
+static bool s_SysTickEnabled;
 
 // Tick count, interrupts masked. A wrap found in COUNTFLAG, which the read
 // clears, is added to Rollover here.
@@ -164,6 +165,7 @@ static bool SystickEnable(TimerDev_t * const pTimer)
 	{
 		return false;
 	}
+	s_SysTickEnabled = true;
 	SYSTICK_REG->CTRL = SYSTICK_CTRL_RUNNING;
 
 	return true;
@@ -175,6 +177,7 @@ static void SystickDisable(TimerDev_t * const pTimer)
 	{
 		return;
 	}
+	s_SysTickEnabled = false;
 	SYSTICK_REG->CTRL = SYSTICK_CTRL_STOPPED;
 	SYSTICK_ICSR = SCB_ICSR_PENDSTCLR;
 }
@@ -182,6 +185,11 @@ static void SystickDisable(TimerDev_t * const pTimer)
 // The tick count restarts from 0 and the trigger restarts its period
 static void SystickReset(TimerDev_t * const pTimer)
 {
+	if (s_SysTickData.pTimer != pTimer)
+	{
+		return;
+	}
+
 	SysTick_TimerData_t &d = s_SysTickData;
 	uint32_t primask = __get_PRIMASK();
 
@@ -196,6 +204,11 @@ static void SystickReset(TimerDev_t * const pTimer)
 // trigger keeps its number of cycles.
 static uint32_t SystickSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
+	if (s_SysTickData.pTimer != pTimer)
+	{
+		return 0;
+	}
+
 	(void)Freq;
 
 	uint32_t clk = SystemCoreClockGet();
@@ -210,6 +223,11 @@ static uint32_t SystickSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
 static uint64_t SystickGetTickCount(TimerDev_t * const pTimer)
 {
+	if (s_SysTickData.pTimer != pTimer)
+	{
+		return 0;
+	}
+
 	uint32_t primask = __get_PRIMASK();
 
 	__disable_irq();
@@ -221,16 +239,12 @@ static uint64_t SystickGetTickCount(TimerDev_t * const pTimer)
 
 static int SystickGetMaxTrigger(TimerDev_t * const pTimer)
 {
-	(void)pTimer;
-
-	return SYSTICK_TRIG_MAXCNT;
+	return s_SysTickData.pTimer == pTimer ? SYSTICK_TRIG_MAXCNT : 0;
 }
 
 static int SystickFindAvailTrig(TimerDev_t * const pTimer)
 {
-	(void)pTimer;
-
-	return s_SysTickData.Trigger[0].nsPeriod == 0 ? 0 : -1;
+	return s_SysTickData.pTimer == pTimer && s_SysTickData.Trigger[0].nsPeriod == 0 ? 0 : -1;
 }
 
 // TrigNo 0 only. The period starts when the counter restarts with it.
@@ -242,7 +256,7 @@ static uint64_t SystickEnableTrigger(TimerDev_t * const pTimer, int TrigNo,
 	SysTick_TimerData_t &d = s_SysTickData;
 	TimerTrig_t &trig = d.Trigger[0];
 
-	if (TrigNo != 0 || nsPeriod == 0 ||
+	if (d.pTimer != pTimer || TrigNo != 0 || nsPeriod == 0 ||
 		(Type != TIMER_TRIG_TYPE_SINGLE && Type != TIMER_TRIG_TYPE_CONTINUOUS))
 	{
 		return 0;
@@ -306,7 +320,7 @@ static void SystickDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	SysTick_TimerData_t &d = s_SysTickData;
 	TimerTrig_t &trig = d.Trigger[0];
 
-	if (TrigNo != 0)
+	if (d.pTimer != pTimer || TrigNo != 0)
 	{
 		return;
 	}
@@ -352,13 +366,14 @@ static bool SystickPowerOff(TimerDev_t * const pTimer)
 		__set_PRIMASK(state);
 		return false;
 	}
+	s_SysTickEnabled = false;
 	SYSTICK_REG->CTRL = 0U;
 	SYSTICK_REG->LOAD = 0U;
 	SYSTICK_REG->VAL = 0U;
 	SYSTICK_ICSR = SCB_ICSR_PENDSTCLR;
 	d->pTimer = nullptr;
 	d->Trigger[0] = {};
-	pTimer->PowerOff = SystickPowerOff;
+	pTimer->PowerOff = nullptr;
 	pTimer->DevNo = -1;
 	pTimer->Freq = 0U;
 	__set_PRIMASK(state);
@@ -368,6 +383,11 @@ static bool SystickPowerOff(TimerDev_t * const pTimer)
 extern "C" bool SysTickTimerPowerOff(TimerDev_t * const pTimer)
 {
 	return SystickPowerOff(pTimer);
+}
+
+bool SysTickTimerEnabled(void)
+{
+	return s_SysTickEnabled;
 }
 
 bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
@@ -385,11 +405,7 @@ bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	}
 
 	SysTick_TimerData_t &d = s_SysTickData;
-	// A disabled SysTick remains assigned to its timer until PowerOff.
-	// Do not overwrite another timer's callback or an active system tick.
-	if ((d.pTimer != nullptr && d.pTimer != pTimer) ||
-		(d.pTimer == nullptr &&
-		(SYSTICK_REG->CTRL & SYSTICK_CTRL_ENABLE) != 0U))
+	if (s_SysTickEnabled || (d.pTimer == nullptr && (SYSTICK_REG->CTRL & SYSTICK_CTRL_ENABLE) != 0U))
 	{
 		return false;
 	}
@@ -408,7 +424,7 @@ bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->pObj = &d;
 
-	pTimer->PowerOff = nullptr;
+	pTimer->PowerOff = SystickPowerOff;
 
 	pTimer->Disable = SystickDisable;
 	pTimer->Enable = SystickEnable;

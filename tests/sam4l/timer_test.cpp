@@ -169,6 +169,12 @@ int main() {
 		assert(!TimerInit(&other,&cfg));
 		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OWNER);
 		assert(!TimerInit(&timers[dev],&cfg));
+		timers[dev].Disable(&timers[dev]);
+		assert(TimerInit(&other, &cfg));
+		assert(!timers[dev].Enable(&timers[dev]));
+		assert(other.PowerOff(&other));
+		assert(!other.Enable(&other));
+		assert(TimerInit(&timers[dev], &cfg));
 		assert(timers[dev].Freq==(dev?375000u:1024u));
 		assert(timers[dev].GetMaxTrigger(&timers[dev])==(dev?3:1));
 		assert(!timers[dev].EnableExtTrigger(&timers[dev],0,TIMER_EXTTRIG_SENSE_TOGGLE));

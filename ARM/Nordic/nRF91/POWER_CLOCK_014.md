@@ -303,11 +303,11 @@ that the first HF timer can be powered off and initialized again
 with the same TimerDev_t. The source file does not contain any
 nRF91-specific code.
 
-The earlier nRF9160 CoreClockTest and CorePowerTest runs predate
-TimerPowerOff and cannot validate it. Rebuild the nRF9160 library
-and repeat the hardware tests, including LFRC/LFXO timer timing,
-HF/LF shared clock requests, sDelay, PowerOff followed by Init
-on the same timer structure, and rejection of repeated PowerOff.
+Both runs in the November 23 nRF9160 CoreClockTest log completed with
+zero failures at 64 MHz. Both RTCs and all three HF timers passed the
+timing and trigger tests. PowerOff on a disabled timer, Init after
+PowerOff, PowerOff on a running timer, and rejection of a repeated
+PowerOff passed in both runs. The log does not identify the build revision.
 
 See docs/architecture/timer-power-off.md for the other MCU timer
 drivers and the remaining hardware tests.

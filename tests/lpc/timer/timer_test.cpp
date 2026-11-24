@@ -191,6 +191,8 @@ int main()
 			assert(s_NvicPrio[g_LpcTimer[d].IrqNo] == expected);
 			t.Disable(&t);
 			assert(t.Enable(&t));
+			assert(!TimerInit(&t, &cfg));
+			t.Disable(&t);
 			assert(s_NvicPrio[g_LpcTimer[d].IrqNo] == expected);
 		}
 		cfg.IntPrio = 3;

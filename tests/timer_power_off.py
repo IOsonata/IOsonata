@@ -113,7 +113,9 @@ class TimerPowerOffChecks(unittest.TestCase):
 		self.assertIn("pTimer->PowerOff = SystickPowerOff;", src)
 		self.assertIn("SYSTICK_ICSR = SCB_ICSR_PENDSTCLR;", src)
 		self.assertIn("d->pTimer = nullptr;", src)
-		self.assertIn("d.pTimer != nullptr && d.pTimer != pTimer", src)
+		init = src[src.index("bool SysTickTimerInit("):]
+		self.assertIn("pTimer->PowerOff = SystickPowerOff;", init)
+		self.assertIn("if (s_SysTickEnabled ||", init)
 		self.assertIn("SysTickTimerPowerOff(", self.read("ARM/include/timer_systick.h"))
 		self.assertIn("return SystickPowerOff(pTimer);", src)
 		self.assertIn("SysTickTimerPowerOff(pTimer)",

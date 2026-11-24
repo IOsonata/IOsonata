@@ -164,8 +164,20 @@ static void R9a02MtimerIRQHandler(int IntNo, void *pCtx)
 	}
 }
 
+static bool R9a02TimerAssigned(TimerDev_t *pTimer)
+{
+	return pTimer != NULL && pTimer->DevNo >= 0 &&
+		pTimer->DevNo < (int)R9A02_TIMER_DEV_CNT &&
+		s_R9a02TimerDev[pTimer->DevNo].pTimer == pTimer;
+}
+
 static void R9a02MtimerDisable(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return;
+	}
+
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
 	uintptr_t state = DisableInterrupt();
 
@@ -208,6 +220,11 @@ static bool R9a02MtimerPowerOff(TimerDev_t * const pTimer)
 
 static bool R9a02MtimerEnable(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return false;
+	}
+
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
 	uintptr_t state = DisableInterrupt();
 
@@ -221,6 +238,11 @@ static bool R9a02MtimerEnable(TimerDev_t * const pTimer)
 
 static void R9a02MtimerReset(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return;
+	}
+
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
 	uintptr_t state = DisableInterrupt();
 	uint64_t now = R9a02MtimeRead();
@@ -237,12 +259,22 @@ static void R9a02MtimerReset(TimerDev_t * const pTimer)
 
 static uint64_t R9a02MtimerGetTickCount(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return 0U;
+	}
+
 	return R9a02MtimeRead() - s_R9a02TimerDev[pTimer->DevNo].Base;
 }
 
 // MTCLK is the LOCO, the only frequency
 static uint32_t R9a02MtimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return 0U;
+	}
+
 	pTimer->Freq = R9A02_LOCO_FREQ;
 	pTimer->nsPeriod = (1000000000ULL + R9A02_LOCO_FREQ / 2U) / R9A02_LOCO_FREQ;
 	R9a02MtimerReset(pTimer);
@@ -252,16 +284,31 @@ static uint32_t R9a02MtimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq
 
 static int R9a02TimerGetMaxTrigger(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return 0;
+	}
+
 	return 1;
 }
 
 static int R9a02TimerFindAvailTrigger(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return -1;
+	}
+
 	return s_R9a02TimerDev[pTimer->DevNo].bTrigEn ? -1 : 0;
 }
 
 static void R9a02MtimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return;
+	}
+
 	if (TrigNo != 0)
 	{
 		return;
@@ -280,6 +327,11 @@ static uint64_t R9a02MtimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, 
 										 TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 										 void * const pContext)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return 0U;
+	}
+
 	if (TrigNo != 0 || (Type != TIMER_TRIG_TYPE_SINGLE && Type != TIMER_TRIG_TYPE_CONTINUOUS))
 	{
 		return 0;
@@ -321,11 +373,21 @@ static uint64_t R9a02MtimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, 
 
 static void R9a02TimerDisableExtTrigger(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return;
+	}
+
 }
 
 // No external trigger
 static bool R9a02TimerEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return false;
+	}
+
 	return false;
 }
 
@@ -435,6 +497,11 @@ static void R9a02TauIRQHandler(int IntNo, void *pCtx)
 
 static void R9a02TauDisable(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return;
+	}
+
 	uintptr_t state = DisableInterrupt();
 
 	R9a02TauStop(&s_R9a02TimerDev[pTimer->DevNo]);
@@ -484,7 +551,7 @@ static bool R9a02TauPowerOff(TimerDev_t * const pTimer)
 			inUse = true;
 		}
 	}
-	if (!inUse)
+	if (!inUse && (R9A02_TAU->TE & ~(1U << chan)) == 0U)
 	{
 		R9a02ModuleStop(R9A02_MSTPCR_D, R9A02_MSTPCRD_TAU);
 	}
@@ -497,6 +564,11 @@ static bool R9a02TauPowerOff(TimerDev_t * const pTimer)
 
 static bool R9a02TauEnable(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return false;
+	}
+
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
 	uintptr_t state = DisableInterrupt();
 
@@ -512,6 +584,11 @@ static bool R9a02TauEnable(TimerDev_t * const pTimer)
 
 static void R9a02TauReset(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return;
+	}
+
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
 	uintptr_t state = DisableInterrupt();
 	bool running = dev->bRunning;
@@ -529,6 +606,11 @@ static void R9a02TauReset(TimerDev_t * const pTimer)
 
 static uint64_t R9a02TauGetTickCount(TimerDev_t * const pTimer)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return 0U;
+	}
+
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
 	uintptr_t state = DisableInterrupt();
 	uint64_t cnt = dev->bRunning ? R9a02TauCount(dev) : dev->Base;
@@ -567,7 +649,8 @@ static uint32_t R9a02TauFindClock(uint32_t Chan, uint32_t Freq, uint16_t *pCks, 
 
 		for (uint32_t k = 0; k < R9A02_TAU_CHAN_COUNT; k++)
 		{
-			if (k != Chan && (R9A02_TAU->TE & (1U << k)) && (R9A02_TAU->TMR[k] & R9A02_TAU_TMR_CKS_Msk) == cks)
+			if (k != Chan && (s_R9a02TimerDev[R9A02_TIMER_TAU_DEVNO(k)].pTimer != NULL ||
+				(R9A02_TAU->TE & (1U << k))) && (R9A02_TAU->TMR[k] & R9A02_TAU_TMR_CKS_Msk) == cks)
 			{
 				used = true;
 			}
@@ -613,6 +696,11 @@ static void R9a02TauSetClock(uint32_t Chan, uint16_t Cks, uint32_t Prs)
 
 static uint32_t R9a02TauSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return 0U;
+	}
+
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
 	uint16_t cks = R9A02_TAU_TMR_CKS_CK00;
 	uint32_t prs = 0;
@@ -664,6 +752,11 @@ static uint32_t R9a02TauSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
 static void R9a02TauDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return;
+	}
+
 	R9a02TimerDev_t *dev = &s_R9a02TimerDev[pTimer->DevNo];
 
 	if (TrigNo != 0 || !dev->bTrigEn)
@@ -688,6 +781,11 @@ static uint64_t R9a02TauEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uin
 									  TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t const Handler,
 									  void * const pContext)
 {
+	if (!R9a02TimerAssigned(pTimer))
+	{
+		return 0U;
+	}
+
 	if (TrigNo != 0 || (Type != TIMER_TRIG_TYPE_SINGLE && Type != TIMER_TRIG_TYPE_CONTINUOUS))
 	{
 		return 0;
@@ -891,26 +989,41 @@ static bool R9a02TauInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCf
 
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
+	uintptr_t state;
+	bool initialized;
+	int i;
+
 	if (pTimer == NULL || pCfg == NULL || pCfg->DevNo < 0 || pCfg->DevNo >= (int)R9A02_TIMER_DEV_CNT ||
 		pCfg->bTickInt || pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)
 	{
 		return false;
 	}
 
-	// One timer object per device
-	TimerDev_t *owner = s_R9a02TimerDev[pCfg->DevNo].pTimer;
-
-	if (owner != NULL && owner != pTimer)
+	state = DisableInterrupt();
+	if (s_R9a02TimerDev[pCfg->DevNo].bRunning)
 	{
+		EnableInterrupt(state);
 		return false;
 	}
-
+	for (i = 0; i < (int)R9A02_TIMER_DEV_CNT; i++)
+	{
+		if (i != pCfg->DevNo && s_R9a02TimerDev[i].pTimer == pTimer &&
+			(s_R9a02TimerDev[i].bRunning || !TimerPowerOff(pTimer)))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+	}
 	if (pCfg->DevNo == R9A02_TIMER_MTIMER_DEVNO)
 	{
-		return R9a02MtimerInit(pTimer, pCfg);
+		initialized = R9a02MtimerInit(pTimer, pCfg);
 	}
-
-	return R9a02TauInit(pTimer, pCfg);
+	else
+	{
+		initialized = R9a02TauInit(pTimer, pCfg);
+	}
+	EnableInterrupt(state);
+	return initialized;
 }
 
 int TimerGetLowFreqDevCount(void)

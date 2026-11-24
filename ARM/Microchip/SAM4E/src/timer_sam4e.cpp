@@ -572,13 +572,13 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pData = &s_Timer[pCfg->DevNo];
 	for (i = 0; i < SAM4E_TIMER_COUNT; i++)
 	{
-		if (s_Timer[i].pTimer == pTimer)
+		if (i != pCfg->DevNo && s_Timer[i].pTimer == pTimer)
 		{
 			EnableInterrupt(state);
 			return false;
 		}
 	}
-	if (pData->pTimer != NULL)
+	if (pData->Running || (pData->pTimer != NULL && !Sam4ePowerOff(pData->pTimer)))
 	{
 		EnableInterrupt(state);
 		return false;

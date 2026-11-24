@@ -549,7 +549,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	for (int i = 0; i < g_LpcTimerCount; i++)
 	{
 		if ((i != pCfg->DevNo && g_LpcTimer[i].pTimer == pTimer) ||
-			(i == pCfg->DevNo && g_LpcTimer[i].pTimer != NULL && g_LpcTimer[i].pTimer != pTimer))
+			(i == pCfg->DevNo && dev->pTimer != NULL && (dev->pReg->TCR & LPC_TIMER_ENABLE)))
 		{
 			EnableInterrupt(state);
 

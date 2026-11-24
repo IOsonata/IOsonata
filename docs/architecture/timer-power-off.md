@@ -61,7 +61,7 @@ configure a new oscillator or change the operation of TimerDisable.
 ## MCU timer drivers
 
 The following source files now contain TimerPowerOff functions.
-**Compiling and testing these changes on hardware remains necessary.**
+The table lists drivers. Board results are recorded separately below.
 
 | MCU | Hardware timer | TimerPowerOff implementation |
 | --- | --- | --- |
@@ -82,6 +82,18 @@ The generic CoreClockTest calls the same Timer API on every MCU. Its
 PowerOff checks include initializing the first HF timer again with the
 same structure after PowerOff, shutting it down while running and
 rejecting an additional PowerOff.
+
+## Validation
+
+- The supplied nRF9160 CoreClockTest log contains two runs at 64 MHz.
+  Both finished with zero failures across RTC0/1 and TIMER0/1/2.
+- Host tests exercised the Microchip, STM32, LPC, Renesas, ESP32-C and
+  standalone SysTick drivers. Host register models can check timer
+  assignment, clock-gate writes and restart behavior. They cannot
+  measure board current or oscillator startup.
+- The RP2040 and initial nRF7120x managed libraries have no generic
+  hardware timer driver linked. The retired nRF54H20 projects are
+  outside the supported target set.
 
 ## Required tests
 

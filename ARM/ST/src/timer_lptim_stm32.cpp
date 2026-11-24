@@ -888,6 +888,13 @@ static uint32_t StLptClock(TIMER_CLKSRC ClkSrc, uint32_t *pSel)
 	}
 }
 
+bool Stm32LptimRunning(int DevNo)
+{
+	const auto &info = s_StLptInfo[DevNo];
+
+	return (*info.pEnReg & info.Mask) && (info.pReg->CR & LPTIM_CR_ENABLE);
+}
+
 /**
  * @brief   LPTIM initialization, called by TimerInit.
  *
@@ -910,7 +917,7 @@ bool Stm32LptimInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	// Vector replaced by an application handler, or running without this
 	// driver: used by other code
 	if (Stm32TimerVectorOwned(info->IrqNo) == false ||
-		(dev->pTimer == nullptr && (*info->pEnReg & info->Mask) && (info->pReg->CR & LPTIM_CR_ENABLE)))
+		Stm32LptimRunning(pCfg->DevNo))
 	{
 		return false;
 	}

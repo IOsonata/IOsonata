@@ -186,7 +186,10 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			return false;
 		}
 	}
-	if (dev->pTimer && dev->pTimer != pTimer)
+	if (dev->pTimer != NULL &&
+		((dev->DevNo < RE01_TIMER_AGT_CNT && (dev->pAgtReg->AGTCR & AGT0_AGTCR_TSTART_Msk)) ||
+		(dev->DevNo == RE01_TIMER_AGT_CNT && TMR1->TCCR != 0U) ||
+		(dev->DevNo >= RE01_TIMER_GPT_DEVNO && (dev->pGptReg->GTCR & GPT320_GTCR_CST_Msk))))
 	{
 		EnableInterrupt(state);
 		return false;

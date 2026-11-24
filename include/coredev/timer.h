@@ -271,7 +271,8 @@ extern "C" {
 /**
  * @brief   Timer initialization.
  *
- * This is a required implementation specific to each architecture.
+ * Init starts a new or disabled timer. Disable a running timer before
+ * calling Init again to change its configuration.
  *
  * @param	pTimer	: Pointer to Timer device private data (timer handle)
  * @param	pCfg	: Pointer timer configuration data.
@@ -556,9 +557,18 @@ public:
      */
     virtual bool Init(const TimerCfg_t &Cfg)
 	{
+		auto getTaskEndpoint = vTimer.GetTaskEndpoint;
+		auto executeTask = vTimer.ExecuteTask;
+
 		vTimer.GetTaskEndpoint = NULL;
 		vTimer.ExecuteTask = NULL;
-		return TimerInit(&vTimer, &Cfg);
+		if (!TimerInit(&vTimer, &Cfg))
+		{
+			vTimer.GetTaskEndpoint = getTaskEndpoint;
+			vTimer.ExecuteTask = executeTask;
+			return false;
+		}
+		return true;
 	}
 
     /**

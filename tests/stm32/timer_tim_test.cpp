@@ -253,6 +253,8 @@ extern "C" int Stm32LptimFind(TimerDev_t * const pTimer)
 	return -1;
 }
 
+extern "C" bool Stm32LptimRunning(int) { return false; }
+
 extern "C" void Stm32LptimRelease(int DevNo)
 {
 	s_LptRelease = DevNo;
@@ -1052,18 +1054,24 @@ static void TestBinding(void)
 	CHECK(t1.EnableTrigger(&t1, 0, 1000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
 	CHECK(Stm32TimFind(&t1) == DevNo(0));
 
+	CHECK(!TimerInit(&t1, &cfg));
+	t1.Disable(&t1);
 	// Init again, same TimerDev_t, same timer
 	CHECK(TimerInit(&t1, &cfg));
 	CHECK(t1.FindAvailTrigger(&t1) == 0);
 
 	// Moved: the first timer is stopped and released
 	cfg.DevNo = DevNo(1);
+	CHECK(!TimerInit(&t1, &cfg));
+	t1.Disable(&t1);
 	CHECK(TimerInit(&t1, &cfg));
 	CHECK(Stm32TimFind(&t1) == DevNo(1) && t1.DevNo == DevNo(1));
 	CHECK(s_StTimDev[0].pTimer == nullptr);
 	CHECK((Reg(0).CR1 & TIM_CR1_CEN) == 0 && Reg(0).DIER == 0);
 	CHECK((*s_StTimInfo[0].pEnReg & s_StTimInfo[0].Mask) == 0);
 
+	CHECK(!TimerInit(&t2, &cfg));
+	t1.Disable(&t1);
 	// Taken by another TimerDev_t: the first one does nothing
 	CHECK(TimerInit(&t2, &cfg));
 	CHECK(Stm32TimFind(&t1) == -1 && Stm32TimFind(&t2) == DevNo(1));
@@ -1080,6 +1088,7 @@ static void TestBinding(void)
 	// Moved to a low power timer and back
 	cfg.DevNo = 0;
 	s_LptRelease = -1;
+	t2.Disable(&t2);
 	CHECK(TimerInit(&t2, &cfg));
 	CHECK(s_StTimDev[1].pTimer == nullptr && (Reg(1).CR1 & TIM_CR1_CEN) == 0);
 	cfg.DevNo = DevNo(1);

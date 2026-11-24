@@ -107,6 +107,7 @@ extern "C" {
  */
 bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 // Stop SysTick and remove its assigned timer structure.
+bool SysTickTimerEnabled(void);
 bool SysTickTimerPowerOff(TimerDev_t * const pTimer);
 
 #ifdef __cplusplus

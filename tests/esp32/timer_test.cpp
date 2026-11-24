@@ -196,6 +196,12 @@ int main()
 		cfg.DevNo = dev;
 		assert(TimerInit(&timers[dev], &cfg));
 		assert(!TimerInit(&duplicate, &cfg));
+		TimerDisable(&timers[dev]);
+		assert(TimerInit(&duplicate, &cfg));
+		assert(!TimerEnable(&timers[dev]));
+		assert(TimerPowerOff(&duplicate));
+		assert(!TimerEnable(&duplicate));
+		assert(TimerInit(&timers[dev], &cfg));
 		assert(timers[dev].Freq == 1000000);
 		assert(timers[dev].ExecuteTask == nullptr);
 		assert(s_Regs[ESP32_INTMTX_BASE + s_TimerSources[dev] * 4] ==

@@ -24,7 +24,7 @@ class Nrf54lCorePort(unittest.TestCase):
 
     def test_grtc_explicit_ownership_and_temporary_cleanup(self):
         source = self.grtc
-        self.assertIn("s_nRfxGrtcData[devno].pTimer != pTimer", source)
+        self.assertIn("if (s_bGrtcEnabled[devno])", source)
         self.assertIn("candidate != devno && s_nRfxGrtcData[candidate].pTimer == pTimer",
                       " ".join(source.split()))
         self.assertIn("if (s_bGrtcEnabled[candidate])", source)

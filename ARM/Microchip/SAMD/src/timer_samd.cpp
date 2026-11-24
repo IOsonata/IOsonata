@@ -164,7 +164,7 @@ static const SamdTimerHw_t s_SamdTimerHw[SAMD_TIMER_MAXCNT] = {
 
 SamdTimerData_t g_SamdTimerData[SAMD_TIMER_MAXCNT];
 static TimerDev_t *s_SamdSysTickOwner;
-static void (*s_SamdReleaseHardware)(TimerDev_t *pTimer, int DevNo);
+static bool (*s_SamdReleaseHardware)(TimerDev_t *pTimer, int DevNo);
 
 static bool SamdTimerTickOpen(SamdTimerData_t *pData, int IntPrio);
 static void SamdTimerTickClose(SamdTimerData_t *pData);
@@ -180,7 +180,7 @@ static SamdTimerTrig_t s_SamdTimerTrig[SAMD_TIMER_TRIG_CNT];
 // Standby, so report them before the system suspends other peripherals.
 extern "C" bool SamdTimerAllowStandby(void)
 {
-	if (s_SamdSysTickOwner != NULL)
+	if (s_SamdSysTickOwner != NULL && SysTickTimerEnabled())
 	{
 		return false;
 	}
@@ -1221,8 +1221,16 @@ static bool SamdTimerNoExtEnable(TimerDev_t * const pTimer, int TrigDevNo, TIMER
 }
 
 // Release this handle's previous timer, or the selected hardware timer.
-static void SamdTimerReleaseBinding(TimerDev_t *pTimer, int DevNo)
+static bool SamdTimerReleaseBinding(TimerDev_t *pTimer, int DevNo)
 {
+	for (int i = 0; i < SAMD_TIMER_MAXCNT; i++)
+	{
+		if ((i == DevNo || g_SamdTimerData[i].pTimer == pTimer) &&
+			g_SamdTimerData[i].bRunning)
+		{
+			return false;
+		}
+	}
 	for (int i = 0; i < SAMD_TIMER_MAXCNT; i++)
 	{
 		if (g_SamdTimerData[i].pTimer == pTimer || (i == DevNo && g_SamdTimerData[i].pTimer != NULL))
@@ -1230,13 +1238,16 @@ static void SamdTimerReleaseBinding(TimerDev_t *pTimer, int DevNo)
 			SamdTimerRelease(&g_SamdTimerData[i]);
 		}
 	}
+	return true;
 }
 
-// PowerOff is a final release, not a clock-gated Disable. The SAMD
-// driver already has a shared hardware-release routine for RTC/TC/TCC.
+// Gate the peripheral clock after stopping the RTC, TC or TCC.
 static bool SamdTimerPowerOff(TimerDev_t * const pTimer)
 {
 	SamdTimerData_t *pData;
+	uint32_t state;
+	uint32_t sharedMask;
+	int i;
 
 	if (pTimer == NULL)
 	{
@@ -1253,11 +1264,36 @@ static bool SamdTimerPowerOff(TimerDev_t * const pTimer)
 	else
 	{
 		pData = SamdTimerGet(pTimer);
-		if (pData == NULL)
+		if (pData == NULL || !SamdTimerRun(pData, false))
 		{
 			return false;
 		}
 		SamdTimerRelease(pData);
+		state = DisableInterrupt();
+		sharedMask = 0U;
+		for (i = 0; i < SAMD_TIMER_MAXCNT; i++)
+		{
+			if (s_SamdTimerHw[i].GclkId == pData->GclkId && i != pTimer->DevNo)
+			{
+				sharedMask |= s_SamdTimerHw[i].ApbMask;
+			}
+		}
+		if ((PM_REGS->PM_APBCMASK & sharedMask) == 0U &&
+			!SamdGclkChannelDisable(pData->GclkId))
+		{
+			pData->pTimer = pTimer;
+			EnableInterrupt(state);
+			return false;
+		}
+		if (SamdTimerIsRtc(pData))
+		{
+			PM_REGS->PM_APBAMASK &= ~PM_APBAMASK_RTC_Msk;
+		}
+		else
+		{
+			PM_REGS->PM_APBCMASK &= ~pData->ApbMask;
+		}
+		EnableInterrupt(state);
 	}
 	pTimer->PowerOff = NULL;
 	pTimer->DevNo = -1;
@@ -1269,19 +1305,13 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer != NULL && pCfg != NULL && pCfg->DevNo == SAMD_SYSTICK_TIMER_DEVNO)
 	{
-		if (pCfg->bTickInt || pCfg->IntPrio < 0 ||
-			(s_SamdSysTickOwner != NULL && s_SamdSysTickOwner != pTimer))
+		if (pCfg->bTickInt || pCfg->IntPrio < 0 || SysTickTimerEnabled())
 		{
 			return false;
 		}
-		if (s_SamdSysTickOwner == pTimer)
+		if (s_SamdReleaseHardware != NULL && !s_SamdReleaseHardware(pTimer, -1))
 		{
-			pTimer->Disable(pTimer);
-			s_SamdSysTickOwner = NULL;
-		}
-		if (s_SamdReleaseHardware != NULL)
-		{
-			s_SamdReleaseHardware(pTimer, -1);
+			return false;
 		}
 		if (!SysTickTimerInit(pTimer, pCfg))
 		{
@@ -1301,8 +1331,16 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
+	if (s_SamdSysTickOwner == pTimer && SysTickTimerEnabled())
+	{
+		return false;
+	}
 	SamdTimerData_t *d = &g_SamdTimerData[pCfg->DevNo];
 
+	if (d->bRunning)
+	{
+		return false;
+	}
 	const SamdTimerHw_t *hw = &s_SamdTimerHw[pCfg->DevNo];
 
 	// Constants of the DevNo, the same if the device is bound
@@ -1342,13 +1380,19 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	uint32_t presc;
 	uint32_t freq;
 
+	s_SamdReleaseHardware = SamdTimerReleaseBinding;
+	if (!SamdTimerReleaseBinding(pTimer, pCfg->DevNo))
+	{
+		return false;
+	}
 	if (s_SamdSysTickOwner == pTimer)
 	{
-		pTimer->Disable(pTimer);
+		if (!SysTickTimerPowerOff(pTimer))
+		{
+			return false;
+		}
 		s_SamdSysTickOwner = NULL;
 	}
-	s_SamdReleaseHardware = SamdTimerReleaseBinding;
-	SamdTimerReleaseBinding(pTimer, pCfg->DevNo);
 
 	d->bCapture = false;
 	d->bTick = pCfg->bTickInt;

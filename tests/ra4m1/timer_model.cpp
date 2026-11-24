@@ -204,6 +204,18 @@ int main()
 	reset_model();CHECK(init(t,2));TimerDev_t other={};CHECK(!init(other,2)&&!init(t,3));
 	CHECK(init(other,3));t.Disable(&t);CHECK(other.Enable(&other)&&!(mstp&clkbit(3)));step(3,31);CHECK(other.GetTickCount(&other)==31);
 	// Raw routes and running hardware must not be taken over.
+	for (int dev = 0; dev < 10; dev++)
+	{
+		reset_model();
+		CHECK(init(t, dev));
+		CHECK(!init(t, dev));
+		t.Disable(&t);
+		CHECK(init(other, dev));
+		CHECK(!t.Enable(&t));
+		CHECK(other.PowerOff(&other));
+		CHECK(!other.Enable(&other));
+		CHECK(init(other, dev));
+	}
 	reset_model();iel[0]=0x57;CHECK(!init(t,2)&&writes==0);
 	reset_model();del[1]=0x1F;CHECK(!init(t,0)&&writes==0);
 	reset_model();gp[0][RA4M1_GTCR/4]=1;mstp&=~clkbit(2);CHECK(!init(t,2)&&gp[0][RA4M1_GTCR/4]==1);

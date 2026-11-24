@@ -654,13 +654,13 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pData = &s_Timer[pCfg->DevNo];
 	for (i = 0; i < ESP32_TIMG_COUNT; i++)
 	{
-		if (s_Timer[i].pTimer == pTimer)
+		if (i != pCfg->DevNo && s_Timer[i].pTimer == pTimer)
 		{
 			EnableInterrupt(state);
 			return false;
 		}
 	}
-	if (pData->pTimer != NULL)
+	if (pData->Running || (pData->pTimer != NULL && !Esp32PowerOff(pData->pTimer)))
 	{
 		EnableInterrupt(state);
 		return false;

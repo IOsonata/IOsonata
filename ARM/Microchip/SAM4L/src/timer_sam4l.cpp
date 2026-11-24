@@ -35,6 +35,7 @@ SOFTWARE.
 #include "system_sam4l.h"
 
 volatile uint32_t g_Sam4lTimerInitStage;
+static uint32_t s_TcClockMask;
 
 Sam4l_TimerData_t g_Sam4lTimerData[SAM4L_TIMER_MAXCNT] = {
 	{nullptr, nullptr, AST_ALARM_IRQn, PM_PBDMASK_AST},
@@ -164,6 +165,7 @@ static bool PowerOff(TimerDev_t *t)
 	Sam4l_TimerData_t *d;
 	uint32_t state;
 	bool stopped;
+	bool shared;
 	int n;
 
 	d = Data(t);
@@ -188,6 +190,29 @@ static bool PowerOff(TimerDev_t *t)
 	if (!d->TcReg)
 	{
 		NVIC_ClearPendingIRQ(AST_OVF_IRQn);
+		SAM4L_AST->AST_CLOCK &= ~AST_CLOCK_CEN;
+		if (!Sam4lAstWait(AST_SR_CLKBUSY))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+		Sam4lTimerPmWrite(&SAM4L_PM->PM_PBDMASK, SAM4L_PM->PM_PBDMASK & ~PM_PBDMASK_AST);
+	}
+	else if (s_TcClockMask & d->ClockMask)
+	{
+		shared = false;
+		for (const auto &entry : g_Sam4lTimerData)
+		{
+			if (&entry != d && entry.TcReg && entry.Timer && entry.ClockMask == d->ClockMask)
+			{
+				shared = true;
+			}
+		}
+		if (!shared)
+		{
+			Sam4lTimerPmWrite(&SAM4L_PM->PM_PBAMASK, SAM4L_PM->PM_PBAMASK & ~d->ClockMask);
+			s_TcClockMask &= ~d->ClockMask;
+		}
 	}
 	d->Timer = nullptr;
 	d->Healthy = false;
@@ -324,8 +349,8 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	auto &d = g_Sam4lTimerData[cfg->DevNo];
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_OWNER;
 	// Reject a handle that is already assigned to a timer.
-	for (auto &entry : g_Sam4lTimerData) if (entry.Timer == t) { EnableInterrupt(state); return false; }
-	if (d.Timer) { EnableInterrupt(state); return false; }
+	for (auto &entry : g_Sam4lTimerData) if (&entry != &d && entry.Timer == t) { EnableInterrupt(state); return false; }
+	if (d.Running) { EnableInterrupt(state); return false; }
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_SOURCE;
 	if (d.TcReg) {
 		if (cfg->ClkSrc != TIMER_CLKSRC_DEFAULT) { EnableInterrupt(state); return false; }
@@ -343,6 +368,11 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	uint32_t freq;
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_FREQUENCY;
 	if (!Plan(d, cfg->Freq, d.Select, freq)) { EnableInterrupt(state); return false; }
+	if (d.Timer != nullptr && !PowerOff(d.Timer))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_SYNC;
 	if (!d.TcReg) {
 		Sam4lTimerPmWrite(&SAM4L_PM->PM_PBDMASK, SAM4L_PM->PM_PBDMASK | PM_PBDMASK_AST);
@@ -371,7 +401,14 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	t->DisableExtTrigger = ExtDisable; t->EnableExtTrigger = ExtEnable;
 	Irq(d, false);
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_SETUP;
-	if (d.TcReg) Sam4lTcSetup(d);
+	if (d.TcReg)
+	{
+		if (!(SAM4L_PM->PM_PBAMASK & d.ClockMask))
+		{
+			s_TcClockMask |= d.ClockMask;
+		}
+		Sam4lTcSetup(d);
+	}
 	else d.Healthy = Sam4lAstSetup(d);
 	bool ok = d.Healthy;
 	if (ok) {

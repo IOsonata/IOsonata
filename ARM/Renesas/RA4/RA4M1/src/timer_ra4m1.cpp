@@ -440,6 +440,7 @@ static bool PowerOff(TimerDev_t *t)
 	}
 	// Four GPT channels share each GPT module clock. Leave it running
 	// while another initialized GPT in that group needs the clock.
+	state = DisableInterrupt();
 	gate = !d->Agt;
 	for (i = 0U; i < RA4M1_TIMER_COUNT; i++)
 	{
@@ -451,11 +452,10 @@ static bool PowerOff(TimerDev_t *t)
 	}
 	if (gate && !ModuleWrite(R_MSTP->MSTPCRD | mask))
 	{
+		EnableInterrupt(state);
 		return false;
 	}
-	state = DisableInterrupt();
 	d->Timer = nullptr;
-	d->Healthy = false;
 	d->Running = false;
 	t->PowerOff = nullptr;
 	t->DevNo = -1;
@@ -581,9 +581,9 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	TimerPlan plan={}; bool agt=cfg->DevNo<2;
 	if (!Plan(agt,cfg->ClkSrc,cfg->Freq,plan)) return false;
 	uint32_t state=DisableInterrupt();
-	for (unsigned i=0;i<RA4M1_TIMER_COUNT;++i) if (s_Timer[i].Timer==t) {EnableInterrupt(state);return false;}
+	for (unsigned i=0;i<RA4M1_TIMER_COUNT;++i) if (i != (unsigned)cfg->DevNo && s_Timer[i].Timer == t) {EnableInterrupt(state);return false;}
 	Ra4m1TimerData &d=s_Timer[cfg->DevNo];
-	if (d.Timer || d.Fault) {EnableInterrupt(state);return false;}
+	if (d.Running || d.Fault || (d.Timer != nullptr && !PowerOff(d.Timer))) {EnableInterrupt(state);return false;}
 	// A stopped channel may still belong to a CPU/DTC/DMAC client.
 	uint8_t first=agt ? (uint8_t)(RA4M1_EVTID_AGT0_AGTI+3U*cfg->DevNo) :
 		(uint8_t)(RA4M1_EVTID_GPT0_CCMPA+8U*(cfg->DevNo-2));

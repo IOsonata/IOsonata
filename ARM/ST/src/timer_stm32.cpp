@@ -131,12 +131,18 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 #if ST_LPTIM_CNT > 0
 		if (devno < ST_LPTIM_CNT)
 		{
-			Stm32LptimRelease(devno);
+			if (Stm32LptimRunning(devno))
+			{
+				return false;
+			}
 		}
 		else
 #endif
 		{
-			Stm32TimRelease(devno);
+			if (Stm32TimRunning(devno))
+			{
+				return false;
+			}
 		}
 	}
 
@@ -152,6 +158,20 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	{
 		ok = Stm32TimInit(pTimer, pCfg);
 	}
+	if (ok && devno >= 0 && devno != pCfg->DevNo)
+	{
+#if ST_LPTIM_CNT > 0
+		if (devno < ST_LPTIM_CNT)
+		{
+			Stm32LptimRelease(devno);
+		}
+		else
+#endif
+		{
+			Stm32TimRelease(devno);
+		}
+	}
+
 	if (ok)
 	{
 		pTimer->PowerOff = Stm32TimerPowerOff;

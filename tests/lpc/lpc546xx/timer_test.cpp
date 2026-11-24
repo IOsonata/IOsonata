@@ -203,6 +203,7 @@ int main()
 		assert(s_NvicPrio[CTIMER3_IRQn] == expected);
 		t0.Disable(&t0);
 		assert(t0.Enable(&t0));
+		t0.Disable(&t0);
 		assert(s_NvicPrio[CTIMER3_IRQn] == expected);
 	}
 	cfg.IntPrio = 2;

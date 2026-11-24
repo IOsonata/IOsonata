@@ -127,12 +127,14 @@ static inline bool Stm32TimerVectorOwned(int IrqNo)
 // has none.
 bool Stm32LptimInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 int Stm32LptimFind(TimerDev_t * const pTimer);
+bool Stm32LptimRunning(int DevNo);
 void Stm32LptimRelease(int DevNo);
 void Stm32LptimIRQHandler(int IrqNo);
 
 // General purpose timers, DevNo ST_LPTIM_CNT and up
 bool Stm32TimInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 int Stm32TimFind(TimerDev_t * const pTimer);
+bool Stm32TimRunning(int DevNo);
 void Stm32TimRelease(int DevNo);
 void Stm32TimIRQHandler(int IrqNo);
 int Stm32TimCount(void);

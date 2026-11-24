@@ -587,28 +587,10 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			}
 		}
 	}
-	if (s_pGrtcOwner[devno] != nullptr &&
-		s_pGrtcOwner[devno] != pTimer)
+	if (s_bGrtcEnabled[devno])
 	{
 		EnableInterrupt(state);
 		return false;
-	}
-	if (s_bGrtcEnabled[devno] &&
-		s_nRfxGrtcData[devno].pTimer != pTimer)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	if (s_nRfxGrtcData[devno].pTimer == pTimer)
-	{
-		for (int i = 0; i < s_nRfxGrtcData[devno].MaxNbTrigEvt; i++)
-		{
-			if (s_nRfxGrtcData[devno].Trigger[i].nsPeriod != 0U)
-			{
-				EnableInterrupt(state);
-				return false;
-			}
-		}
 	}
 	// Retire the old disabled group before rebinding this Timer handle.
 	// Otherwise the old interrupt group keeps a pointer whose DevNo now
@@ -635,7 +617,13 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	rtc.pInt = &NRF_GRTC->INTEN0 + devno * 4;
 	rtc.pSysCnt = &NRF_GRTC->SYSCOUNTER[devno];
-    memset(rtc.Trigger, 0, sizeof(rtc.Trigger));
+    rtc.pInt[2] = nRFxGrtcCCMask(rtc);
+	for (int i = 0; i < rtc.MaxNbTrigEvt; i++)
+	{
+		NRF_GRTC->CC[rtc.StartCCIdx + i].CCEN = 0U;
+		NRF_GRTC->EVENTS_COMPARE[rtc.StartCCIdx + i] = 0U;
+	}
+	memset(rtc.Trigger, 0, sizeof(rtc.Trigger));
 
 
 	pTimer->Rollover = 0;
