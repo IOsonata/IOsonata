@@ -984,6 +984,25 @@ extern "C" bool nRFxLfclkRunningFromRc(void)
 		(NRFX_LFCLK_STATE_Msk |
 		(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos));
 }
+
+// Preserve the measured LFRC timebase across a balanced timer
+// Disable/Enable. A stopped LFCLK still has a selected source; it must
+// not cause TimerSetFrequency to revert to nominal 32768 Hz.
+// If an external owner supplies LFXO while RC was selected, use the
+// active crystal frequency instead.
+extern "C" bool nRFxLfclkUsesRc(void)
+{
+	uint32_t stat;
+
+	if (nRFxLowOscSelected() != OSC_TYPE_RC)
+	{
+		return false;
+	}
+	stat = NRF_CLOCK->NRFX_LFCLKSTAT;
+	return (stat & NRFX_LFCLK_STATE_Msk) == 0U ||
+		(stat & NRFX_LFCLK_STAT_SRC_Msk) ==
+			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos);
+}
 #endif
 
 #if defined(NRF91_SERIES)

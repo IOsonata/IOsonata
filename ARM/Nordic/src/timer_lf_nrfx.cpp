@@ -174,6 +174,7 @@ static bool s_bRtcHwClear[TIMER_NRFX_RTC_MAX];
 // LFRC has no CLOCK CAL task; its measured frequency is used for the RTC
 // prescaler and timer conversions, never for CPU delay-loop calibration.
 extern "C" bool nRFxLfclkRunningFromRc(void);
+extern "C" bool nRFxLfclkUsesRc(void);
 extern "C" uint32_t nRFxLfclkConfigurationEpoch(void);
 
 #define NRF91_LFRC_MEASURE_US		100000U
@@ -186,8 +187,13 @@ static bool s_bNRF91LfrcMeasured;
 
 static uint32_t nRFxRtcBaseFrequency(void)
 {
-	if (nRFxLfclkRunningFromRc() && s_bNRF91LfrcMeasured &&
-		s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch())
+	// The timer may be disabled and LFCLK physically stopped when
+	// TimerSetFrequency runs. Keep the measured frequency while the
+	// configured clock source and its measurement epoch are unchanged.
+	// A running externally owned LFXO must still use 32768 Hz.
+	if (s_bNRF91LfrcMeasured &&
+		s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch() &&
+		nRFxLfclkUsesRc())
 	{
 		return s_nRF91LfrcHz;
 	}

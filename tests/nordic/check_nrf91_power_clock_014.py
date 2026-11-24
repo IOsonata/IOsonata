@@ -157,5 +157,50 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertEqual(64000000 * 1000000 // 16001600, 3999600)
 		self.assertEqual(64000000 * 1000000 // 3000330, 21330986)
 
+
+	def test_lfrc_rate_survives_timer_disable_enable(self):
+		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
+		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
+		start = clock.index('extern "C" bool nRFxLfclkUsesRc(void)')
+		end = clock.index("#endif", start)
+		helper = clock[start:end]
+		self.assertIn("nRFxLowOscSelected() != OSC_TYPE_RC", helper)
+		self.assertIn("(stat & NRFX_LFCLK_STATE_Msk) == 0U", helper)
+		self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", helper)
+		self.assertIn("NRFX_LFCLK_SRC_RC", helper)
+
+		begin = rtc.index("static uint32_t nRFxRtcBaseFrequency(void)")
+		end = rtc.index("static bool nRFxRtcMeasureLfrc", begin)
+		base = rtc[begin:end]
+		self.assertIn("nRFxLfclkUsesRc()", base)
+		self.assertNotIn("nRFxLfclkRunningFromRc()", base)
+		self.assertIn("s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch()", base)
+		self.assertIn("return s_nRF91LfrcHz;", base)
+		self.assertIn("return TIMER_NRFX_RTC_BASE_FREQ;", base)
+
+		# A stopped LFCLK does not invalidate the selected RC source.
+		# An externally supplied LFXO and a changed selection epoch do.
+		measured = 44720
+		def base_rate(selected_rc, running, active_rc, same_epoch):
+			uses_rc = selected_rc and (not running or active_rc)
+			return measured if uses_rc and same_epoch else 32768
+
+		self.assertEqual(base_rate(True, True, True, True), measured)
+		self.assertEqual(base_rate(True, False, False, True), measured)
+		self.assertEqual(base_rate(True, True, True, True), measured)
+		self.assertEqual(base_rate(True, True, False, True), 32768)
+		self.assertEqual(base_rate(False, False, False, True), 32768)
+		self.assertEqual(base_rate(True, False, False, False), 32768)
+
+		# CoreClockTest calls TimerSetFrequency before re-enabling each
+		# timer: its second 250-ms sample must keep the measured rate.
+		demo = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
+		start = demo.index("static void CoreClockTestTimer(int DevNo)")
+		end = demo.index("// Exercise the public Timer trigger API", start)
+		sample = demo[start:end]
+		self.assertLess(sample.index("frequency = TimerSetFrequency(&s_Timer"),
+			sample.index("enabled = TimerEnable(&s_Timer)"))
+		self.assertIn("TimerDisable(&s_Timer);", sample)
+
 if __name__ == "__main__":
 	unittest.main()

@@ -134,3 +134,27 @@ The 100-ms software observation cannot permanently stabilize LFRC:
 thermal or supply drift after measurement still affects long-running
 timekeeping. Production modem use must retain LFXO.
 
+
+## LFRC Disable/Enable lifecycle correction
+
+The nRF9160 CoreClockTest after the first LFRC rate-measurement patch
+reproduced a precise state bug on both RTC0 and RTC1. The first 250-ms
+measurement passed at 44720 Hz, but after TimerDisable stopped the last
+LFCLK owner the next TimerSetFrequency reported 32768 Hz. RTC raw
+ticks still measured approximately 44740-44755 Hz, causing two
+remaining 250-ms timing failures. Both LFXO and HF timer paths passed.
+
+The measured input rate must be associated with the **selected** LFRC
+source and the selection generation, rather than the LFCLK running bit.
+A stopped LFCLK does not mean its requested source changed. The
+internal `nRFxLfclkUsesRc()` query returns true when RC is selected
+and LFCLK is stopped or physically supplied by RC. If an external
+owner is supplying running LFXO instead, the timer uses nominal
+32768 Hz. `nRFxRtcBaseFrequency()` keeps the measured rate across
+balanced TimerDisable/Enable calls and invalidates it only when the
+clock configuration generation changes.
+
+The generic CoreClockTest keeps the 2% assertion; no hard-coded
+44720-Hz frequency, synthesized clock, or test waiver is introduced.
+The physical LFRC frequency is not trimmed.
+
