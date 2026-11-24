@@ -1324,6 +1324,10 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	}
 
 	devno = pCfg->DevNo - TIMER_NRFX_RTC_MAX;
+	if (s_bTimerEnabled[devno])
+	{
+		return false;
+	}
 #if defined(NRF91_SERIES)
 	// A TIMER configured as a counter is in use by the counter driver.
 	if (s_nRFxTimerData[devno].pReg->MODE != TIMER_MODE_MODE_Timer)
@@ -1344,12 +1348,6 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 			return false;
 		}
 	}
-#if defined(NRF91_SERIES)
-	if (s_bTimerEnabled[devno])
-	{
-		nRFxTimerDisable(s_pnRFxTimerDev[devno]);
-	}
-#endif
 	pTimer->DevNo = pCfg->DevNo;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	s_pnRFxTimerData = s_nRFxTimerData;

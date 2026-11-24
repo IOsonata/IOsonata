@@ -1506,9 +1506,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pRtc = &s_nRfxRtcData[pSelectedCfg->DevNo];
 	reg = pRtc->pReg;
 	pOldTimer = s_pnRfxRtcDev[pSelectedCfg->DevNo];
-	// An automatically selected RTC may be timing an sDelay call.
-	if (pOldTimer != nullptr && pOldTimer != pTimer &&
-		s_bRtcAutoSelected[pSelectedCfg->DevNo])
+	if (s_bRtcEnabled[pSelectedCfg->DevNo])
 	{
 		return false;
 	}
@@ -1538,10 +1536,6 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		}
 	}
 
-	if (pOldTimer != nullptr && s_bRtcEnabled[pSelectedCfg->DevNo])
-	{
-		nRFxRtcDisable(pOldTimer);
-	}
 	pTimer->DevNo = pSelectedCfg->DevNo;
 	pTimer->EvtHandler = pSelectedCfg->EvtHandler;
 	s_pnRfxRtcData = s_nRfxRtcData;

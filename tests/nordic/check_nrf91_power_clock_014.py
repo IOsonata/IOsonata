@@ -207,10 +207,20 @@ class Nrf91PowerClock(unittest.TestCase):
 		section = hf[hf.index("bool nRFxTimerInit("):]
 		self.assertNotIn("s_pnRFxTimerDev[devno] != pTimer", section)
 		self.assertIn("pReg->MODE != TIMER_MODE_MODE_Timer", section)
-		stop = section.index("nRFxTimerDisable(s_pnRFxTimerDev[devno]);")
-		self.assertLess(section.index("TIMER_TRIG_PEI_CONTINUOUS"), stop)
-		self.assertLess(stop, section.index("pTimer->DevNo = pCfg->DevNo;"))
 		self.assertIn("s_pnRFxTimerDev[devno] = nullptr;", section)
+
+	def test_running_timer_rejects_init_before_configuration_changes(self):
+		for file, init, enabled, assignment in (
+			("timer_hf_nrfx.cpp", "nRFxTimerInit", "s_bTimerEnabled[devno]",
+			 "pTimer->DevNo = pCfg->DevNo;"),
+			("timer_lf_nrfx.cpp", "nRFxRtcInit", "s_bRtcEnabled[pSelectedCfg->DevNo]",
+			 "pTimer->DevNo = pSelectedCfg->DevNo;"),
+		):
+			with self.subTest(driver=file):
+				source = (ROOT / "ARM/Nordic/src" / file).read_text(encoding="utf-8")
+				section = source[source.index("bool " + init + "("):]
+				check = "if (" + enabled + ")\n\t{\n\t\treturn false;"
+				self.assertLess(section.index(check), section.index(assignment))
 
 	def test_nrf91_timer_frequency_change_rephases_armed_triggers(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")

@@ -236,7 +236,7 @@ not exercised in that hardware run. This batch fixes the following
 on the nRF91 path:
 
 - HF TIMER reinitialization: TimerInit accepts an explicitly selected
-  timer that is already configured. It checks PEI connections and
+  timer after TimerDisable. A running timer rejects TimerInit. It checks PEI connections and
   counter mode before replacing the configuration.
 - Frequency changes: for nRF91 HF TIMER and RTC, prevalidate all
   armed normal compares against the proposed frequency before
@@ -285,7 +285,7 @@ long interval rejection.
 The nRF9160 DK previously reported a TIMER0 initialization failure
 because the driver rejected an explicit TimerInit call when the
 TimerDev_t address changed. The driver now accepts reinitialization
-of an explicitly selected TIMER or RTC. Automatic RTC selection still
+of an explicitly selected TIMER or RTC after TimerDisable. Automatic RTC selection still
 requires a free RTC. Reinitialization on the DK awaits verification.
 
 ## TimerPowerOff and timer device assignment
