@@ -147,22 +147,6 @@ wake on the nRF9160 DK under the tested conditions. Modem-active
 shutdown, current measurements, optional SRAM retention and the
 nRF91x1 CorePowerTest are outside this result.
 
-## sDelay right after an LFCLK release (2026-11-23)
-
-Two CoreClockTest runs measured the reuse `sDelay(1)`, called right
-after `SystemLowFreqClockDisable`, at 1,000,133 and 1,002,599 us. When
-the STOP had not settled, `sDelay` read LFCLK as running and treated the
-call as warm, while the enable then waited for the stop and started the
-crystal again without compensation.
-
-`nRFxSleepLfClockRunning` now reports LFCLK with a pending STOP as not
-running, and `SystemLowFreqClockEnable` counts the stop wait together
-with the start wait, reset at each enable. This applies to the nRF5340
-application core as well, which uses the same measured wait. nRF52 and
-the nRF5340 network core get the query change only; nRF54L is not
-affected. Not yet run on hardware: the reuse reading should now stay
-close to the warm one on every run.
-
 ## Remaining validation
 
 1. Run source tests: `python3 tests/nordic/check_nrf91_power_clock_014.py`.

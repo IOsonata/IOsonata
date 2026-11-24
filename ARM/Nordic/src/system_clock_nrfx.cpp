@@ -197,8 +197,7 @@ static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
 #if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-// Time the last SystemLowFreqClockEnable spent polling for a pending
-// stop and for the start, in calibrated polls, for the next sDelay
+// Time spent in calibrated LFCLK startup polling, for the next sDelay
 // request. This is internal to the Nordic clock/delay implementation.
 static uint32_t s_nRFxLfclkStartWaitUs;
 #endif
@@ -900,6 +899,9 @@ static bool nRFxLfclkStart(uint32_t Src)
 {
 	uint32_t elapsed;
 
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
+	s_nRFxLfclkStartWaitUs = 0U;
+#endif
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
 #if NRF52_ERRATA_132_ENABLE_WORKAROUND
@@ -954,14 +956,13 @@ static bool nRFxLfclkWaitStopped(void)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
-#endif
 	}
 	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U;
 }
 
-// Stop and startup wait of the last SystemLowFreqClockEnable, for sDelay.
+// Snapshot actual LFCLK hardware state before sDelay requests an RTC.
+// A running oscillator avoids the cold LFXO startup penalty. No ownership
+// change or oscillator start takes place in this query.
 #if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void)
 {
@@ -1013,6 +1014,11 @@ extern "C" bool nRFxSleepLfClockAccurate(void)
 }
 #endif
 
+extern "C" bool nRFxSleepLfClockRunning(void)
+{
+	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
+}
+
 // A STOP issued here is settled once LFCLKSTAT reports the clock stopped,
 // or once a BLE stack that drives CLOCK itself runs LFCLK. Without this
 // the flag would stay set after the last release until the next direct
@@ -1038,25 +1044,6 @@ static void nRFxLfclkStopSettle(void)
 	}
 }
 
-#if !defined(NRF54L_SERIES)
-// Snapshot for sDelay, taken before it requests an RTC. LFCLK that runs
-// with a STOP still pending is not warm: the next enable waits for that
-// stop and starts the oscillator again. sDelay on nRF54L uses the GRTC
-// state instead.
-extern "C" bool nRFxSleepLfClockRunning(void)
-{
-	uint32_t state;
-	bool running;
-
-	state = DisableInterrupt();
-	nRFxLfclkStopSettle();
-	running = !s_bNRFxLfclkStopPending &&
-		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
-	EnableInterrupt(state);
-	return running;
-}
-#endif
-
 bool SystemLowFreqClockEnable(void)
 {
 	uint32_t src;
@@ -1066,10 +1053,6 @@ bool SystemLowFreqClockEnable(void)
 	bool stopped;
 	bool started;
 
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-	// Zero unless this call waits for a stop or starts the oscillator.
-	s_nRFxLfclkStartWaitUs = 0U;
-#endif
 	if (!nRFxLfclkOscSource(nRFxLowOscSelected(), &src))
 	{
 		return false;
