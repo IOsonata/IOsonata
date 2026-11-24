@@ -116,6 +116,37 @@ prove long-term accuracy under temperature variation. A more accurate time
 reference should continue to use LFXO. It is not evidence of modem-active
 clock control, System ON wake, or System OFF GPIO wake.
 
+## nRF9160 CorePowerTest hardware validation
+
+Four consecutive nRF9160 DK CorePowerTest boots reported **0 failures**:
+the first boot performed 14 checks and the next three each performed 15
+checks, for 59 completed checks total. The source UART transcript confirms:
+
+- Three resumable System ON sleep/timer-wake cycles per boot:
+  **12/12 automatic wakes PASS**.
+- After every wake, CPU/peripheral clock rate, UART rate, and
+  static/stack RAM continuity checks PASS.
+- Three subsequent Button 1 (P0.06) wakes from System OFF:
+  reset reason `0x00000100`, retention marker and
+  `System OFF reset-on-wake: PASS` on each restart.
+- GPIO wake configuration, invalid-index rejection, disable and rearm,
+  reset-reason stability, and GPREGRET read/write/invalid-index checks
+  all PASS.
+- The reported capability bitmap is `0x0000003f`. Reduced CPU
+  power mode is UNSUPPORTED and a reserved System OFF SRAM retention
+  test region is not configured, so SRAM retention across System OFF
+  is **not validated**.
+- Every run reports `LogDiag fifo=0, uartfifo=8, evicted=0,
+  uartRejected=0x42`. The diagnostic snapshots output queues before
+  the final report drains. The rejected UART submissions reflect
+  backpressure, not independently verified dropped UART bytes; preserve
+  this observation for UART/SysLog performance review.
+
+This covers bare-metal System ON sleep/resume and System OFF/button
+wake on the nRF9160 DK under the tested conditions. Modem-active
+shutdown, current measurements, optional SRAM retention and the
+nRF91x1 CorePowerTest are outside this result.
+
 ## Remaining validation
 
 1. Run source tests: `python3 tests/nordic/check_nrf91_power_clock_014.py`.
@@ -128,12 +159,15 @@ clock control, System ON wake, or System OFF GPIO wake.
    datasheet tolerance; the UART timing result does not read it directly.
 4. Run CoreClockTest on nRF91x1 hardware. The nRF9160 result does not
    establish that other nRF91 variants are validated.
-5. Run CorePowerTest on nRF9160 and nRF91x1, including System ON timer
-   wake, GPIO/System OFF wake, retention registers, UART restoration,
-   reset reasons and repeated cycles. A bare-metal System OFF test does
-   not validate modem-active shutdown.
-6. Preserve all previously validated nRF52, nRF5340 and nRF54L behavior
-   and verify both debug/release managed configurations.
+5. nRF9160 CorePowerTest hardware run: **complete**, 4 boots and
+   59 checks with zero failures; 12/12 automatic timer wakes and
+   3/3 Button 1 System OFF resets passed. No reserved SRAM retention
+   region was configured; modem-active System OFF remains untested.
+6. Run nRF91x1 CorePowerTest and CoreClockTest on hardware. Revalidate
+   the shared power and clock paths across its intended MCU variants,
+   and verify Debug/Release managed configurations.
+7. Preserve already validated nRF52, nRF5340 and nRF54L behavior and
+   investigate UART TX backpressure separately if it affects throughput.
 
 No default watchdog is enabled. No target-specific code belongs in the
 shared CoreClockTest or CorePowerTest examples.
