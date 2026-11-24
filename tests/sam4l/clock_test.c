@@ -214,7 +214,7 @@ int main(void)
 		assert(SystemCoreClockSelect(OSC_TYPE_RC, 8000000));
 		assert(SystemCoreClockGet() == 40000000);
 		assert(SystemMicroSecLoopCnt == ((uint64_t)40000000U * 1000000ULL) / 14000000U);
-		assert(SystemnsDelayFactor == ((uint64_t)40000000U << 16) / 3000000U);
+		assert(SystemnsDelayFactor == 40000000U / SAM4L_NSDELAY_LOOP_CYCLES);
 		assert(g_TestMask == mask);
 		assert(SAM4L_WDT->WDT_CTRL == WDT_CTRL_EN);
 		assert(SAM4L_BPM->BPM_PMCON == (BPM_PMCON_PS(2) | BPM_PMCON_CK32S));

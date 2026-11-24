@@ -275,7 +275,14 @@ static void CorePowerTestSleep(uint32_t Caps)
 	bool ok;
 	volatile uint32_t stackRam[CORE_POWER_TEST_RAM_WORDS];
 
-	if ((Caps & SYSTEM_POWER_CAP_SLEEP) == 0U || SystemSleep == nullptr)
+#if defined(CORE_POWER_TEST_LEGACY_OPTIONAL_APIS) && defined(__GNUC__)
+	if (SystemSleep == nullptr)
+	{
+		CorePowerTestUnsupported("Resumable SystemSleep");
+		return;
+	}
+#endif
+	if ((Caps & SYSTEM_POWER_CAP_SLEEP) == 0U)
 	{
 		CorePowerTestUnsupported("Resumable SystemSleep");
 		return;
@@ -405,12 +412,14 @@ int main(void)
 	SysLogPrintf(SysLogGet(), "CorePowerTest\r\n");
 	s_Checks = 0U;
 	s_Failures = 0U;
+#if defined(CORE_POWER_TEST_LEGACY_OPTIONAL_APIS) && defined(__GNUC__)
 	if (SystemPowerCapabilitiesGet == nullptr)
 	{
 		CorePowerTestUnsupported("Power capability API");
 		CorePowerTestSummary();
 		return 1;
 	}
+#endif
 	caps = SystemPowerCapabilitiesGet();
 	SysLogPrintf(SysLogGet(), "Capabilities 0x%08x\r\n", (unsigned)caps);
 	// Logging already allows the interrupt UART and SysLog FIFOs to drain.

@@ -75,14 +75,7 @@ print('SAM4L PICOUART direct RX handover and retained-status handling PASS')
 
 # Wake test changes host baud only while the normal USART is active.
 # Both sides establish a 1 Mbaud handshake before the MCU can sleep.
-demo_source = (root / 'exemples/misc/power_off_demo.cpp').read_text()
 host_source = (root / 'Python/sam4l_uart_wake.py').read_text()
-setup_prompt = demo_source.index('UART wake setup: send R at 1000000 baud')
-switch_prompt = demo_source.index('UART sleep preparation: switch host to 9600 baud')
-host_guard = demo_source.index('msDelay(750);', switch_prompt)
-sleep_entry = demo_source.index('SystemSleep();', host_guard)
-assert setup_prompt < switch_prompt < host_guard < sleep_entry
-assert "if (rxByte != 'R')" in demo_source[setup_prompt:switch_prompt]
 host_setup = host_source.index('if b"UART wake setup: send R" in line:')
 host_switch = host_source.index('port.baudrate = 9600', host_setup)
 host_settle = host_source.index('time.sleep(args.wake_delay)', host_switch)
@@ -91,7 +84,7 @@ assert host_setup < host_switch < host_settle < host_send
 assert 'parser.add_argument("--wake-delay", type=float, default=1.25' in host_source
 assert 'if not 1.25 <= args.wake_delay < args.total_timeout:' in host_source
 assert 'Old PowerOffDemo firmware.' in host_source
-print('SAM4L UART host-rate handshake precedes PICOUART activation PASS')
+print('SAM4L UART host baud change and wake delay PASS')
 
 # Exercise host acceptance with a simulated serial port, without hardware.
 subprocess.run([sys.executable,

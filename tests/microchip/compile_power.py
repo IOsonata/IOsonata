@@ -20,11 +20,12 @@ XPACK_ROOTS = (
 TARGETS = (
     ('SAM4E', ('SAM4E8C', 'SAM4E8CB', 'SAM4E8E',
                'SAM4E16C', 'SAM4E16CB', 'SAM4E16E'),
-     ('system_sam4e.c', 'system_power_sam4e.cpp', 'system_clock_sam4e.cpp')),
+     ('system_sam4e.c', 'system_power_sam4e.cpp', 'system_clock_sam4e.cpp', 'timer_sam4e.cpp')),
     ('SAM4L', tuple('SAM4L' + family + size + package
                    for family in 'CS' for size in '248' for package in 'ABC'),
      ('system_sam4l.c', 'system_power_sam4l.cpp',
-      'uart_sam4l.cpp', 'i2c_sam4l.cpp', 'spi_sam4l.cpp')),
+      'uart_sam4l.cpp', 'i2c_sam4l.cpp', 'spi_sam4l.cpp',
+      'timer_sam4l.cpp', 'timer_sam4l_ast.cpp', 'timer_sam4l_tc.cpp')),
 )
 
 

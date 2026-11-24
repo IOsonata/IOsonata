@@ -61,6 +61,14 @@ SYSCOUNTER.
 | nRF52, nRF5340 application and network cores, nRF9160 and nRF91x1 | RTC and TIMER |
 | nRF54L15, nRF54LM20A/B and nRF7120x application core | GRTC groups 0 through 3 and TIMER00, TIMER10, TIMER20 through TIMER24 |
 
+## Microchip timer drivers
+
+| MCU | Hardware | PowerOff clock behavior |
+| --- | --- | --- |
+| SAM D11 and D21 | RTC, TC, TCC and SysTick | Stops the peripheral and disables its bus clock. TC and TCC keep a shared generic clock channel while a sibling uses it. SysTick stops its counter and clears its pending interrupt. |
+| SAM4L | AST and TC | Stops the AST prescaler or TC channel. Releases a driver-enabled TC block clock after the last assigned channel powers off. |
+| SAM4E | TC | Stops the channel, disables its interrupt and gates its peripheral clock. |
+
 Initialize C timer structures to zero before their first use. Drivers with
 no PowerOff callback return false. Other MCU families will implement
 TimerPowerOff with their respective Power & Clock ports.

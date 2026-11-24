@@ -169,6 +169,12 @@ int main() {
 		assert(!TimerInit(&other,&cfg));
 		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OWNER);
 		assert(!TimerInit(&timers[dev],&cfg));
+		timers[dev].Disable(&timers[dev]);
+		assert(TimerInit(&other, &cfg));
+		assert(!timers[dev].Enable(&timers[dev]));
+		assert(other.PowerOff(&other));
+		assert(!other.Enable(&other));
+		assert(TimerInit(&timers[dev], &cfg));
 		assert(timers[dev].Freq==(dev?375000u:1024u));
 		assert(timers[dev].GetMaxTrigger(&timers[dev])==(dev?3:1));
 		assert(!timers[dev].EnableExtTrigger(&timers[dev],0,TIMER_EXTTRIG_SENSE_TOGGLE));
@@ -300,5 +306,18 @@ int main() {
 	s_TestPeripheralClock = 24000000;
 	assert(timers[1].SetFrequency(&timers[1], 0) == 187500);
 	assert(g_Sam4lTimerData[1].BaseFreq == s_TestPeripheralClock);
+	assert(!TimerPowerOff(&a));
+	ast.AST_SR.value &= ~AST_SR_BUSY;
+	assert(TimerPowerOff(&a));
+	assert(ast.AST_IMR == 0U && ast.AST_WER == 0U);
+	assert(!(pm.PM_PBDMASK & PM_PBDMASK_AST));
+	for (int dev = 1; dev <= 3; dev++)
+	{
+		assert(TimerPowerOff(&timers[dev]));
+		assert(tc[0].TC_CHANNEL[dev - 1].TC_IMR == 0U);
+		assert(bool(pm.PM_PBAMASK & PM_PBAMASK_TC0) == (dev < 3));
+		assert(pm.PM_PBAMASK & PM_PBAMASK_TC1);
+		assert(!TimerPowerOff(&timers[dev]));
+	}
 	puts("SAM4L timer register-model tests passed");
 }

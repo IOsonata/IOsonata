@@ -3,7 +3,7 @@
 
 @brief	SAM4E Timer/Counter implementation for the generic IOsonata Timer.
 
-Nine TC channels are indexed DevNo 0..8 (TC0..TC8).
+TC channels are indexed from zero. The device header selects three or nine channels.
 All are high-frequency devices; their clock is derived from MCK.
 A continuous 32-bit hardware counter is extended in software by sampling
 on the mandatory overflow interrupt, even when no user event is installed.
@@ -19,7 +19,11 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include "coredev/system_core_clock.h"
 #include "coredev/timer.h"
 
+#ifdef SAM4E_TC2
 #define SAM4E_TIMER_COUNT		9
+#else
+#define SAM4E_TIMER_COUNT		3
+#endif
 #define SAM4E_TIMER_TRIGGERS	3
 #define SAM4E_TIMER_MIN_TICKS	4UL
 #define SAM4E_TIMER_MAX_TICKS	0x7FFFFFFFUL
@@ -47,9 +51,13 @@ static Sam4eTimerData_t s_Timer[SAM4E_TIMER_COUNT];
 
 static TcChannel *Sam4eChannel(int DevNo)
 {
+#ifdef SAM4E_TC2
 	Sam4eTc * const pBlocks[] = { SAM4E_TC0, SAM4E_TC1, SAM4E_TC2 };
 
 	return &pBlocks[DevNo / 3]->TC_CHANNEL[DevNo % 3];
+#else
+	return &SAM4E_TC0->TC_CHANNEL[DevNo];
+#endif
 }
 
 static Sam4eTimerData_t *Sam4eData(TimerDev_t *pTimer)
@@ -511,12 +519,48 @@ static void Sam4eTimerIRQ(int DevNo)
 extern "C" void TC0_Handler(void) { Sam4eTimerIRQ(0); }
 extern "C" void TC1_Handler(void) { Sam4eTimerIRQ(1); }
 extern "C" void TC2_Handler(void) { Sam4eTimerIRQ(2); }
+#ifdef SAM4E_TC2
 extern "C" void TC3_Handler(void) { Sam4eTimerIRQ(3); }
 extern "C" void TC4_Handler(void) { Sam4eTimerIRQ(4); }
 extern "C" void TC5_Handler(void) { Sam4eTimerIRQ(5); }
 extern "C" void TC6_Handler(void) { Sam4eTimerIRQ(6); }
 extern "C" void TC7_Handler(void) { Sam4eTimerIRQ(7); }
 extern "C" void TC8_Handler(void) { Sam4eTimerIRQ(8); }
+#endif
+
+// A final hardware release. Disable stops counting but retains the TC
+// channel owner, while PowerOff makes that channel available to Init.
+static bool Sam4ePowerOff(TimerDev_t *pTimer)
+{
+	Sam4eTimerData_t *pData;
+	uint32_t state;
+	int i;
+	int devno;
+
+	state = DisableInterrupt();
+	pData = Sam4eData(pTimer);
+	if (pData == NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	devno = pTimer->DevNo;
+	Sam4eRun(pData, false);
+	pData->pReg->TC_IDR = 0xFFFFFFFFUL;
+	(void)pData->pReg->TC_SR;
+	NVIC_ClearPendingIRQ(pData->Irq);
+	for (i = 0; i < SAM4E_TIMER_TRIGGERS; i++)
+	{
+		pData->Trigger[i].Active = false;
+	}
+	SAM4E_PMC->PMC_PCDR0 = 1UL << (ID_TC0 + devno);
+	pData->pTimer = NULL;
+	pTimer->PowerOff = NULL;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	EnableInterrupt(state);
+	return true;
+}
 
 bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 {
@@ -536,15 +580,21 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	}
 	state = DisableInterrupt();
 	pData = &s_Timer[pCfg->DevNo];
+	if (pData->Running)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 	for (i = 0; i < SAM4E_TIMER_COUNT; i++)
 	{
-		if (s_Timer[i].pTimer == pTimer)
+		if (s_Timer[i].pTimer == pTimer &&
+			(s_Timer[i].Running || !Sam4ePowerOff(pTimer)))
 		{
 			EnableInterrupt(state);
 			return false;
 		}
 	}
-	if (pData->pTimer != NULL)
+	if (pData->pTimer != NULL && !Sam4ePowerOff(pData->pTimer))
 	{
 		EnableInterrupt(state);
 		return false;
@@ -564,7 +614,7 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Disable = Sam4eDisable;
-	pTimer->PowerOff = NULL;
+	pTimer->PowerOff = Sam4ePowerOff;
 	pTimer->Enable = Sam4eEnable;
 	pTimer->Reset = Sam4eReset;
 	pTimer->GetTickCount = Sam4eCount;

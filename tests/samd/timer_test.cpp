@@ -14,6 +14,15 @@ typedef int IRQn_Type;
 #define TC1_IRQn 18
 #define TC2_IRQn 19
 #define TCC0_IRQn 17
+#define PM_APBAMASK_RTC_Msk 1
+static struct { uint32_t PM_APBCMASK, PM_APBAMASK; } s_Pm;
+#define PM_REGS (&s_Pm)
+static int s_LastDisabledChannel = -1;
+static bool SamdGclkChannelDisable(uint8_t channel)
+{
+	s_LastDisabledChannel = channel;
+	return true;
+}
 #define PM_APBCMASK_TC1_Msk 1
 #define PM_APBCMASK_TC2_Msk 2
 #define PM_APBCMASK_TCC0_Msk 4
@@ -45,7 +54,15 @@ static unsigned s_Closes;
 static bool s_CancelNext;
 static bool s_ResetInHandler;
 static uint32_t s_Pending;
-static unsigned s_SysTickStops;
+static bool s_SysTickRunning;
+bool SysTickTimerEnabled(void) { return s_SysTickRunning; }
+bool SysTickTimerPowerOff(TimerDev_t *timer)
+{
+	s_SysTickRunning = false;
+	timer->PowerOff = nullptr;
+	timer->DevNo = -1;
+	return true;
+}
 static uint32_t s_MainFreq = 48000000;
 static uint32_t s_LfFreq = 32768;
 static bool s_SetupFail;
@@ -68,13 +85,14 @@ static void NVIC_ClearPendingIRQ(int);
 
 static void StopSysTick(TimerDev_t *)
 {
-	s_SysTickStops++;
+	s_SysTickRunning = false;
 }
 
 bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *)
 {
 	pTimer->DevNo = 0;
 	pTimer->Disable = StopSysTick;
+	s_SysTickRunning = true;
 	pTimer->Freq = 48000000;
 
 	return true;
@@ -203,7 +221,12 @@ int main()
 
 	for (int dev = 0; dev < 4; dev++)
 	{
+		if (dev > 0) TimerDisable(&timer);
 		cfg.DevNo = dev;
+		assert(TimerInit(&timer, &cfg));
+		assert(!TimerInit(&timer, &cfg));
+		assert(TimerPowerOff(&timer));
+		assert(!TimerEnable(&timer));
 		assert(TimerInit(&timer, &cfg));
 		assert(g_SamdTimerData[dev].pOps == (dev == 0 ? &s_SamdRtcOps : dev < 3 ? &s_SamdTcOps : &s_SamdTccOps));
 		assert(g_SamdTimerData[dev].pTickOps == nullptr);
@@ -302,15 +325,18 @@ int main()
 	assert(s_Opens == 1);
 	cfg.DevNo = 0;
 	cfg.bTickInt = true;
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
 	assert(s_Closes == 1 && s_Opens == 2);
 	assert(!TimerEnableExtTrigger(&timer, 2, TIMER_EXTTRIG_SENSE_TOGGLE));
 	assert(TimerEnableExtTrigger(&timer, 2, TIMER_EXTTRIG_SENSE_DISABLE));
 	cfg.bTickInt = false;
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
 	assert(s_Closes == 2 && s_Opens == 2);
 	// A callback changing another due trigger suppresses its old event.
 	cfg.DevNo = 1;
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
 	for (int i = 0; i < 2; i++)
 	{
@@ -327,6 +353,7 @@ int main()
 	assert(TimerGetLowFreqDevCount() == 1);
 	assert(TimerGetHighFreqDevCount() == 4);
 	cfg.DevNo = SAMD_SYSTICK_TIMER_DEVNO;
+	TimerDisable(&timer);
 	assert(cfg.DevNo == 4 && TimerInit(&timer, &cfg));
 	assert(!SamdTimerAllowStandby());
 	assert(timer.DevNo == 4 && timer.Freq == 48000000);
@@ -334,19 +361,34 @@ int main()
 	assert(!g_SamdTimerData[1].bRunning);
 	TimerDev_t other = {};
 	assert(!TimerInit(&other, &cfg));
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
-	assert(s_SysTickStops == 1);
+	assert(SysTickTimerEnabled());
 	cfg.bTickInt = true;
 	assert(!TimerInit(&timer, &cfg));
-	assert(s_SysTickStops == 1);
+	assert(SysTickTimerEnabled());
 	cfg.bTickInt = false;
 	cfg.DevNo = 2;
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
-	assert(s_SysTickStops == 2 && s_SamdSysTickOwner == nullptr);
+	assert(!SysTickTimerEnabled() && s_SamdSysTickOwner == nullptr);
 	assert(!SamdTimerAllowStandby());
 	cfg.DevNo = 4;
 	assert(TimerInit(&other, &cfg));
 	cfg.DevNo = 5;
 	assert(!TimerInit(&timer, &cfg));
+	assert(TimerPowerOff(&other));
+	assert(!TimerPowerOff(&other));
+	assert(!SysTickTimerEnabled());
+	cfg.DevNo = 1;
+	assert(TimerInit(&other, &cfg));
+	s_Pm.PM_APBCMASK = PM_APBCMASK_TC1_Msk | PM_APBCMASK_TC2_Msk;
+	s_LastDisabledChannel = -1;
+	assert(TimerPowerOff(&other));
+	assert(s_LastDisabledChannel == -1);
+	assert(s_Pm.PM_APBCMASK == PM_APBCMASK_TC2_Msk);
+	assert(TimerPowerOff(&timer));
+	assert(s_LastDisabledChannel == GCLK_CLKCTRL_ID_TC1_TC2_Val);
+	assert(s_Pm.PM_APBCMASK == 0U);
 	puts("SAMD timer family selection, rollover, triggers, routing and reinitialization: PASS");
 }

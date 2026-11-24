@@ -81,7 +81,7 @@ class StandbySourceTest(unittest.TestCase):
 		self.assertIn("EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk", s)
 
 	def test_samd11_board_selects_sw0(self):
-		board = (ROOT / "ARM/Microchip/SAMD/SAMD11/exemples/PowerOffDemo/src/board.h").read_text(encoding="utf-8")
+		board = (ROOT / "ARM/Microchip/SAMD/SAMD11/exemples/CorePowerTest/src/board.h").read_text(encoding="utf-8")
 		self.assertIn("#define WAKE_BUT_PIN 14", board)
 		self.assertIn("#define POWER_DEMO_RESUME_WAKE 1", board)
 

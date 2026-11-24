@@ -18,6 +18,8 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include "component/supc.h"
 #include "component/wdt.h"
 
+#include "idelay.h"
+
 // Supplied by ARM startup in firmware builds.
 uint32_t SystemMicroSecLoopCnt = 1000000UL;
 

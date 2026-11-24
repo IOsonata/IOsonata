@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 INCLUDES = ['-I' + str(ROOT / p) for p in
-            ('tests/sam4e/power_shim', 'include', 'ARM/Microchip/SAM4E/include')]
+            ('tests/sam4e/power_shim', 'include', 'ARM/include', 'ARM/Microchip/SAM4E/include')]
 SOURCES = ['ARM/Microchip/SAM4E/src/system_power_sam4e.cpp',
            'ARM/Microchip/SAM4E/src/system_clock_sam4e.cpp']
 
