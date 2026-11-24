@@ -15,6 +15,18 @@ UART. The board sets `CORE_CLOCK_TEST_TIMERS=0`. The completion count covers
 the enabled checks. Timer triggers, concurrent timers, timer power-off and
 delay calibration and accuracy are outside this image.
 
+### Test a timer
+
+Set `CORE_CLOCK_TEST_TIMERS=1` in the CoreClockTest Release C++ preprocessor
+symbols. The SAMD11 builds one timer per image so the linker can discard
+the other timer implementations. The default device is 0 (RTC). Set
+`CORE_CLOCK_TEST_TIMER_DEVNO` to 1 (TC1), 2 (TC2), 3 (TCC0) or 4 (SysTick)
+and rebuild the application to test that device.
+
+The test measures 110 ms, counts periodic and one-shot callbacks, then
+disables and powers off the selected timer. Multi-timer checks require
+the full test image on a larger target.
+
 ### Measure delay factors during porting
 
 In the **CoreClockTest** Release configuration, add

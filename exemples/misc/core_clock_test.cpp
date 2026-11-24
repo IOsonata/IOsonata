@@ -139,7 +139,7 @@ static void CoreClockTestTriggerHandler(TimerDev_t *pTimer, int Trigger,
 	(void)pTimer;
 	(void)Trigger;
 	(void)pContext;
-	s_TriggerCount++;
+	s_TriggerCount = s_TriggerCount + 1U;
 }
 
 static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event)
@@ -1125,6 +1125,40 @@ static void CoreClockTestTimerPowerOff(void)
 	}
 }
 
+#if CORE_CLOCK_TEST_TIMERS && defined(CORE_CLOCK_TEST_TIMER_DEVNO)
+static void CoreClockTestSingleTimer(void)
+{
+	uint32_t start;
+	uint32_t elapsed;
+	uint32_t fired;
+	uint64_t period;
+
+	CoreClockTestPrint("Timer device %u\r\n", (unsigned)CORE_CLOCK_TEST_TIMER_DEVNO);
+	if (CoreClockTestTimerInit(CORE_CLOCK_TEST_TIMER_DEVNO, &s_Timer))
+	{
+		s_TriggerCount = 0U;
+		period = nsTimerEnableTrigger(&s_Timer, 0, 20000000ULL,
+			TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler, nullptr);
+		start = TimerGetMicrosecond(&s_Timer);
+		msDelay(110U);
+		elapsed = TimerGetMicrosecond(&s_Timer) - start;
+		fired = s_TriggerCount;
+		TimerDisableTrigger(&s_Timer, 0);
+		CoreClockTestPrint("Elapsed %u us, callbacks %u\r\n", (unsigned)elapsed, (unsigned)fired);
+		CoreClockTestResult("Timer timing", elapsed >= 107800U && elapsed <= 112200U);
+		CoreClockTestResult("Timer periodic callback", period != 0U && fired == 5U);
+		s_TriggerCount = 0U;
+		period = nsTimerEnableTrigger(&s_Timer, 0, 20000000ULL,
+			TIMER_TRIG_TYPE_SINGLE, CoreClockTestTriggerHandler, nullptr);
+		msDelay(75U);
+		CoreClockTestResult("Timer one-shot callback", period != 0U && s_TriggerCount == 1U);
+		TimerDisableTrigger(&s_Timer, 0);
+		TimerDisable(&s_Timer);
+		CoreClockTestResult("Timer PowerOff", TimerPowerOff(&s_Timer));
+	}
+}
+#endif
+
 static void CoreClockTestPortCalibration(void)
 {
 	CoreClockTestPrint("Delay calibration build\r\n");
@@ -1171,6 +1205,12 @@ int main(void)
 	{
 		return 1;
 	}
+#if CORE_CLOCK_TEST_TIMERS && defined(CORE_CLOCK_TEST_TIMER_DEVNO)
+	msDelay(1000);
+	CoreClockTestSingleTimer();
+	CoreClockTestComplete();
+	return 0;
+#endif
 	msDelay(1000);
 	CoreClockTestPrint("CoreClockTest\r\nStartup CPU %u Hz, peripheral clock 0 %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
