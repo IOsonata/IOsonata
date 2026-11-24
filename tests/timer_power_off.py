@@ -124,10 +124,10 @@ class TimerPowerOffChecks(unittest.TestCase):
 		begin = src.index("static void CoreClockTestTimerPowerOff(void)")
 		end = src.index("int main(void)", begin)
 		test = src[begin:end]
+		self.assertIn("stopped = TimerPowerOff(&s_RetainedTimer);", test)
+		self.assertIn("TimerInit(&s_RetainedTimer, &cfg);", test)
 		self.assertIn("TimerPowerOff(&s_RetainedTimer);", test)
-		self.assertIn("TimerInit(&s_PowerOffTimer, &cfg);", test)
-		self.assertIn("TimerPowerOff(&s_PowerOffTimer);", test)
-		self.assertIn("!TimerPowerOff(&s_PowerOffTimer)", test)
+		self.assertIn("!TimerPowerOff(&s_RetainedTimer)", test)
 		self.assertIn("CoreClockTestTimerPowerOff();", src)
 		self.assertNotIn("NRF91_SERIES", test)
 

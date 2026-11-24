@@ -342,8 +342,7 @@ class NordicSleepDelay(unittest.TestCase):
         matrix_end = source.index("// Exercise the public Timer trigger API", matrix_start)
         matrix = source[matrix_start:matrix_end]
         self.assertIn("pTimer = &s_Timer;", matrix)
-        self.assertIn("s_RetainedTimer.Enable != nullptr", matrix)
-        self.assertIn("s_RetainedTimer.DevNo == DevNo", matrix)
+        self.assertIn("DevNo == TimerGetHighFreqDevNo()", matrix)
         self.assertIn("pTimer = &s_RetainedTimer;", matrix)
         self.assertLess(matrix.index("pTimer = &s_RetainedTimer;"),
             matrix.index("CoreClockTestTimerInit(DevNo, pTimer)"))
@@ -372,19 +371,19 @@ class NordicSleepDelay(unittest.TestCase):
 
 
 
-    def test_generic_timer_power_off_transfers_hardware_ownership(self):
+    def test_generic_timer_power_off_reuses_same_structure(self):
         source = TEST.read_text(encoding="utf-8")
         begin = source.index("static void CoreClockTestTimerPowerOff(void)")
         end = source.index("int main(void)", begin)
         test = source[begin:end]
         self.assertIn("TimerGetHighFreqDevNo()", test)
         self.assertIn("s_RetainedTimer.PowerOff == nullptr", test)
+        self.assertIn("stopped = TimerPowerOff(&s_RetainedTimer);", test)
+        self.assertIn("TimerInit(&s_RetainedTimer, &cfg);", test)
         self.assertIn("TimerPowerOff(&s_RetainedTimer);", test)
-        self.assertIn("TimerInit(&s_PowerOffTimer, &cfg);", test)
-        self.assertIn("TimerPowerOff(&s_PowerOffTimer);", test)
-        self.assertIn("!TimerPowerOff(&s_PowerOffTimer)", test)
+        self.assertIn("!TimerPowerOff(&s_RetainedTimer)", test)
         self.assertLess(test.index("TimerPowerOff(&s_RetainedTimer);"),
-            test.index("TimerInit(&s_PowerOffTimer, &cfg);"))
+            test.index("TimerInit(&s_RetainedTimer, &cfg);"))
         self.assertIn("CoreClockTestTimerPowerOff();", source)
         self.assertNotIn("NRF91_SERIES", test)
 

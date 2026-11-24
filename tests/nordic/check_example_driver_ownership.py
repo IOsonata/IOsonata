@@ -123,7 +123,7 @@ class DemoDriverOwnership(unittest.TestCase):
 
 		self.assertIn("CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);", source)
 		self.assertIn("Timer independent clock ownership", source)
-		self.assertIn("CoreClockTestTimerInit(DevNo)", source)
+		self.assertIn("CoreClockTestTimerInit(DevNo, pTimer)", source)
 		for name in ("CLOCK_DEMO_CORE_READONLY", "CLOCK_DEMO_DEFER_TIMER",
 			"CLOCK_DEMO_UART_RX_TEST", "CLOCK_DEMO_STOP_UART",
 			"CLOCK_DEMO_HF_SOURCE_ENABLE", "CLOCK_DEMO_LF_SOURCE_ENABLE",
@@ -135,11 +135,11 @@ class DemoDriverOwnership(unittest.TestCase):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("timerDevNo < timerCount", source)
 		self.assertIn("cfg.DevNo = DevNo;", source)
-		self.assertIn("TimerSetFrequency(&s_Timer", source)
+		self.assertIn("TimerSetFrequency(pTimer", source)
 		self.assertNotIn("CLOCK_DEMO_TIMER_DEVNO", source)
 		self.assertNotIn("CLOCK_DEMO_STOP_TIMER_DEVNO", source)
 		self.assertNotIn("CLOCK_DEMO_CYCLES", source)
-		self.assertIn("TimerDisable(&s_Timer);", source)
+		self.assertIn("TimerDisable(pTimer);", source)
 
 	def test_core_clock_checks_shared_clock_lifecycle(self):
 		source = CLOCK.read_text(encoding="utf-8")

@@ -80,7 +80,7 @@ class Nrf91PowerClock(unittest.TestCase):
 		begin = example.index("static void CoreClockTestTimer(int DevNo)")
 		end = example.index("// Exercise the public Timer trigger API", begin)
 		section = example[begin:end]
-		self.assertIn("TimerGetTickCount(&s_Timer)", section)
+		self.assertIn("TimerGetTickCount(pTimer)", section)
 		self.assertIn("TimerGetMicrosecond(&s_RetainedTimer)", section)
 		self.assertIn("Independent LF timer rate:", section)
 		self.assertIn('CoreClockTestResult("Delay within 2 percent",', section)
@@ -198,9 +198,9 @@ class Nrf91PowerClock(unittest.TestCase):
 		start = demo.index("static void CoreClockTestTimer(int DevNo)")
 		end = demo.index("// Exercise the public Timer trigger API", start)
 		sample = demo[start:end]
-		self.assertLess(sample.index("frequency = TimerSetFrequency(&s_Timer"),
-			sample.index("enabled = TimerEnable(&s_Timer)"))
-		self.assertIn("TimerDisable(&s_Timer);", sample)
+		self.assertLess(sample.index("frequency = TimerSetFrequency(pTimer"),
+			sample.index("enabled = TimerEnable(pTimer)"))
+		self.assertIn("TimerDisable(pTimer);", sample)
 
 	def test_nrf91_hf_timer_exclusive_handle(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
@@ -310,8 +310,7 @@ class Nrf91PowerClock(unittest.TestCase):
 		start = example.index("static void CoreClockTestTimer(int DevNo)")
 		end = example.index("// Exercise the public Timer trigger API", start)
 		matrix = example[start:end]
-		self.assertIn("s_RetainedTimer.Enable != nullptr", matrix)
-		self.assertIn("s_RetainedTimer.DevNo == DevNo", matrix)
+		self.assertIn("DevNo == TimerGetHighFreqDevNo()", matrix)
 		self.assertIn("pTimer = &s_RetainedTimer;", matrix)
 		self.assertIn("CoreClockTestTimerInit(DevNo, pTimer)", matrix)
 		self.assertIn("CoreClockTestTimerTriggers(pTimer);", matrix)
@@ -335,8 +334,8 @@ class Nrf91PowerClock(unittest.TestCase):
 				self.assertIn(data + " = nullptr;", src)
 				self.assertIn("static bool " + owner + "(", src)
 				self.assertIn("!" + owner + "(pTimer)", src)
-		self.assertIn("TimerPowerOff(&s_RetainedTimer);", test)
-		self.assertIn("TimerInit(&s_PowerOffTimer, &cfg);", test)
+		self.assertIn("stopped = TimerPowerOff(&s_RetainedTimer);", test)
+		self.assertIn("TimerInit(&s_RetainedTimer, &cfg);", test)
 		self.assertNotIn("NRF91_SERIES", test[test.index("static void CoreClockTestTimerPowerOff(void)"):test.index("int main(void)")])
 
 if __name__ == "__main__":

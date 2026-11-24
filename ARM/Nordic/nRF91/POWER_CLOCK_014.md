@@ -327,14 +327,14 @@ that device number.
 
 The same generic CoreClockTest is used across every MCU. It tests
 that the first HF timer can be powered off and initialized again
-with another TimerDev_t. The source file does not contain any
+with the same TimerDev_t. The source file does not contain any
 nRF91-specific code.
 
 The earlier nRF9160 CoreClockTest and CorePowerTest runs predate
 TimerPowerOff and cannot validate it. Rebuild the nRF9160 library
 and repeat the hardware tests, including LFRC/LFXO timer timing,
 HF/LF shared clock requests, sDelay, PowerOff followed by Init
-on another timer structure, and rejection of repeated PowerOff.
+on the same timer structure, and rejection of repeated PowerOff.
 
 See docs/architecture/timer-power-off.md for the other MCU timer
 drivers and the remaining hardware tests.

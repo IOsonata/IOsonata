@@ -102,7 +102,6 @@ static const UARTCfg_t s_UartCfg = {
 static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
 static TimerDev_t s_RetainedTimer;
-static TimerDev_t s_PowerOffTimer;
 static volatile uint32_t s_InterruptCount;
 static volatile uint32_t s_TriggerCount;
 static uint32_t s_LfTimerInitMask;
@@ -780,12 +779,9 @@ static void CoreClockTestTimer(int DevNo)
 	bool hfReady;
 	bool enabled;
 
-	// The retained high-frequency reference remains owned after Disable.
-	// When it is the device being tested, reuse the same Timer handle.
-	// This is generic for any MCU with persistent timer ownership.
+	// Use the calibration timer structure whenever testing the first HF timer.
 	pTimer = &s_Timer;
-	if (s_RetainedTimer.Enable != nullptr &&
-		s_RetainedTimer.DevNo == DevNo)
+	if (TimerGetHighFreqDevCount() > 0 && DevNo == TimerGetHighFreqDevNo())
 	{
 		pTimer = &s_RetainedTimer;
 	}
@@ -1005,6 +1001,8 @@ static void CoreClockTestConcurrentTimerTest(int LowCount, int HighCount)
 {
 	TimerCfg_t firstCfg;
 	TimerCfg_t secondCfg;
+	TimerDev_t *pFirst;
+	TimerDev_t *pSecond;
 	int secondNo;
 	uint32_t start;
 	uint32_t elapsed;
@@ -1017,53 +1015,59 @@ static void CoreClockTestConcurrentTimerTest(int LowCount, int HighCount)
 		return;
 	}
 	secondNo = LowCount > 0 && HighCount > 0 ? LowCount : 1;
+	// The first HF device already has a timer structure from calibration.
+	pFirst = &s_Timer;
+	pSecond = &s_RetainedTimer;
+	if (LowCount == 0)
+	{
+		pFirst = &s_RetainedTimer;
+		pSecond = &s_Timer;
+	}
 	firstCfg = s_TimerCfg;
 	secondCfg = s_TimerCfg;
 	firstCfg.DevNo = 0;
 	secondCfg.DevNo = secondNo;
 	firstCfg.EvtHandler = nullptr;
 	secondCfg.EvtHandler = nullptr;
-	first = TimerInit(&s_Timer, &firstCfg);
-	second = TimerInit(&s_RetainedTimer, &secondCfg);
+	first = TimerInit(pFirst, &firstCfg);
+	second = TimerInit(pSecond, &secondCfg);
 	if (!first || !second)
 	{
 		if (first)
 		{
-			TimerDisable(&s_Timer);
+			TimerDisable(pFirst);
 		}
 		if (second)
 		{
-			TimerDisable(&s_RetainedTimer);
+			TimerDisable(pSecond);
 		}
 		CoreClockTestResult("Concurrent timer initialization", false);
 		return;
 	}
-	first = TimerEnable(&s_Timer);
-	second = TimerEnable(&s_RetainedTimer);
+	first = TimerEnable(pFirst);
+	second = TimerEnable(pSecond);
 	if (first && second)
 	{
-		start = TimerGetMicrosecond(&s_RetainedTimer);
-		TimerDisable(&s_Timer);
+		start = TimerGetMicrosecond(pSecond);
+		TimerDisable(pFirst);
 		msDelay(30);
-		elapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+		elapsed = TimerGetMicrosecond(pSecond) - start;
 		CoreClockTestResult("Timer independent clock ownership", elapsed > 0U);
 	}
 	else
 	{
 		CoreClockTestResult("Concurrent timer enable", false);
 	}
-	TimerDisable(&s_Timer);
-	TimerDisable(&s_RetainedTimer);
+	TimerDisable(pFirst);
+	TimerDisable(pSecond);
 }
 
-// Verify that PowerOff releases a physical TIMER for another handle.
-// Keep the entire test generic; drivers that cannot safely power off
-// report UNSUPPORTED instead of pretending to transfer ownership.
+// Power off the first HF timer and initialize it again.
 static void CoreClockTestTimerPowerOff(void)
 {
 	TimerCfg_t cfg;
 	int devno;
-	bool released;
+	bool stopped;
 	bool initialized;
 	bool poweredOff;
 
@@ -1079,24 +1083,24 @@ static void CoreClockTestTimerPowerOff(void)
 	cfg = s_TimerCfg;
 	cfg.DevNo = devno;
 	cfg.EvtHandler = nullptr;
-	released = TimerPowerOff(&s_RetainedTimer);
-	CoreClockTestResult("Timer PowerOff owner release", released);
-	if (!released)
+	stopped = TimerPowerOff(&s_RetainedTimer);
+	CoreClockTestResult("Timer disabled PowerOff", stopped);
+	if (!stopped)
 	{
 		return;
 	}
-	initialized = TimerInit(&s_PowerOffTimer, &cfg);
+	initialized = TimerInit(&s_RetainedTimer, &cfg);
 	CoreClockTestResult("Timer init after PowerOff", initialized);
 	if (!initialized)
 	{
 		return;
 	}
-	poweredOff = TimerPowerOff(&s_PowerOffTimer);
+	poweredOff = TimerPowerOff(&s_RetainedTimer);
 	CoreClockTestResult("Timer active PowerOff", poweredOff);
 	if (poweredOff)
 	{
 		CoreClockTestResult("Timer repeated PowerOff rejected",
-			!TimerPowerOff(&s_PowerOffTimer));
+			!TimerPowerOff(&s_RetainedTimer));
 	}
 }
 

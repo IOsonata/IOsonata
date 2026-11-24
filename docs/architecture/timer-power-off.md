@@ -22,8 +22,7 @@ bool Timer::PowerOff();
 Example:
 
 ```cpp
-TimerDev_t timer1 = {};
-TimerDev_t timer2 = {};
+TimerDev_t timer = {};
 TimerCfg_t cfg = {
 	.DevNo = TimerGetHighFreqDevNo(),
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
@@ -31,15 +30,15 @@ TimerCfg_t cfg = {
 	.IntPrio = 2,
 	.EvtHandler = nullptr,
 };
-if (TimerInit(&timer1, &cfg))
+if (TimerInit(&timer, &cfg))
 {
-	TimerDisable(&timer1);
-	TimerEnable(&timer1);
-	if (TimerPowerOff(&timer1))
+	TimerDisable(&timer);
+	TimerEnable(&timer);
+	if (TimerPowerOff(&timer))
 	{
-		if (TimerInit(&timer2, &cfg))
+		if (TimerInit(&timer, &cfg))
 		{
-			TimerPowerOff(&timer2);
+			TimerPowerOff(&timer);
 		}
 	}
 }
@@ -83,8 +82,8 @@ The following source files now contain TimerPowerOff functions.
 | ARM SysTick-only timer | SysTick | Stop SysTick, clear pending interrupt and free timer structure |
 
 The generic CoreClockTest calls the same Timer API on every MCU. Its
-PowerOff checks include initializing the first HF timer through a
-second structure after PowerOff, shutting it down while running and
+PowerOff checks include initializing the first HF timer again with the
+same structure after PowerOff, shutting it down while running and
 rejecting an additional PowerOff.
 
 ## Required tests
