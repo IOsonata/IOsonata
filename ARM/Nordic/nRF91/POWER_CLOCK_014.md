@@ -290,16 +290,13 @@ requires a free RTC. Reinitialization on the DK awaits verification.
 
 ## TimerPowerOff and timer device assignment
 
-TimerPowerOff() is a generic IOsonata Timer function. It stops the
-peripheral, disables timer interrupts, clears the compare settings and
-frees the TimerDev_t assignment. TimerDisable() continues to stop
-counting while retaining that assignment.
+TimerPowerOff() powers down the timer. TimerInit() is required to
+start it again. TimerDisable() preserves the configuration for
+TimerEnable(), including when TimerInit() selected the RTC automatically.
+sDelay() powers off its temporary RTC when the delay finishes.
 
-On nRF91, RTC0/RTC1 and TIMER0/1/2 have PowerOff functions. The
-drivers refuse to remove a timer that still has PEI connections.
-After PowerOff, calls through the old timer structure cannot restart
-the timer or change its settings. A new TimerDev_t can initialize
-that device number.
+On nRF91, RTC0/RTC1 and TIMER0/1/2 support PowerOff. Disconnect
+any PEI connections before powering down the timer.
 
 The same generic CoreClockTest is used across every MCU. It tests
 that the first HF timer can be powered off and initialized again

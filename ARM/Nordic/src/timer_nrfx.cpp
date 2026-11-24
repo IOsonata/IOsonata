@@ -224,8 +224,7 @@ int TimerGetHighFreqDevNo()
 	defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || \
 	defined(NRF54L_SERIES) || defined(NRF91_SERIES)
 
-// TimerInit selects an unused LF timer for DevNo=-1; TimerDisable
-// returns only automatically selected timers to the timer driver.
+// TimerInit selects an unused LF timer for DevNo=-1.
 #if !defined(NRF54L_SERIES)
 extern "C" bool nRFxSleepLfClockRunning(void);
 #endif
@@ -460,7 +459,10 @@ extern "C" bool sDelay(uint32_t Seconds)
 	if (initialized)
 	{
 		TimerDisableTrigger(&s_SleepTimer, 0);
-		TimerDisable(&s_SleepTimer);
+		if (!TimerPowerOff(&s_SleepTimer))
+		{
+			success = false;
+		}
 	}
 	irqState = __get_PRIMASK();
 	__disable_irq();

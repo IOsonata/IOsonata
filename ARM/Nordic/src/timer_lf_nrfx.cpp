@@ -128,9 +128,6 @@ static bool nRFxRtcOwned(TimerDev_t *pTimer)
 	return devno >= 0 && devno < TIMER_NRFX_RTC_MAX &&
 		s_pnRfxRtcDev[devno] == pTimer;
 }
-// A timer initialized with DevNo=-1 is returned to the pool by Disable.
-// Explicitly indexed timers retain their handles across Disable/Enable.
-static bool s_bRtcAutoSelected[TIMER_NRFX_RTC_MAX];
 
 // What does not change is constant, so it stays in flash. Only the trigger
 // state above and the device pointers are in RAM.
@@ -597,9 +594,6 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 
 static void nRFxRtcDisable(TimerDev_t * const pTimer)
 {
-	uint32_t irqState;
-	int devno;
-
 	if (!nRFxRtcOwned(pTimer))
 	{
 		return;
@@ -637,17 +631,6 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 	usDelay(50U);
 #endif
 	SystemLowFreqClockDisable();
-	if (s_bRtcAutoSelected[pTimer->DevNo] &&
-		s_pnRfxRtcDev[pTimer->DevNo] == pTimer)
-	{
-		irqState = DisableInterrupt();
-		devno = pTimer->DevNo;
-		s_nRfxRtcData[devno].pReg->INTENCLR = 0xFFFFFFFFU;
-		s_nRfxRtcData[devno].pReg->EVTENCLR = 0xFFFFFFFFU;
-		s_pnRfxRtcDev[devno] = nullptr;
-		s_bRtcAutoSelected[devno] = false;
-		EnableInterrupt(irqState);
-	}
 }
 
 // CLEAR task, returns once COUNTER reads lower than before it, bounded:
@@ -1420,7 +1403,6 @@ static bool nRFxRtcPowerOff(TimerDev_t * const pTimer)
 	}
 	memset(pData->pTrigger, 0,
 		pData->MaxNbTrigEvt * sizeof(TimerTrig_t));
-	s_bRtcAutoSelected[devno] = false;
 	s_bRtcHwClear[devno] = false;
 #if defined(NRF91_SERIES)
 	s_bRtcResetPending[devno] = false;
@@ -1658,7 +1640,6 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	}
 	nRFxRtcSetFrequency(pTimer, pSelectedCfg->Freq);
 #endif
-	s_bRtcAutoSelected[pSelectedCfg->DevNo] = automatic;
 	nRFxRtcClear(reg);
 	return true;
 }

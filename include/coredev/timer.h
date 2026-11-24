@@ -257,8 +257,7 @@ struct __Timer_Device {
 	 */
 	bool (*EnableExtTrigger)(TimerDev_t * const pTimerDev, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense);
 
-	// Stop the hardware timer, disable its interrupts and clear its
-	// device assignment. Disable alone keeps the timer assigned.
+	// Power down the hardware timer. Init is required to start it again.
 	// Drivers without PowerOff support leave this pointer NULL.
 	bool (*PowerOff)(TimerDev_t * const pTimerDev);
 };
@@ -288,7 +287,7 @@ int TimerGetHighFreqDevCount(void);
 int TimerGetHighFreqDevNo(void);
 
 /**
- * @brief   Turn off timer.
+ * @brief   Stop the timer and keep its configuration.
  *
  * This is used to disable timer for power saving. Call Enable() to
  * re-enable timer instead of full initialization sequence
@@ -298,15 +297,9 @@ int TimerGetHighFreqDevNo(void);
 static inline void TimerDisable(TimerDev_t * const pTimer) { pTimer->Disable(pTimer); }
 
 /**
- * @brief Stop a timer completely and make the device available for Init.
+ * @brief Power down the timer. Call TimerInit to start it again.
  *
- * TimerDisable stops counting but keeps the existing TimerDev_t.
- * TimerPowerOff stops counting, disables the timer interrupts and
- * removes that device assignment. A subsequent TimerInit can use a
- * different TimerDev_t for the same hardware timer.
- *
- * @return true when the timer has been stopped and its device freed.
- *         false if the timer cannot be powered off safely.
+ * @return true if the driver powered down the timer.
  */
 static inline bool TimerPowerOff(TimerDev_t * const pTimer)
 {
@@ -577,14 +570,14 @@ public:
     virtual bool Enable() { return vTimer.Enable(&vTimer); }
 
     /**
-     * @brief   Turn off timer.
+     * @brief   Stop the timer and keep its configuration.
      *
      * This is used to disable timer for power saving. Call Enable() to
      * re-enable timer instead of full initialization sequence
      */
     virtual void Disable() { vTimer.Disable(&vTimer); }
 
-	/** @brief Stop the timer and free its hardware device. */
+	/** @brief Power down the timer. Call Init to start it again. */
 	virtual bool PowerOff() { return TimerPowerOff(&vTimer); }
 
     /**

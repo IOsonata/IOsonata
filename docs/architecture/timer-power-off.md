@@ -2,15 +2,12 @@
 
 ## Timer functions
 
-`TimerInit()` configures a hardware timer and assigns it to a
-`TimerDev_t`. `TimerDisable()` stops counting without removing that
-assignment. `TimerEnable()` resumes the same timer.
+`TimerDisable()` stops timer operation and preserves the configuration.
+Call `TimerEnable()` to resume, or `TimerInit()` to change the configuration.
 
-`TimerPowerOff()` stops counting, disables the timer interrupts, clears
-the timer's compare settings, removes its device assignment and turns
-off its peripheral clock when that clock is not needed by another
-timer. A subsequent `TimerInit()` may assign the same hardware timer
-to a different `TimerDev_t`.
+`TimerPowerOff()` powers down the timer. The driver disables its interrupts,
+clears its compare settings and turns off clocks used only by that timer.
+Call `TimerInit()` to start it again.
 
 The generic C and C++ functions are:
 

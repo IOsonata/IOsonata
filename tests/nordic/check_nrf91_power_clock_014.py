@@ -65,7 +65,7 @@ class Nrf91PowerClock(unittest.TestCase):
 		start = timer.index('extern "C" bool sDelay(uint32_t Seconds)')
 		delay = timer[start:]
 		for call in ("nRFxSleepLfClockAccurate()", "nRFxSleepLfClockStartupWaitUs()",
-					 "TimerInit(&s_SleepTimer", "TimerDisable(&s_SleepTimer)", "__WFE()"):
+					 "TimerInit(&s_SleepTimer", "TimerPowerOff(&s_SleepTimer)", "__WFE()"):
 			self.assertIn(call, delay)
 		self.assertNotIn("msDelay(", delay)
 		self.assertNotIn("DWT->", delay)

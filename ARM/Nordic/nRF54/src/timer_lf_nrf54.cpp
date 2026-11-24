@@ -93,12 +93,11 @@ alignas(4) static nRFGrtcData_t s_nRfxGrtcData[TIMER_NRFX_RTC_MAX] = {
 // running, Disable never stops it: the radio stack (MPSL, SoftDevice) uses it
 // too and can start it after this driver did.
 static bool s_bGrtcEnabled[TIMER_NRFX_RTC_MAX];
-static bool s_bGrtcAutoSelected[TIMER_NRFX_RTC_MAX];
 // Reservation persists when a generic Timer handle is rebound to another
 // disabled GRTC group; pTimer in each group is only its active dispatch handle.
 static TimerDev_t *s_pGrtcOwner[TIMER_NRFX_RTC_MAX];
 
-// Reject stale handles after automatic release or sequential rebinding.
+// Reject stale handles after PowerOff or reinitialization.
 // Ownership must be checked before accessing any per-group GRTC state.
 static nRFGrtcData_t *nRFxGrtcOwned(TimerDev_t * const pTimer)
 {
@@ -203,8 +202,6 @@ static void nRFxGrtcDisable(TimerDev_t * const pTimer)
 	uint32_t state;
 	nRFGrtcData_t *pRtc;
 	int devno;
-	int i;
-	int idx;
 
 	if (pTimer == nullptr)
 	{
@@ -226,27 +223,6 @@ static void nRFxGrtcDisable(TimerDev_t * const pTimer)
 	NVIC_DisableIRQ(nRFxGrtcIrqNo(devno));
 	NVIC_ClearPendingIRQ(nRFxGrtcIrqNo(devno));
 
-	// Explicitly initialized timers retain their trigger and group
-	// ownership across Disable. Only temporary timers return to the pool.
-	if (s_bGrtcAutoSelected[devno])
-	{
-		pRtc->pInt[2] = nRFxGrtcCCMask(*pRtc);
-		for (i = 0; i < pRtc->MaxNbTrigEvt; i++)
-		{
-			idx = pRtc->StartCCIdx + i;
-			NRF_GRTC->CC[idx].CCEN = 0U;
-			NRF_GRTC->EVENTS_COMPARE[idx] = 0U;
-			pRtc->CC[i] = 0U;
-			pRtc->Compare[i] = 0U;
-			pRtc->Trigger[i].nsPeriod = 0U;
-			pRtc->Trigger[i].Handler = nullptr;
-			pRtc->Trigger[i].pContext = nullptr;
-			pRtc->Trigger[i].Type = TIMER_TRIG_TYPE_SINGLE;
-		}
-		pRtc->pTimer = nullptr;
-		s_pGrtcOwner[devno] = nullptr;
-		s_bGrtcAutoSelected[devno] = false;
-	}
 	EnableInterrupt(state);
 }
 
@@ -295,7 +271,6 @@ static bool nRFxGrtcPowerOff(TimerDev_t * const pTimer)
 	pRtc->pTimer = nullptr;
 	s_pGrtcOwner[devno] = nullptr;
 	s_bGrtcEnabled[devno] = false;
-	s_bGrtcAutoSelected[devno] = false;
 	pTimer->PowerOff = nullptr;
 	pTimer->DevNo = -1;
 	pTimer->Freq = 0U;
@@ -646,14 +621,12 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 			s_nRfxGrtcData[candidate].pInt[2] =
 				nRFxGrtcCCMask(s_nRfxGrtcData[candidate]);
 			s_nRfxGrtcData[candidate].pTimer = nullptr;
-			s_bGrtcAutoSelected[candidate] = false;
 		}
 	}
 	// Install ownership before restoring interrupts, so another user
 	// cannot select the same group while initialization proceeds.
 	s_nRfxGrtcData[devno].pTimer = pTimer;
 	s_pGrtcOwner[devno] = pTimer;
-	s_bGrtcAutoSelected[devno] = automatic;
 	EnableInterrupt(state);
     pTimer->DevNo = devno;
     pTimer->EvtHandler = pCfg->EvtHandler;

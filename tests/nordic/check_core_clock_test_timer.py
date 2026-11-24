@@ -139,11 +139,22 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertIn("first = 1;", rtc)
         self.assertIn("first = 2;", rtc)
         self.assertIn("candidate >= first", rtc)
-        self.assertIn("s_bRtcAutoSelected[devno] = false;", rtc)
         self.assertIn("s_pnRfxRtcDev[candidate] == nullptr", rtc)
-        self.assertIn("s_bRtcAutoSelected[pSelectedCfg->DevNo] = automatic;", rtc)
         self.assertNotIn("s_pnRfxRtcSleepOwner", rtc)
         self.assertIn("SystemLowFreqClockDisable();", rtc)
+
+    def test_disable_preserves_selected_timer_until_power_off(self):
+        for path, name, assignment in (
+            ("src/timer_lf_nrfx.cpp", "nRFxRtc", "s_pnRfxRtcDev[devno] = nullptr;"),
+            ("nRF54/src/timer_lf_nrf54.cpp", "nRFxGrtc", "pRtc->pTimer = nullptr;"),
+        ):
+            with self.subTest(timer=name):
+                src = (ROOT / "ARM/Nordic" / path).read_text()
+                disable = src.split("static void " + name + "Disable(", 1)[1].split("\n}", 1)[0]
+                off = src.split("static bool " + name + "PowerOff(", 1)[1].split("\n}", 1)[0]
+                self.assertNotIn(assignment, disable)
+                self.assertIn(assignment, off)
+                self.assertIn("pTimer->DevNo = -1;", off)
 
     def test_sdelay_uses_only_lf_rtc_and_sleep(self):
         src = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
@@ -154,7 +165,7 @@ class NordicSleepDelay(unittest.TestCase):
             "nsTimerEnableTrigger(&s_SleepTimer, 0,",
             "TIMER_TRIG_TYPE_SINGLE", "__WFE();",
             "s_bSleepTimerDone", "SCB_SCR_SEVONPEND_Msk",
-            "TimerDisable(&s_SleepTimer)",
+            "TimerPowerOff(&s_SleepTimer)",
             "NRF_SDELAY_COLD_OVERHEAD_TICKS",
             "NRF_SDELAY_WARM_OVERHEAD_TICKS",
             "warmClock = nRFxSleepLfClockRunning();"):
