@@ -1455,15 +1455,19 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	if (actual != 0U && (modeChange ||
 		(best != previous && !(best == 1U && previous == 0U && !binary))))
 	{
-		bool busy = (Idx == SAMD_GCLK_MAIN && (s_HfUsers || SamdClockBusy(false))) ||
+		bool busy = (Idx == SAMD_GCLK_MAIN && s_HfUsers != 0U) ||
 			(Idx == SAMD_GCLK_LF && s_LfUsers != 0U);
 		busy = busy || (ctrl & GCLK_GENCTRL_OE_Msk) != 0U;
 		// Generator 1 can feed another generator directly.
 		for (uint32_t gen = 0; !busy && Idx == SAMD_GCLK_LF && gen < GCLK_GEN_NUM; gen++)
 		{
 			uint32_t value = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, gen);
-			busy = value == UINT32_MAX ||
-				((value & GCLK_GENCTRL_GENEN_Msk) != 0U &&
+			if (value == UINT32_MAX)
+			{
+				EnableInterrupt(state);
+				return 0U;
+			}
+			busy = ((value & GCLK_GENCTRL_GENEN_Msk) != 0U &&
 				 (value & GCLK_GENCTRL_SRC_Msk) == GCLK_GENCTRL_SRC_GCLKGEN1);
 		}
 		// A reference channel must not be retimed beneath a running PLL.
@@ -1477,12 +1481,21 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 				 (SYSCTRL_REGS->SYSCTRL_DPLLCTRLA & SYSCTRL_DPLLCTRLA_ENABLE_Msk) != 0U &&
 				 (SYSCTRL_REGS->SYSCTRL_DPLLCTRLB & SYSCTRL_DPLLCTRLB_REFCLK_Msk) ==
 				 SYSCTRL_DPLLCTRLB_REFCLK_GCLK);
-			busy = value == UINT32_MAX ||
-				((reference || (value & GCLK_CLKCTRL_CLKEN_Msk) != 0U) &&
+			if (value == UINT32_MAX)
+			{
+				EnableInterrupt(state);
+				return 0U;
+			}
+			busy = ((reference || (value & GCLK_CLKCTRL_CLKEN_Msk) != 0U) &&
 				 (value & GCLK_CLKCTRL_GEN_Msk) == GCLK_CLKCTRL_GEN(Idx) &&
 				 SamdTimerClockBusy(channel));
 		}
 		if (busy)
+		{
+			// An active consumer fixes the achievable rate at the current divider.
+			actual = SamdGclkGenFreq((uint32_t)Idx);
+		}
+		else if (Idx == SAMD_GCLK_MAIN && SamdClockBusy(false))
 		{
 			actual = 0U;
 		}
