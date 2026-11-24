@@ -15,6 +15,21 @@ UART. The board sets `CORE_CLOCK_TEST_TIMERS=0`. The completion count covers
 the enabled checks. Timer triggers, concurrent timers, timer power-off and
 delay calibration and accuracy are outside this image.
 
+### Measure delay factors during porting
+
+In the **CoreClockTest** Release configuration, add
+`CORE_CLOCK_TEST_DELAY_CALIBRATION=1` under **GNU ARM Cross C++ Compiler >
+Preprocessor > Defined symbols**. Leave `CORE_CLOCK_TEST_TIMERS=0` and rebuild
+the application. This selects a calibration-only image for the 16 KiB part.
+
+The test uses the core-clocked SysTick timer to measure the public delay
+functions at the startup frequency (48 MHz) and in reduced-speed mode
+(24 MHz), then restores performance mode. Capture the two UART lines
+beginning with `Delay divisors`. Each gives the CPU frequency and the
+microsecond and nanosecond loop divisors scaled by 1,000,000.
+These are measurements for choosing the port defaults. Remove the symbol
+and rebuild to resume the normal clock test.
+
 ## Historical demo notes (pre-migration)
 
 # SAMD11 ClockDemo

@@ -64,6 +64,10 @@ SOFTWARE.
 #define CORE_CLOCK_TEST_TIMERS 1
 #endif
 
+#ifndef CORE_CLOCK_TEST_DELAY_CALIBRATION
+#define CORE_CLOCK_TEST_DELAY_CALIBRATION CORE_CLOCK_TEST_TIMERS
+#endif
+
 #define CLOCK_TEST_CYCLES	3U
 
 // The generic API is declared for every target. A weak reference lets the
@@ -587,14 +591,17 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 		CoreClockTestPrint("DWT calibration unavailable; HF Timer will measure delay timing\r\n");
 	}
 
-	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
+	cfg = s_TimerCfg;
+#ifdef CORE_CLOCK_TEST_DELAY_TIMER_DEVNO
+	cfg.DevNo = CORE_CLOCK_TEST_DELAY_TIMER_DEVNO;
+#else
+	cfg.DevNo = TimerGetHighFreqDevNo();
+	if (TimerGetHighFreqDevCount() <= 0 || cfg.DevNo < 0)
 	{
 		CoreClockTestPrint("Delay timing: no CPU counter or HF Timer\r\n");
 		return false;
 	}
-
-	cfg = s_TimerCfg;
-	cfg.DevNo = TimerGetHighFreqDevNo();
+#endif
 	cfg.EvtHandler = nullptr;
 	if (!TimerInit(&s_RetainedTimer, &cfg))
 	{
@@ -683,7 +690,7 @@ static void CoreClockTestDelayCalibrationRecord(void)
 {
 	DelayCalibrationPoint_t sample;
 
-	if (!CORE_CLOCK_TEST_TIMERS)
+	if (!CORE_CLOCK_TEST_DELAY_CALIBRATION)
 	{
 		return;
 	}
@@ -692,6 +699,10 @@ static void CoreClockTestDelayCalibrationRecord(void)
 
 	if (!CoreClockTestDelaySample(&sample))
 	{
+		if (!CORE_CLOCK_TEST_TIMERS)
+		{
+			CoreClockTestResult("Delay calibration measurement", false);
+		}
 		return;
 	}
 
@@ -1114,6 +1125,26 @@ static void CoreClockTestTimerPowerOff(void)
 	}
 }
 
+static void CoreClockTestPortCalibration(void)
+{
+	CoreClockTestPrint("Delay calibration build\r\n");
+	CoreClockTestDelayCalibrationRecord();
+	CoreClockTestPowerMode();
+	CoreClockTestDelayCalibrationReport();
+}
+
+static void CoreClockTestComplete(void)
+{
+	CoreClockTestFlush();
+	CoreClockTestPrint("CoreClockTest complete: %u failures\r\n", s_Failures);
+	CoreClockTestFlush();
+
+	while (1)
+	{
+		msDelay(1000);
+	}
+}
+
 int main(void)
 {
 	unsigned cycle;
@@ -1145,6 +1176,12 @@ int main(void)
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	CoreClockTestFlush();
 	CoreClockTestResult("Core clock startup", SystemCoreClockGet() != 0U);
+	if (CORE_CLOCK_TEST_DELAY_CALIBRATION && !CORE_CLOCK_TEST_TIMERS)
+	{
+		CoreClockTestPortCalibration();
+		CoreClockTestComplete();
+		return 0;
+	}
 	CoreClockTestSharedClockTest();
 	CoreClockTestPowerMode();
 	CoreClockTestDelayCalibrationRecord();
@@ -1312,18 +1349,14 @@ int main(void)
 		CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);
 		CoreClockTestSleepDelayOwnership(lowTimerCount);
 		CoreClockTestTimerPowerOff();
-		CoreClockTestDelayCalibrationReport();
 	}
 	else
 	{
 		CoreClockTestPrint("Timer and delay measurements omitted from this build\r\n");
 	}
-	CoreClockTestFlush();
-	CoreClockTestPrint("CoreClockTest complete: %u failures\r\n", s_Failures);
-	CoreClockTestFlush();
-
-	while (1)
+	if (CORE_CLOCK_TEST_DELAY_CALIBRATION)
 	{
-		msDelay(1000);
+		CoreClockTestDelayCalibrationReport();
 	}
+	CoreClockTestComplete();
 }
