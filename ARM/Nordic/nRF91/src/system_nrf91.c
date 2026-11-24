@@ -91,9 +91,19 @@ uint32_t SystemCoreClockGet(void)
 
 void SystemCoreClockUpdate(void)
 {
-    SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
+	SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
+#if defined(NRF9120_XXAA)
+	// Thingy:91 X CoreClockTest at 64 MHz with the HF timer reference.
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
-		16000000UL, 3000000UL);
+		16001760UL, 3000360UL);
+#else
+	// CoreClockTest, nRF9160 at 64 MHz: 3,999,600 us loops/s and
+	// 21,330,986 ns loops/s. msDelay(100) measured 100,010 us and
+	// nsDelay(100 ms) 100,011 us with the 16,000,000 and 3,000,000
+	// divisors.
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		16001600UL, 3000330UL);
+#endif
 }
 
 void SystemInit(void)

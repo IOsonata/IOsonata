@@ -564,6 +564,7 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Disable = Sam4eDisable;
+	pTimer->PowerOff = NULL;
 	pTimer->Enable = Sam4eEnable;
 	pTimer->Reset = Sam4eReset;
 	pTimer->GetTickCount = Sam4eCount;

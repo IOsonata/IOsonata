@@ -936,6 +936,7 @@ bool Stm32LptimInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	pTimer->Disable = StLptDisable;
+	pTimer->PowerOff = NULL;
 	pTimer->Enable = StLptEnable;
 	pTimer->Reset = StLptReset;
 	pTimer->GetTickCount = StLptGetTickCount;

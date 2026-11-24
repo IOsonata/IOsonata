@@ -196,7 +196,7 @@ static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
-#if defined(NRF5340_XXAA_APPLICATION)
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 // Time spent in calibrated LFCLK startup polling, for the next sDelay
 // request. This is internal to the Nordic clock/delay implementation.
 static uint32_t s_nRFxLfclkStartWaitUs;
@@ -214,6 +214,11 @@ static bool s_bNRFxNetLfclkRcFallback;
 // Temporarily selected sources, independent of the board oscillator hardware.
 static bool s_bNRFxCoreOscSelected;
 static bool s_bNRFxLowOscSelected;
+#if defined(NRF91_SERIES)
+// Invalidate the measured LFRC RTC rate after every source configuration.
+// The counter is independent of the application's oscillator descriptor.
+static uint32_t s_nRF91LfclkConfigEpoch;
+#endif
 static OSC_TYPE s_nRFxCoreOscSelected;
 static OSC_TYPE s_nRFxLowOscSelected;
 
@@ -832,7 +837,7 @@ bool SystemLowFreqClockCalibrate(void)
 // Read the active source, not the selected-source register copy.
 static bool nRFxLfclkFinishStart(uint32_t Src)
 {
-#if defined(NRF53_SERIES)
+#if defined(NRF53_SERIES) || defined(NRF91_SERIES)
 	uint32_t elapsed;
 
 	if ((Src & NRFX_LFCLK_SRC_Msk) ==
@@ -849,7 +854,7 @@ static bool nRFxLfclkFinishStart(uint32_t Src)
 			}
 			usDelay(NRFX_LFCLK_START_POLL_US);
 			elapsed += NRFX_LFCLK_START_POLL_US;
-#if defined(NRF5340_XXAA_APPLICATION)
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 			s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
 #endif
 		}
@@ -869,9 +874,20 @@ static bool nRFxLfclkFinishStart(uint32_t Src)
 		if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STAT_SRC_Msk) ==
 			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos))
 		{
+#if defined(NRF53_SERIES)
 			(void)nRFxLfclkCalibrate();
+#endif
+			return true;
 		}
+#if defined(NRF91_SERIES)
+		// The modem can keep LFXO running while a foreground client
+		// requests LFRC. Accept that externally owned source without
+		// stopping the clock: its actual frequency remains accurate.
+		return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STAT_SRC_Msk) ==
+			(NRFX_LFCLK_SRC_XTAL << NRFX_LFCLK_SRC_Pos);
+#else
 		return true;
+#endif
 	}
 #else
 	(void)Src;
@@ -883,7 +899,7 @@ static bool nRFxLfclkStart(uint32_t Src)
 {
 	uint32_t elapsed;
 
-#if defined(NRF5340_XXAA_APPLICATION)
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 	s_nRFxLfclkStartWaitUs = 0U;
 #endif
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
@@ -910,7 +926,7 @@ static bool nRFxLfclkStart(uint32_t Src)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
-#if defined(NRF5340_XXAA_APPLICATION)
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
 #endif
 	}
@@ -947,10 +963,54 @@ static bool nRFxLfclkWaitStopped(void)
 // Snapshot actual LFCLK hardware state before sDelay requests an RTC.
 // A running oscillator avoids the cold LFXO startup penalty. No ownership
 // change or oscillator start takes place in this query.
-#if defined(NRF5340_XXAA_APPLICATION)
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void)
 {
 	return s_nRFxLfclkStartWaitUs;
+}
+#endif
+
+#if defined(NRF91_SERIES)
+// Internal nRF91 clock/RTC interface. Neither function starts or stops LFCLK.
+extern "C" uint32_t nRFxLfclkConfigurationEpoch(void)
+{
+	return s_nRF91LfclkConfigEpoch;
+}
+
+extern "C" bool nRFxLfclkRunningFromRc(void)
+{
+	return (NRF_CLOCK->NRFX_LFCLKSTAT &
+		(NRFX_LFCLK_STATE_Msk | NRFX_LFCLK_STAT_SRC_Msk)) ==
+		(NRFX_LFCLK_STATE_Msk |
+		(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos));
+}
+
+// Preserve the measured LFRC timebase across a balanced timer
+// Disable/Enable. A stopped LFCLK still has a selected source; it must
+// not cause TimerSetFrequency to revert to nominal 32768 Hz.
+// If an external owner supplies LFXO while RC was selected, use the
+// active crystal frequency instead.
+extern "C" bool nRFxLfclkUsesRc(void)
+{
+	uint32_t stat;
+
+	if (nRFxLowOscSelected() != OSC_TYPE_RC)
+	{
+		return false;
+	}
+	stat = NRF_CLOCK->NRFX_LFCLKSTAT;
+	return (stat & NRFX_LFCLK_STATE_Msk) == 0U ||
+		(stat & NRFX_LFCLK_STAT_SRC_Msk) ==
+			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos);
+}
+#endif
+
+#if defined(NRF91_SERIES)
+// Do not calibrate LFRC by a CPU busy wait as part of sDelay's
+// low-power sleep setup. Use the already validated LFXO timebase.
+extern "C" bool nRFxSleepLfClockAccurate(void)
+{
+	return nRFxLowOscSelected() == OSC_TYPE_XTAL;
 }
 #endif
 
@@ -1181,6 +1241,11 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		s_bNRFxLfclkStopPending = false;
 		s_nRFxLowOscSelected = ClkSrc;
 		s_bNRFxLowOscSelected = true;
+#if defined(NRF91_SERIES)
+		// A subsequent RTC initialization must remeasure LFRC after
+		// selecting an oscillator, even if the oscillator was RC before.
+		s_nRF91LfclkConfigEpoch++;
+#endif
 	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);

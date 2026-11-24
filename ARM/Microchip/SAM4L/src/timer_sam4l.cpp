@@ -323,6 +323,7 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	d.Timer = t; d.Healthy = true;
 	t->DevNo = cfg->DevNo; t->Freq = freq; t->nsPeriod = (1000000000ULL + freq / 2) / freq;
 	t->EvtHandler = cfg->EvtHandler;
+	t->PowerOff = NULL;
 	t->Disable = Disable; t->Enable = Enable; t->Reset = Reset; t->GetTickCount = GetCount;
 	t->SetFrequency = Frequency; t->GetMaxTrigger = MaxTrigger; t->FindAvailTrigger = FindTrigger;
 	t->DisableTrigger = TriggerDisable; t->EnableTrigger = TriggerEnable;

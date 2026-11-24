@@ -256,6 +256,10 @@ struct __Timer_Device {
 	 * @return  true - Success
 	 */
 	bool (*EnableExtTrigger)(TimerDev_t * const pTimerDev, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense);
+
+	// Power down the hardware timer. Init is required to start it again.
+	// Drivers without PowerOff support leave this pointer NULL.
+	bool (*PowerOff)(TimerDev_t * const pTimerDev);
 };
 
 #pragma pack(pop)
@@ -267,7 +271,8 @@ extern "C" {
 /**
  * @brief   Timer initialization.
  *
- * This is a required implementation specific to each architecture.
+ * Init starts a new or disabled timer. Disable a running timer before
+ * calling Init again to change its configuration.
  *
  * @param	pTimer	: Pointer to Timer device private data (timer handle)
  * @param	pCfg	: Pointer timer configuration data.
@@ -283,7 +288,7 @@ int TimerGetHighFreqDevCount(void);
 int TimerGetHighFreqDevNo(void);
 
 /**
- * @brief   Turn off timer.
+ * @brief   Stop the timer and keep its configuration.
  *
  * This is used to disable timer for power saving. Call Enable() to
  * re-enable timer instead of full initialization sequence
@@ -291,6 +296,17 @@ int TimerGetHighFreqDevNo(void);
  * @param	pTimer	: Pointer to Timer device private data (timer handle)
  */
 static inline void TimerDisable(TimerDev_t * const pTimer) { pTimer->Disable(pTimer); }
+
+/**
+ * @brief Power down the timer. Call TimerInit to start it again.
+ *
+ * @return true if the driver powered down the timer.
+ */
+static inline bool TimerPowerOff(TimerDev_t * const pTimer)
+{
+	return pTimer != NULL && pTimer->PowerOff != NULL ?
+		pTimer->PowerOff(pTimer) : false;
+}
 
 /**
  * @brief   Turn on timer.
@@ -522,6 +538,7 @@ public:
 		vTimer.pObj = this;
 		vTimer.GetTaskEndpoint = NULL;
 		vTimer.ExecuteTask = NULL;
+		vTimer.PowerOff = NULL;
 	}
 	virtual ~Timer() {}
 
@@ -540,9 +557,18 @@ public:
      */
     virtual bool Init(const TimerCfg_t &Cfg)
 	{
+		auto getTaskEndpoint = vTimer.GetTaskEndpoint;
+		auto executeTask = vTimer.ExecuteTask;
+
 		vTimer.GetTaskEndpoint = NULL;
 		vTimer.ExecuteTask = NULL;
-		return TimerInit(&vTimer, &Cfg);
+		if (!TimerInit(&vTimer, &Cfg))
+		{
+			vTimer.GetTaskEndpoint = getTaskEndpoint;
+			vTimer.ExecuteTask = executeTask;
+			return false;
+		}
+		return true;
 	}
 
     /**
@@ -554,12 +580,15 @@ public:
     virtual bool Enable() { return vTimer.Enable(&vTimer); }
 
     /**
-     * @brief   Turn off timer.
+     * @brief   Stop the timer and keep its configuration.
      *
      * This is used to disable timer for power saving. Call Enable() to
      * re-enable timer instead of full initialization sequence
      */
     virtual void Disable() { vTimer.Disable(&vTimer); }
+
+	/** @brief Power down the timer. Call Init to start it again. */
+	virtual bool PowerOff() { return TimerPowerOff(&vTimer); }
 
     /**
      * @brief   Reset timer.

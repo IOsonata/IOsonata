@@ -24,16 +24,15 @@ class Nrf54lCorePort(unittest.TestCase):
 
     def test_grtc_explicit_ownership_and_temporary_cleanup(self):
         source = self.grtc
-        self.assertIn("s_bGrtcAutoSelected[devno] = automatic;", source)
-        self.assertIn("s_nRfxGrtcData[devno].pTimer != pTimer", source)
-        self.assertIn("candidate != devno && s_nRfxGrtcData[candidate].pTimer == pTimer", source)
+        self.assertIn("if (s_bGrtcEnabled[devno])", source)
+        self.assertIn("candidate != devno && s_nRfxGrtcData[candidate].pTimer == pTimer",
+                      " ".join(source.split()))
         self.assertIn("if (s_bGrtcEnabled[candidate])", source)
         self.assertIn("s_nRfxGrtcData[candidate].Trigger[i].nsPeriod != 0U", source)
         self.assertIn("s_nRfxGrtcData[candidate].pTimer = nullptr;", source)
         self.assertIn("s_nRfxGrtcData[candidate].pInt[2] =", source)
 
 
-        self.assertIn("s_bGrtcAutoSelected[devno]", source)
         self.assertIn("pRtc->pTimer = nullptr;", source)
         self.assertIn("s_pGrtcOwner[devno] = nullptr;", source)
         self.assertIn("s_pGrtcOwner[devno] = pTimer;", source)
@@ -43,7 +42,6 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("pRtc->pInt[2] = nRFxGrtcCCMask(*pRtc);", source)
         self.assertIn("NRF_GRTC->CC[idx].CCEN = 0U;", source)
         self.assertIn("NRF_GRTC->EVENTS_COMPARE[idx] = 0U;", source)
-        self.assertIn("s_bGrtcAutoSelected[devno] = false;", source)
         self.assertNotIn("GrtcSleepClaim", source)
         self.assertNotIn("GrtcSleepRelease", source)
 
@@ -165,7 +163,7 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("cfg.DevNo = -1;", source)
         self.assertIn("TimerInit(&s_SleepTimer, &cfg)", source)
         self.assertIn("TimerDisableTrigger(&s_SleepTimer, 0);", source)
-        self.assertIn("TimerDisable(&s_SleepTimer);", source)
+        self.assertIn("TimerPowerOff(&s_SleepTimer)", source)
 
     def test_nrf54l_system_sleep_and_capabilities(self):
         source = self.power

@@ -573,6 +573,7 @@ bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
 	pTimerData->pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimerData->pTimer->Disable = Re01AgtDisable;
+	pTimerData->pTimer->PowerOff = NULL;
 	pTimerData->pTimer->Enable = Re01AgtEnable;
 	pTimerData->pTimer->Reset = Re01AgtReset;
 	pTimerData->pTimer->GetTickCount = Re01AgtGetTickCount;

@@ -1341,6 +1341,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Disable = SamdTimerDisable;
+	pTimer->PowerOff = NULL;
 	pTimer->Enable = SamdTimerEnable;
 	pTimer->Reset = SamdTimerReset;
 	pTimer->GetTickCount = SamdTimerGetTickCount;

@@ -397,6 +397,28 @@ SYSTEM_RESET_WAKE_PIN (0x100) and GPREGRET start counter increasing from
 registers for the tested configuration. It does not validate SRAM retention,
 modem-active shutdown, or the independent nRF9160 variant.
 
+For the nRF9160 DK, the IOsonata 0.14 CoreClockTest subsequently completed
+two consecutive hardware UART runs with **0 failures** after the LFRC
+measured-frequency RTC correction and Disable/Enable cache fix. Both
+RTC0/RTC1 passed `msDelay` and `nsDelay` 250-ms checks using measured
+~44.73–44.74-kHz LFRC rates, and crystal-based RTCs, HF timers, sDelay,
+shared-clock lifecycles and timer triggers passed. This validates RTC
+**timekeeping compensation**, not physical LFRC trimming or datasheet
+frequency tolerance. The subsequent nRF9160 DK CorePowerTest
+also completed four boots with zero failures (14 checks on the first boot
+and 15 on each of the next three, 59 checks total). Three timer-based
+System ON sleep/wake cycles passed on each boot, for 12/12 cycles. Clock,
+UART and static/stack RAM continuity passed after each resume. Three
+successive Button 1 wakes from System OFF reported reset reason 0x100
+and passed retention marker and reset-on-wake checks. GPIO wake
+configuration/disable/rearm and retention register operations also passed.
+SRAM retention across System OFF was UNSUPPORTED because no dedicated
+test region was provided; reduced CPU power mode is not supported.
+The log showed SysLog evicted=0, UART pending=8 at snapshot and
+66 unaccepted UART submissions per boot, a backpressure diagnostic
+rather than evidence of lost output. Modem-active System OFF, current
+consumption and nRF91x1 CoreClockTest/CorePowerTest remain unverified.
+
 Outstanding family-specific build checks and the nRF5340 network-core
 power limitations still require review.
 

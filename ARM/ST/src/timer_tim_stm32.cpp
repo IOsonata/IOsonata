@@ -1224,6 +1224,7 @@ bool Stm32TimInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->nsPeriod = (1000000000ULL + (freq >> 1)) / freq;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Disable = StTimDisable;
+	pTimer->PowerOff = NULL;
 	pTimer->Enable = StTimEnable;
 	pTimer->Reset = StTimReset;
 	pTimer->GetTickCount = StTimGetTickCount;

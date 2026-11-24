@@ -28,6 +28,7 @@ struct __Timer_Device {
 	uint64_t (*EnableTrigger)(TimerDev_t *,int,uint64_t,TIMER_TRIG_TYPE,TimerTrigEvtHandler_t,void *);
 	void (*DisableExtTrigger)(TimerDev_t *);
 	bool (*EnableExtTrigger)(TimerDev_t *,int,TIMER_EXTTRIG_SENSE);
+	bool (*PowerOff)(TimerDev_t *);
 };
 #pragma pack(pop)
 #ifdef __cplusplus

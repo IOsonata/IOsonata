@@ -383,6 +383,7 @@ bool Re01GptInit(RE01_TimerData_t * const dev, const TimerCfg_t * const pCfg)
 	TimerDev_t *timer = dev->pTimer;
 	timer->DevNo = pCfg->DevNo;
 	timer->EvtHandler = pCfg->EvtHandler;
+	timer->PowerOff = NULL;
 	timer->Enable = Re01GptEnable;
 	timer->Disable = Re01GptDisable;
 	timer->Reset = Re01GptReset;

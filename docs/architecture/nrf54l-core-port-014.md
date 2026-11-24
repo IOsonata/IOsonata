@@ -29,7 +29,7 @@ are unchanged and MCU-independent. UART default is 1,000,000 baud.
   application-available GRTC interrupt group. MPSL's final group and
   compare channels 7-11 are not automatically selected.
 - Explicit GRTC Timer handles retain ownership after `TimerDisable`.
-  An auto-selected temporary Timer returns its group on Disable. Selection
+  An auto-selected temporary Timer returns its group on PowerOff. Selection
   and reservation are interrupt-safe; release disables its interrupt group,
   clears the group's compare channels/events, and invalidates the old handle.
   A generic test may sequentially reuse its handle for another group only
@@ -69,8 +69,8 @@ Automatic allocation must skip reserved groups.
 
 Additional source review found stale-handle access paths in GRTC `Reset`, `EnableTrigger`,
 `DisableTrigger`, `GetTickCount`, `GetMaxTrigger`, `SetFrequency` and
-`FindAvailTrigger`. An automatically released timer retains its former
-`DevNo`, which can subsequently refer to a group used by a different timer.
+`FindAvailTrigger`. PowerOff clears the timer device number. Disable keeps the group assigned
+so Enable can resume it.
 All seven operations now check the active group owner before accessing group
 state. Mutating trigger/reset paths also hold the interrupt mask across the
 ownership check and update. Source-level regression assertions were added.

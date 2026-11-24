@@ -539,6 +539,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	pTimer->Disable = LpcTimerDisable;
+	pTimer->PowerOff = NULL;
 	pTimer->Enable = LpcTimerEnable;
 	pTimer->Reset = LpcTimerReset;
 	pTimer->GetTickCount = LpcTimerGetTickCount;

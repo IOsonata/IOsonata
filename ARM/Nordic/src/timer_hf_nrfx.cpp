@@ -59,7 +59,7 @@ SOFTWARE.
 #define NRF_TIMER0			NRF_TIMER0_NS
 #define NRF_TIMER1			NRF_TIMER1_NS
 #define NRF_TIMER2			NRF_TIMER2_NS
-#elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#elif defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 #define NRF_TIMER0			NRF_TIMER00_S
 #define NRF_TIMER1			NRF_TIMER10_S
 #define NRF_TIMER2			NRF_TIMER20_S
@@ -219,6 +219,20 @@ static bool s_bnRFxTimerHwClear[TIMER_NRFX_HF_MAX];
 // through this pointer, so that the data is linked only when a timer is
 // initialized.
 const nRFTimerData_t *s_pnRFxTimerData = nullptr;
+
+// Reject an old TimerDev_t after another handle initializes this TIMER.
+static bool nRFxTimerOwned(TimerDev_t *pTimer)
+{
+	int devno;
+
+	if (pTimer == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	return devno >= 0 && devno < TIMER_NRFX_HF_MAX &&
+		s_pnRFxTimerDev[devno] == pTimer;
+}
 
 // Interrupt of a TIMER in counter mode. counter_nrfx.cpp, linked by
 // CounterInit, replaces this empty default.
@@ -466,7 +480,7 @@ static void TimerIRQHandler(int DevNo)
 
 extern "C" {
 
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 __WEAK void TIMER00_IRQHandler()
 {
 	TimerIRQHandler(0);
@@ -535,8 +549,15 @@ __WEAK void TIMER4_IRQHandler()
 
 static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return false;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	reg = s_nRFxTimerData[devno].pReg;
 
 	if (s_bTimerEnabled[devno])
 	{
@@ -553,7 +574,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 	switch (devno)
 	{
 		case 0:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER00_IRQn);
 			NVIC_EnableIRQ(TIMER00_IRQn);
 #else
@@ -562,7 +583,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #endif
 			break;
 		case 1:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER10_IRQn);
 			NVIC_EnableIRQ(TIMER10_IRQn);
 #else
@@ -571,7 +592,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #endif
 			break;
 		case 2:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER20_IRQn);
 			NVIC_EnableIRQ(TIMER20_IRQn);
 #else
@@ -581,7 +602,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 			break;
 #if TIMER_NRFX_HF_MAX > 3
 		case 3:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER21_IRQn);
 			NVIC_EnableIRQ(TIMER21_IRQn);
 #else
@@ -590,7 +611,7 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #endif
 			break;
 		case 4:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 			NVIC_ClearPendingIRQ(TIMER22_IRQn);
 			NVIC_EnableIRQ(TIMER22_IRQn);
 #else
@@ -618,8 +639,15 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 
 static void nRFxTimerDisable(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	reg = s_nRFxTimerData[devno].pReg;
 
 	if (!s_bTimerEnabled[devno])
 	{
@@ -633,7 +661,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
     switch (devno)
     {
         case 0:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER00_IRQn);
             NVIC_DisableIRQ(TIMER00_IRQn);
 #else
@@ -642,7 +670,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 1:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER10_IRQn);
             NVIC_DisableIRQ(TIMER10_IRQn);
 #else
@@ -651,7 +679,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 2:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER20_IRQn);
             NVIC_DisableIRQ(TIMER20_IRQn);
 #else
@@ -661,7 +689,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
             break;
 #if TIMER_NRFX_HF_MAX > 3
         case 3:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER21_IRQn);
             NVIC_DisableIRQ(TIMER21_IRQn);
 #else
@@ -670,7 +698,7 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 #endif
             break;
         case 4:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
         	NVIC_ClearPendingIRQ(TIMER22_IRQn);
             NVIC_DisableIRQ(TIMER22_IRQn);
 #else
@@ -694,14 +722,90 @@ static void nRFxTimerDisable(TimerDev_t * const pTimer)
 	// The count and the triggers are kept, Enable resumes them
 }
 
+// Full shutdown is distinct from Disable. Disable retains the binding,
+// while PowerOff makes the hardware TIMER available to another handle.
+// PEI routes must be disconnected by their owner before releasing it.
+static bool nRFxTimerPowerOff(TimerDev_t * const pTimer)
+{
+	const nRFTimerData_t *pData;
+	NRF_TIMER_Type *reg;
+	uint32_t state;
+	int devno;
+	int i;
+
+	if (pTimer == nullptr)
+	{
+		return false;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	if (devno < 0 || devno >= TIMER_NRFX_HF_MAX)
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	if (s_pnRFxTimerDev[devno] != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	pData = &s_nRFxTimerData[devno];
+	reg = pData->pReg;
+	if (reg->MODE != TIMER_MODE_MODE_Timer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	for (i = 0; i < pData->MaxNbTrigEvt; i++)
+	{
+		if (pData->pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			pData->pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+	}
+	if (s_bTimerEnabled[devno])
+	{
+		nRFxTimerDisable(pTimer);
+	}
+	reg->TASKS_STOP = 1U;
+	reg->INTENCLR = 0xFFFFFFFFUL;
+	reg->SHORTS = 0U;
+	for (i = 0; i <= pData->CountCC; i++)
+	{
+		reg->EVENTS_COMPARE[i] = 0U;
+	}
+	NVIC_DisableIRQ(pData->IrqNo);
+	NVIC_ClearPendingIRQ(pData->IrqNo);
+	memset(pData->pTrigger, 0,
+		pData->MaxNbTrigEvt * sizeof(TimerTrig_t));
+	memset(pData->pCC, 0,
+		pData->MaxNbTrigEvt * sizeof(uint32_t));
+	s_bnRFxTimerHwClear[devno] = false;
+	s_pnRFxTimerDev[devno] = nullptr;
+	pTimer->PowerOff = nullptr;
+	pTimer->Freq = 0U;
+	pTimer->DevNo = -1;
+	EnableInterrupt(state);
+	return true;
+}
+
 // Clears the counter and the tick count. The armed triggers restart their
 // period from the clear.
 static void nRFxTimerReset(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
+	NRF_TIMER_Type *reg;
+	uint32_t state;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
-	NRF_TIMER_Type *reg = tdata.pReg;
-	uint32_t state = DisableInterrupt();
+	reg = tdata.pReg;
+	state = DisableInterrupt();
 
 	reg->TASKS_CLEAR = 1;
 	pTimer->Rollover = 0;
@@ -732,10 +836,95 @@ static void nRFxTimerReset(TimerDev_t * const pTimer)
 
 static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return 0U;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	reg = s_nRFxTimerData[devno].pReg;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	int i;
+#if defined(NRF91_SERIES)
+	uint32_t base;
+	uint32_t prescaler;
+	uint32_t bestDiff;
+	uint32_t requested;
+	uint32_t proposed;
+	uint32_t irqState;
+	uint64_t ticks;
+	int j;
+
+	base = tdata.MaxFreq;
+	prescaler = 0U;
+	if (Freq != 0U)
+	{
+		bestDiff = UINT32_MAX;
+		for (j = 0; j <= TIMER_NRFX_PRESCALER_MAX; j++)
+		{
+			requested = base >> j;
+			proposed = requested > Freq ? requested - Freq : Freq - requested;
+			if (proposed < bestDiff)
+			{
+				bestDiff = proposed;
+				prescaler = (uint32_t)j;
+			}
+		}
+	}
+	proposed = base >> prescaler;
+
+	// Validate every armed compare before modifying the hardware. A
+	// period that cannot fit the 32-bit counter is rejected rather
+	// than shortened. Do not change a timer bound to PEI.
+	irqState = DisableInterrupt();
+	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
+	{
+		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
+			tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
+		{
+			EnableInterrupt(irqState);
+			return pTimer->Freq;
+		}
+		if (tdata.pTrigger[i].nsPeriod != 0ULL)
+		{
+			ticks = (tdata.pTrigger[i].nsPeriod / 1000000000ULL) *
+				proposed +
+				((tdata.pTrigger[i].nsPeriod % 1000000000ULL) *
+				proposed + 500000000ULL) / 1000000000ULL;
+			if (ticks == 0ULL || ticks > UINT32_MAX)
+			{
+				EnableInterrupt(irqState);
+				return pTimer->Freq;
+			}
+		}
+	}
+	reg->TASKS_STOP = 1U;
+	reg->PRESCALER = prescaler;
+	pTimer->Freq = proposed;
+	pTimer->nsPeriod = 1000000000ULL / proposed;
+	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
+	{
+		if (tdata.pTrigger[i].nsPeriod != 0ULL)
+		{
+			ticks = TimerNanosecondToTick(pTimer,
+				tdata.pTrigger[i].nsPeriod);
+			tdata.pCC[i] = (uint32_t)ticks;
+			tdata.pTrigger[i].nsPeriod =
+				TimerTickToNanosecond(pTimer, ticks);
+		}
+	}
+	// Changing prescaler resets the time origin and rephases the
+	// existing one-shot/continuous compares to the new tick rate.
+	nRFxTimerReset(pTimer);
+	if (s_bTimerEnabled[devno])
+	{
+		reg->TASKS_START = 1U;
+	}
+	EnableInterrupt(irqState);
+	return pTimer->Freq;
+#else
 
 	// Frequency changes invalidate scheduled compare periods.
 	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
@@ -750,7 +939,7 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	// Clock before the prescaler. TIMER00 of the nRF54L runs from the CPU
 	// clock.
 	uint32_t base = tdata.MaxFreq;
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 	if (devno == 0)
 	{
 		base = SystemCoreClock;
@@ -796,12 +985,18 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	}
 
     return pTimer->Freq;
+#endif
 }
 
 static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
 
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return 0ULL;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	return nRFxTimerReadCount(s_nRFxTimerData[devno], devno, pTimer, nullptr);
 }
 
@@ -933,9 +1128,16 @@ bool nRFxTimerEnablePeiTrigger(TimerDev_t * const pTimer, int TrigNo,
 static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                                        TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return 0ULL;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
-	NRF_TIMER_Type *reg = tdata.pReg;
+	reg = tdata.pReg;
 
 	if (TrigNo < 0 || TrigNo >= tdata.MaxNbTrigEvt)
 	{
@@ -950,24 +1152,18 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 		return 0;
 	}
 
-	// Ticks as TimerNanosecondToTick, with one 64 bit division instead of two
-	// up to 100 s (nsPeriod * Freq fits 64 bits up to 128 MHz): the period
-	// starts at the capture below, as soon as the ticks are known.
+	// Preserve the full 64-bit tick count until validated. Casting to
+	// uint32_t first would silently wrap long one-shot or periodic
+	// intervals into unrelated, shorter hardware compares.
+	uint64_t ticks;
 	uint32_t cc;
 
-	if (nsPeriod <= 100000000000ULL)
+	ticks = TimerNanosecondToTick(pTimer, nsPeriod);
+	if (ticks == 0ULL || ticks > UINT32_MAX)
 	{
-		cc = (uint32_t)((nsPeriod * pTimer->Freq + 500000000ULL) / 1000000000ULL);
+		return 0ULL;
 	}
-	else
-	{
-		cc = (uint32_t)TimerNanosecondToTick(pTimer, nsPeriod);
-	}
-
-    if (cc <= 0)
-    {
-        return 0;
-    }
+	cc = (uint32_t)ticks;
 
 	// The period starts at the capture. A compare left from before is cleared
 	// first. The counter is captured in this CC and the period added right
@@ -1008,9 +1204,16 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 
 static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
+	NRF_TIMER_Type *reg;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
-	NRF_TIMER_Type *reg = tdata.pReg;
+	reg = tdata.pReg;
 	PeiDev_t *pei;
 	PeiEvent_t evt;
 	PeiEndpoint_t endpoint;
@@ -1046,7 +1249,13 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 
 static int nRFxTimerFindAvailTrigger(TimerDev_t * const pTimer)
 {
-	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
+	int devno;
+
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return -1;
+	}
+	devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 
 	for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
@@ -1060,6 +1269,10 @@ static int nRFxTimerFindAvailTrigger(TimerDev_t * const pTimer)
 
 static int nRFxTimerGetMaxTrigger(TimerDev_t * const pTimer)
 {
+	if (!nRFxTimerOwned(pTimer))
+	{
+		return 0;
+	}
 	return s_nRFxTimerData[pTimer->DevNo - TIMER_NRFX_RTC_MAX].MaxNbTrigEvt;
 }
 
@@ -1088,24 +1301,46 @@ bool nRFxTimerEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_E
 
 bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 {
+	int i;
+	int devno;
+
 	// Any frequency, SetFrequency takes the closest one
+	if (pTimer == nullptr || pCfg == nullptr)
+	{
+		return false;
+	}
+#if defined(NRF91_SERIES)
+	// nRF91 TIMERs use their fixed 16-MHz peripheral clock. There
+	// is no per-TIMER oscillator-source multiplexer to configure.
+	if (pCfg->ClkSrc != TIMER_CLKSRC_DEFAULT)
+	{
+		return false;
+	}
+#endif
 	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX
 			|| pCfg->DevNo >= (TIMER_NRFX_HF_MAX + TIMER_NRFX_RTC_MAX))
 	{
 		return false;
 	}
 
-	int devno = pCfg->DevNo - TIMER_NRFX_RTC_MAX;
-	pTimer->DevNo = pCfg->DevNo;
-	pTimer->EvtHandler = pCfg->EvtHandler;
-	s_pnRFxTimerData = s_nRFxTimerData;
-
+	devno = pCfg->DevNo - TIMER_NRFX_RTC_MAX;
+	if (s_bTimerEnabled[devno])
+	{
+		return false;
+	}
+#if defined(NRF91_SERIES)
+	// A TIMER configured as a counter is in use by the counter driver.
+	if (s_nRFxTimerData[devno].pReg->MODE != TIMER_MODE_MODE_Timer)
+	{
+		return false;
+	}
+#endif
 	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 
 	// A live PEI endpoint must be unbound explicitly before reinitializing
 	// the underlying timer, even if a different Timer object is supplied.
-	for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
+	for (i = 0; i < tdata.MaxNbTrigEvt; i++)
 	{
 		if (tdata.pTrigger[i].Type == TIMER_TRIG_PEI_SINGLE ||
 			tdata.pTrigger[i].Type == TIMER_TRIG_PEI_CONTINUOUS)
@@ -1113,6 +1348,10 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 			return false;
 		}
 	}
+	pTimer->DevNo = pCfg->DevNo;
+	pTimer->EvtHandler = pCfg->EvtHandler;
+	s_pnRFxTimerData = s_nRFxTimerData;
+
 	s_pnRFxTimerDev[devno] = pTimer;
 	s_bnRFxTimerHwClear[devno] = false;
 	pTimer->Rollover = 0;
@@ -1121,6 +1360,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	memset(tdata.pTrigger, 0, tdata.MaxNbTrigEvt * sizeof(TimerTrig_t));
 
 	pTimer->Disable = nRFxTimerDisable;
+	pTimer->PowerOff = nRFxTimerPowerOff;
 	pTimer->Enable = nRFxTimerEnable;
 	pTimer->Reset = nRFxTimerReset;
 	pTimer->GetTickCount = nRFxTimerGetTickCount;
@@ -1141,6 +1381,11 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	reg->SHORTS = 0;
 	reg->INTENCLR = 0xFFFFFFFFUL;
 
+	for (i = 0; i <= tdata.CountCC; i++)
+	{
+		reg->EVENTS_COMPARE[i] = 0U;
+	}
+
 	// Only support timer mode, 32-bit counter
 	reg->MODE = TIMER_MODE_MODE_Timer;
 	reg->BITMODE = TIMER_BITMODE_BITMODE_32Bit;
@@ -1151,6 +1396,12 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	// later Enable does not count it again.
 	if (nRFxTimerEnable(pTimer) == false)
 	{
+#if defined(NRF91_SERIES)
+		// No hardware ownership was acquired: do not leave a stale
+		// handle that permanently blocks a later successful init.
+		s_pnRFxTimerDev[devno] = nullptr;
+		pTimer->PowerOff = nullptr;
+#endif
 		return false;
 	}
 
@@ -1158,7 +1409,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	switch (devno)
 	{
 	case 0:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER00_IRQn);
 		NVIC_SetPriority(TIMER00_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER00_IRQn);
@@ -1169,7 +1420,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 #endif
 		break;
 	case 1:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER10_IRQn);
 		NVIC_SetPriority(TIMER10_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER10_IRQn);
@@ -1180,7 +1431,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 #endif
 		break;
 	case 2:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER20_IRQn);
 		NVIC_SetPriority(TIMER20_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER20_IRQn);
@@ -1192,7 +1443,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 		break;
 #if TIMER_NRFX_HF_MAX > 3
 	case 3:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER21_IRQn);
 		NVIC_SetPriority(TIMER21_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER21_IRQn);
@@ -1203,7 +1454,7 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 #endif
 		break;
 	case 4:
-#if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		NVIC_ClearPendingIRQ(TIMER22_IRQn);
 		NVIC_SetPriority(TIMER22_IRQn, pCfg->IntPrio);
 		NVIC_EnableIRQ(TIMER22_IRQn);

@@ -190,7 +190,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX)
 	{
-#if defined(NRF54L_SERIES)
+#if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
 		return nRFxGrtcInit(pTimer, pCfg);
 #else
 		return nRFxRtcInit(pTimer, pCfg);
@@ -222,14 +222,17 @@ int TimerGetHighFreqDevNo()
 	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
 	defined(NRF52833_XXAA) || defined(NRF52840_XXAA) || \
 	defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || \
-	defined(NRF54L_SERIES)
+	defined(NRF54L_SERIES) || defined(NRF91_SERIES)
 
-// TimerInit selects an unused LF timer for DevNo=-1; TimerDisable
-// returns only automatically selected timers to the timer driver.
+// TimerInit selects an unused LF timer for DevNo=-1.
 #if !defined(NRF54L_SERIES)
 extern "C" bool nRFxSleepLfClockRunning(void);
 #endif
-#if defined(NRF5340_XXAA_APPLICATION)
+#if defined(NRF91_SERIES)
+extern "C" bool nRFxSleepLfClockAccurate(void);
+#endif
+
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);
 #endif
 
@@ -321,7 +324,7 @@ extern "C" bool sDelay(uint32_t Seconds)
 	uint64_t nanoseconds;
 	uint32_t frequency;
 	bool warmClock;
-#if defined(NRF5340_XXAA_APPLICATION)
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 	uint32_t startupWaitUs;
 #endif
 	bool initialized;
@@ -335,6 +338,14 @@ extern "C" bool sDelay(uint32_t Seconds)
 	{
 		return false;
 	}
+#if defined(NRF91_SERIES)
+	// The nRF91 RC clock has no hardware calibration and may run far
+	// from 32768 Hz. Never report a seconds delay from that source.
+	if (!nRFxSleepLfClockAccurate())
+	{
+		return false;
+	}
+#endif
 	irqState = __get_PRIMASK();
 	__disable_irq();
 	if (s_bSleepTimerBusy)
@@ -360,7 +371,7 @@ extern "C" bool sDelay(uint32_t Seconds)
 	cfg.EvtHandler = nullptr;
 	cfg.bTickInt = false;
 	initialized = TimerInit(&s_SleepTimer, &cfg);
-#if defined(NRF5340_XXAA_APPLICATION)
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 	// LFCLK may start immediately after a STOP, or require hundreds of
 	// milliseconds for LFXO. Its pre-init running bit cannot distinguish
 	// these cases. Use the clock owner's actual startup wait this time.
@@ -394,7 +405,7 @@ extern "C" bool sDelay(uint32_t Seconds)
 			compensation = Seconds == chunk ?
 				(warmClock ? NRF_SDELAY_WARM_OVERHEAD_TICKS :
 					NRF_SDELAY_COLD_OVERHEAD_TICKS) : 0U;
-#if defined(NRF5340_XXAA_APPLICATION)
+#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 			// Startup wait is counted in calibrated 100-us polls by the
 			// Nordic clock owner. Compensate what actually happened, rather
 			// than assuming every stopped-LFCLK request takes 260 ms.
@@ -448,7 +459,10 @@ extern "C" bool sDelay(uint32_t Seconds)
 	if (initialized)
 	{
 		TimerDisableTrigger(&s_SleepTimer, 0);
-		TimerDisable(&s_SleepTimer);
+		if (!TimerPowerOff(&s_SleepTimer))
+		{
+			success = false;
+		}
 	}
 	irqState = __get_PRIMASK();
 	__disable_irq();
