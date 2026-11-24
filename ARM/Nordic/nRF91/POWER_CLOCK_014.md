@@ -15,10 +15,26 @@ hardware-complete merely because these sources build.
 - `sDelay()`: uses an available low-frequency RTC with WFE and returns it to
   the timer pool. On nRF91, the clock owner's observed cold-start polling
   duration is compensated, as on the nRF5340 application core.
-- An nRF91 LFRC is not factory-calibrated through CLOCK CAL tasks. To avoid
-  reporting a substantially incorrect seconds delay, `sDelay()` refuses
-  the uncalibrated LFRC source. It uses LFXO for nominally accurate seconds.
-  This is not a synthesized LFCLK and does not change `g_McuOsc`.
+- nRF91 LFRC has no CLOCK CAL task and can run far from 32768 Hz.
+  The nRF91 RTC driver measures raw LFRC counter ticks over a calibrated
+  100-ms high-frequency CPU delay on first RTC initialization per LFCLK
+  selection. It caches the measured input rate until the next source
+  selection, and uses that rate for RTC prescalers, timer timestamps,
+  and trigger compare periods. Neither RTC ownership nor core
+  delay-loop factors are changed by the measurement.
+- A requested LFRC remains LFRC; there is no silent substitution with
+  LFXO, synthesized LFCLK or mutation of `g_McuOsc`. The measurement is
+  performed in foreground with interrupts enabled and uses no extra
+  RTC/HF timer peripheral, heap, or watchdog. Failed/unreasonable samples
+  fail RTC initialization rather than exposing fictitious timestamps.
+- LFXO remains 32768 Hz and retains its accuracy advantage. The existing
+  sDelay implementation continues to require LFXO on nRF91, because its
+  low-power call must not insert a foreground RC measurement busy wait.
+  An RC rate estimate has limited validity as temperature changes and
+  inherits the uncertainty of the CPU high-frequency time reference;
+  long-duration accurate timekeeping should use LFXO. `SystemLowFreqClockCalibrate()`
+  still reports hardware trimming unsupported: measuring RC rate is not
+  an oscillator trim.
 - nRF91 LFCLK start completion is checked against the actual LFCLKSTAT
   source, not just the LFCLKSTARTED event. Existing modem ownership must
   be preserved; the modem requires LFXO.
@@ -77,11 +93,13 @@ CoreClockTest to confirm both delays at 100,000 us.
    through `tests/nordic/build_managed_power_clock.py`.
 3. Run CoreClockTest on nRF9160 using the updated code and inspect
    LFXO cold/warm `sDelay`, ownership and LFRC timing separately.
-4. Diagnose LFRC frequency directly against HF timer, including
-   LFCLKSTAT source confirmation. The generic CoreClockTest now reports
-   raw LF RTC tick rate calculated against the independent HF timer,
-   distinguishing physical oscillator drift from a faulty conversion.
-   Preserve the failing timing result until its cause is established.
+4. Validate the new nRF91 LFRC software rate measurement. Run both
+   RTC0/RTC1 on LFRC in CoreClockTest, compare the reported calibrated
+   timer frequency with its independent raw RTC tick-rate diagnostic,
+   and require all four 250-ms/2%-tolerance checks to PASS. Confirm
+   the active LFCLKSTAT source is RC during RC tests and LFXO after
+   restoration. Repeated RC selections must remeasure the rate.
+   The earlier four failures remain evidence until hardware retest.
 5. Run CorePowerTest on nRF9160 and nRF91x1, including timer wake,
    GPIO/System OFF wake, retention, UART restoration, and reset reasons.
    A bare-metal System OFF test does not validate modem-active shutdown.
@@ -89,3 +107,30 @@ CoreClockTest to confirm both delays at 100,000 us.
 
 No default watchdog is enabled. No target-specific code belongs in the
 shared CoreClockTest or CorePowerTest examples.
+
+
+## LFRC rate compensation implementation
+
+`system_clock_nrfx.cpp` exposes two nRF91-only internal helpers to the
+RTC driver: a source-configuration generation counter and a read-only
+physical LFRC status query. A successful `SystemLowFreqClockSelect()`
+invalidates the previously measured RC rate. Neither function owns
+or starts clocks.
+
+`timer_lf_nrfx.cpp` starts a newly initialized RTC temporarily with
+PRESCALER=0, measures the oscillator frequency using a 100-ms
+foreground high-frequency delay, and restores the timer's requested
+frequency. The input clock is read from actual LFCLKSTAT, not only
+the board's nominal `g_McuOsc` descriptor. Subsequent RTCs reuse the
+same measurement for that LFCLK configuration. After the measurement,
+`TimerSetFrequency()` uses the measured base rate and reports the
+achievable divided frequency. The existing generic Timer API converts
+microseconds and compare periods using that reported frequency.
+
+When a timer is kept initialized but disabled across a source change,
+reinitializing that timer refreshes its effective frequency and
+compare setup. Source switches remain disallowed while LFCLK is in use.
+The 100-ms software observation cannot permanently stabilize LFRC:
+thermal or supply drift after measurement still affects long-running
+timekeeping. Production modem use must retain LFXO.
+

@@ -169,6 +169,78 @@ static bool s_bRtcHwClear[TIMER_NRFX_RTC_MAX];
 // OVRFLW well within this time.
 #define RTC_NEAR_WRAP			0x10000U
 
+#if defined(NRF91_SERIES)
+// Internal oscillator state is owned by system_clock_nrfx.cpp. The nRF91
+// LFRC has no CLOCK CAL task; its measured frequency is used for the RTC
+// prescaler and timer conversions, never for CPU delay-loop calibration.
+extern "C" bool nRFxLfclkRunningFromRc(void);
+extern "C" uint32_t nRFxLfclkConfigurationEpoch(void);
+
+#define NRF91_LFRC_MEASURE_US		100000U
+#define NRF91_LFRC_MIN_HZ		16000U
+#define NRF91_LFRC_MAX_HZ		64000U
+
+static uint32_t s_nRF91LfrcHz;
+static uint32_t s_nRF91LfrcEpoch;
+static bool s_bNRF91LfrcMeasured;
+
+static uint32_t nRFxRtcBaseFrequency(void)
+{
+	if (nRFxLfclkRunningFromRc() && s_bNRF91LfrcMeasured &&
+		s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch())
+	{
+		return s_nRF91LfrcHz;
+	}
+	return TIMER_NRFX_RTC_BASE_FREQ;
+}
+
+// This RTC is already initialized, enabled, and has PRESCALER=0.
+// Measure its raw ticks using the CPU's independently calibrated
+// high-frequency delay loop. Interrupts remain enabled, and no other
+// RTC or HF TIMER is allocated. Measure once per source selection.
+static bool nRFxRtcMeasureLfrc(NRF_RTC_Type *pReg)
+{
+	uint32_t epoch;
+	uint32_t before;
+	uint32_t after;
+	uint32_t ticks;
+	uint32_t freq;
+
+	if (!nRFxLfclkRunningFromRc())
+	{
+		return true;
+	}
+	epoch = nRFxLfclkConfigurationEpoch();
+	if (s_bNRF91LfrcMeasured && s_nRF91LfrcEpoch == epoch)
+	{
+		return true;
+	}
+	// Foreground measurement only: never busy-wait in an IRQ or while
+	// the caller has masked interrupts.
+	if (__get_IPSR() != 0U || __get_PRIMASK() != 0U)
+	{
+		return false;
+	}
+	before = pReg->COUNTER;
+	usDelay(NRF91_LFRC_MEASURE_US);
+	after = pReg->COUNTER;
+	ticks = (after - before) & RTC_COUNTER_MASK;
+	freq = (uint32_t)(((uint64_t)ticks * 1000000ULL +
+		NRF91_LFRC_MEASURE_US / 2U) / NRF91_LFRC_MEASURE_US);
+	if (freq < NRF91_LFRC_MIN_HZ || freq > NRF91_LFRC_MAX_HZ ||
+		!nRFxLfclkRunningFromRc() ||
+		nRFxLfclkConfigurationEpoch() != epoch)
+	{
+		return false;
+	}
+	s_nRF91LfrcHz = freq;
+	s_nRF91LfrcEpoch = epoch;
+	s_bNRF91LfrcMeasured = true;
+	return true;
+}
+#endif
+
+
 // Set by nRFxRtcInit. The interrupt handlers below are kept by the linker as soon as
 // this file is part of a build, used or not. They reach the timer data
 // through this pointer, so that the data is linked only when a timer is
@@ -605,6 +677,11 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
 	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 	NRF_RTC_Type *reg = rtc.pReg;
+#if defined(NRF91_SERIES)
+	uint32_t base = nRFxRtcBaseFrequency();
+#else
+	uint32_t base = TIMER_NRFX_RTC_BASE_FREQ;
+#endif
 
 	for (int i = 0; i < rtc.MaxNbTrigEvt; i++)
 	{
@@ -617,14 +694,14 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
 	uint32_t div = 1;
 
-	if (Freq > 0U && Freq < TIMER_NRFX_RTC_BASE_FREQ)
+	if (Freq > 0U && Freq < base)
 	{
-		div = TIMER_NRFX_RTC_BASE_FREQ / Freq;
+		div = base / Freq;
 		if (div > RTC_PRESCALER_PRESCALER_Msk)
 		{
 			div = RTC_PRESCALER_PRESCALER_Msk + 1U;
 		}
-		else if ((uint64_t)TIMER_NRFX_RTC_BASE_FREQ * (2U * div + 1U) >
+		else if ((uint64_t)base * (2U * div + 1U) >
 				 2ULL * Freq * div * (div + 1U))
 		{
 			// base / div - Freq > Freq - base / (div + 1)
@@ -644,7 +721,7 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
 	// From what PRESCALER holds
 	div = (reg->PRESCALER & RTC_PRESCALER_PRESCALER_Msk) + 1U;
-	pTimer->Freq = (TIMER_NRFX_RTC_BASE_FREQ + div / 2U) / div;
+	pTimer->Freq = (base + div / 2U) / div;
 
 	// Tick period rounded down to a nanosecond, 30517 for the 30517.58 ns of
 	// 32768 Hz. Not precise enough to convert a count or a trigger period,
@@ -1284,7 +1361,13 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
         reg->EVTENSET = RTC_EVTEN_TICK_Msk;
 	}
 
+#if defined(NRF91_SERIES)
+	// Characterize the RC at its undivided input rate before choosing
+	// the application's requested prescaler. LFXO still uses 32768 Hz.
+	nRFxRtcSetFrequency(pTimer, 0U);
+#else
     nRFxRtcSetFrequency(pTimer, pSelectedCfg->Freq);
+#endif
 
 	// Enable LFCLK before clearing the RTC, so the CLEAR task
 	// completes on the selected clock. Init continues to enable the timer.
@@ -1314,6 +1397,20 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		s_pnRfxRtcDev[pSelectedCfg->DevNo] = nullptr;
 		return false;
 	}
+#if defined(NRF91_SERIES)
+	// A measured LFRC rate must be available before any timer triggers
+	// are armed. If measurement fails, release this RTC and its LFCLK
+	// reference rather than advertising a nominal 32768 Hz timebase.
+	if (!nRFxRtcMeasureLfrc(reg))
+	{
+		nRFxRtcDisable(pTimer);
+		reg->INTENCLR = 0xFFFFFFFFU;
+		reg->EVTENCLR = 0xFFFFFFFFU;
+		s_pnRfxRtcDev[pSelectedCfg->DevNo] = nullptr;
+		return false;
+	}
+	nRFxRtcSetFrequency(pTimer, pSelectedCfg->Freq);
+#endif
 	s_bRtcAutoSelected[pSelectedCfg->DevNo] = automatic;
 	nRFxRtcClear(reg);
 	return true;

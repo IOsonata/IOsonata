@@ -214,6 +214,11 @@ static bool s_bNRFxNetLfclkRcFallback;
 // Temporarily selected sources, independent of the board oscillator hardware.
 static bool s_bNRFxCoreOscSelected;
 static bool s_bNRFxLowOscSelected;
+#if defined(NRF91_SERIES)
+// Invalidate the measured LFRC RTC rate after every source configuration.
+// The counter is independent of the application's oscillator descriptor.
+static uint32_t s_nRF91LfclkConfigEpoch;
+#endif
 static OSC_TYPE s_nRFxCoreOscSelected;
 static OSC_TYPE s_nRFxLowOscSelected;
 
@@ -966,8 +971,24 @@ extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void)
 #endif
 
 #if defined(NRF91_SERIES)
-// nRF91 LFRC is not hardware calibrated. An uncalibrated RC clock
-// cannot provide the precise seconds required by sDelay.
+// Internal nRF91 clock/RTC interface. Neither function starts or stops LFCLK.
+extern "C" uint32_t nRFxLfclkConfigurationEpoch(void)
+{
+	return s_nRF91LfclkConfigEpoch;
+}
+
+extern "C" bool nRFxLfclkRunningFromRc(void)
+{
+	return (NRF_CLOCK->NRFX_LFCLKSTAT &
+		(NRFX_LFCLK_STATE_Msk | NRFX_LFCLK_STAT_SRC_Msk)) ==
+		(NRFX_LFCLK_STATE_Msk |
+		(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos));
+}
+#endif
+
+#if defined(NRF91_SERIES)
+// Do not calibrate LFRC by a CPU busy wait as part of sDelay's
+// low-power sleep setup. Use the already validated LFXO timebase.
 extern "C" bool nRFxSleepLfClockAccurate(void)
 {
 	return nRFxLowOscSelected() == OSC_TYPE_XTAL;
@@ -1201,6 +1222,11 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		s_bNRFxLfclkStopPending = false;
 		s_nRFxLowOscSelected = ClkSrc;
 		s_bNRFxLowOscSelected = true;
+#if defined(NRF91_SERIES)
+		// A subsequent RTC initialization must remeasure LFRC after
+		// selecting an oscillator, even if the oscillator was RC before.
+		s_nRF91LfclkConfigEpoch++;
+#endif
 	}
 	s_bNRFxLfclkTransition = false;
 	EnableInterrupt(state);

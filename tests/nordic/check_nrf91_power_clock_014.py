@@ -86,6 +86,54 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertIn('CoreClockTestResult("Delay within 2 percent",', section)
 		self.assertNotIn("NRF91_SERIES", section)
 
+
+	def test_nrf91_lfrc_measured_before_timer_frequency_is_exposed(self):
+		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
+		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
+		self.assertIn("s_nRF91LfclkConfigEpoch++", clock)
+		self.assertIn('extern "C" uint32_t nRFxLfclkConfigurationEpoch(void)', clock)
+		self.assertIn('extern "C" bool nRFxLfclkRunningFromRc(void)', clock)
+		self.assertIn("NRF91_LFRC_MEASURE_US", rtc)
+		self.assertIn("usDelay(NRF91_LFRC_MEASURE_US);", rtc)
+		self.assertIn("if (__get_IPSR() != 0U || __get_PRIMASK() != 0U)", rtc)
+		self.assertIn("ticks = (after - before) & RTC_COUNTER_MASK;", rtc)
+		self.assertIn("s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch()", rtc)
+		self.assertIn("s_nRF91LfrcHz = freq;", rtc)
+		self.assertIn("uint32_t base = nRFxRtcBaseFrequency();", rtc)
+		self.assertIn("pTimer->Freq = (base + div / 2U) / div;", rtc)
+		start = rtc.index("bool nRFxRtcInit(")
+		init = rtc[start:]
+		self.assertLess(init.index("nRFxRtcMeasureLfrc(reg)"),
+			init.index("nRFxRtcSetFrequency(pTimer, pSelectedCfg->Freq);",
+				init.index("nRFxRtcMeasureLfrc(reg)")))
+		self.assertIn("nRFxRtcDisable(pTimer);", init)
+
+	def test_lfrc_rate_conversion_model(self):
+		# Simulate hardware raw counts. The reference interval is measured
+		# using the independently calibrated HF CPU delay, not an LF RTC.
+		interval_us = 100000
+		for input_hz in (20000, 32768, 44757, 50000):
+			raw = (input_hz * interval_us + 500000) // 1000000
+			measured = (raw * 1000000 + interval_us // 2) // interval_us
+			self.assertLessEqual(abs(measured - input_hz), 5)
+			for requested in (0, 1024, 32768):
+				div = 1
+				if requested and requested < measured:
+					div = measured // requested
+					if div > 4095:
+						div = 4096
+					elif measured * (2 * div + 1) > 2 * requested * div * (div + 1):
+						div += 1
+				reports_hz = (measured + div // 2) // div
+				ticks = (input_hz * 250000 + 500000 * div) // (1000000 * div)
+				elapsed_us = (ticks * 1000000 + reports_hz // 2) // reports_hz
+				self.assertLessEqual(abs(elapsed_us - 250000), 5000)
+
+	def test_generic_accuracy_is_not_waived_for_rc(self):
+		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
+		self.assertIn('CoreClockTestResult("Delay within 2 percent", elapsed >= 245000U && elapsed <= 255000U);', example)
+		self.assertIn("timer reports %u Hz", example)
+		self.assertNotIn("NRF91_SERIES", example)
 	def test_nrf9160_dk_button_wake_configuration(self):
 		board = (ROOT / "ARM/Nordic/nRF91/nRF9160/exemples/CorePowerTest/src/board.h").read_text(encoding="utf-8")
 		thingy = board[board.index("#if defined(NORDIC_THINGY91)"):board.index("#elif defined(NRF9160_DK)")]
@@ -108,7 +156,6 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertNotIn("16000000UL, 3000000UL", src)
 		self.assertEqual(64000000 * 1000000 // 16001600, 3999600)
 		self.assertEqual(64000000 * 1000000 // 3000330, 21330986)
-
 
 if __name__ == "__main__":
 	unittest.main()

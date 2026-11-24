@@ -863,7 +863,7 @@ static void CoreClockTestTimer(int DevNo)
 				// Timer tick-to-time conversion. Keep every MCU generic.
 				measuredTickRate = (uint32_t)(((tickEnd - tickStart) *
 					1000000ULL + hfElapsed / 2U) / hfElapsed);
-				CoreClockTestPrint("Independent LF timer rate: %u Hz (nominal %u Hz)\r\n",
+				CoreClockTestPrint("Independent LF timer rate: %u Hz (timer reports %u Hz)\r\n",
 					(unsigned)measuredTickRate, (unsigned)frequency);
 			}
 		}
