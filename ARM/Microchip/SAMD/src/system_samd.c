@@ -134,6 +134,12 @@ __attribute__((weak)) McuOsc_t g_McuOsc = {
 extern uint32_t SystemMicroSecLoopCnt;
 
 // CPU clock after reset is OSC8M divided by 8
+extern bool SysTickTimerEnabled(void) __attribute__((weak));
+
+static uint32_t s_CoreSource = UINT32_MAX;
+static uint32_t s_HfUsers;
+static SYSTEM_POWER_MODE s_PowerMode;
+static uint32_t s_LfUsers;
 uint32_t SystemCoreClock = SAMD_OSC8M_FREQ / 8UL;
 uint32_t SystemnsDelayFactor = 1000000UL;
 
@@ -1132,6 +1138,9 @@ static bool SamdSystemClockInit(void)
 	}
 
 	result = SamdClockInit();
+	s_CoreSource = result ?
+		SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_MAIN) & GCLK_GENCTRL_SRC_Msk :
+		UINT32_MAX;
 	if (!result)
 	{
 		(void)SamdMainOsc8m();
@@ -1446,7 +1455,8 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	if (actual != 0U && (modeChange ||
 		(best != previous && !(best == 1U && previous == 0U && !binary))))
 	{
-		bool busy = Idx == SAMD_GCLK_MAIN && SamdClockBusy(false);
+		bool busy = (Idx == SAMD_GCLK_MAIN && (s_HfUsers || SamdClockBusy(false))) ||
+			(Idx == SAMD_GCLK_LF && s_LfUsers != 0U);
 		busy = busy || (ctrl & GCLK_GENCTRL_OE_Msk) != 0U;
 		// Generator 1 can feed another generator directly.
 		for (uint32_t gen = 0; !busy && Idx == SAMD_GCLK_LF && gen < GCLK_GEN_NUM; gen++)
@@ -1525,7 +1535,14 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 
 	primask = __get_PRIMASK();
 	__disable_irq();
-	if (SamdClockBusy(false))
+	if (ClkSrc == GetHighFreqOscType() && OscFreq == GetHighFreqOscFreq() &&
+		s_CoreSource == (SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_MAIN) &
+			GCLK_GENCTRL_SRC_Msk) && SamdGclkGenFreq(SAMD_GCLK_MAIN) != 0U)
+	{
+		__set_PRIMASK(primask);
+		return true;
+	}
+	if (s_HfUsers || s_LfUsers || s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER || SamdClockBusy(false))
 	{
 		__set_PRIMASK(primask);
 
@@ -1553,7 +1570,15 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 
 	primask = __get_PRIMASK();
 	__disable_irq();
-	if (SamdClockBusy(true))
+	if (ClkSrc == GetLowFreqOscType() && OscFreq == GetLowFreqOscFreq() &&
+		(SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_LF) & GCLK_GENCTRL_SRC_Msk) ==
+			(ClkSrc == OSC_TYPE_RC ? GCLK_GENCTRL_SRC_OSC32K : GCLK_GENCTRL_SRC_XOSC32K) &&
+		SamdGclkGenFreq(SAMD_GCLK_LF) != 0U)
+	{
+		__set_PRIMASK(primask);
+		return true;
+	}
+	if (s_LfUsers || SamdClockBusy(true))
 	{
 		__set_PRIMASK(primask);
 
@@ -1572,4 +1597,124 @@ void SystemOscInit(void)
 {
 	// No programmable crystal load capacitance. SystemInit starts the
 	// oscillators.
+}
+
+bool SystemHighFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	ready = s_HfUsers != UINT32_MAX && (SystemCoreClockGet() != 0U);
+	if (ready)
+	{
+		s_HfUsers++;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (s_HfUsers != 0U)
+	{
+		s_HfUsers--;
+	}
+	__set_PRIMASK(state);
+}
+
+bool SystemHighFreqClockCalibrate(void)
+{
+	return false;
+}
+
+bool SystemLowFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	ready = s_LfUsers != UINT32_MAX && (SystemPeriphClockGet(SAMD_GCLK_LF) != 0U);
+	if (ready)
+	{
+		s_LfUsers++;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+void SystemLowFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (s_LfUsers != 0U)
+	{
+		s_LfUsers--;
+	}
+	__set_PRIMASK(state);
+}
+
+bool SystemLowFreqClockCalibrate(void)
+{
+	return false;
+}
+
+static bool SamdSetRunningMode(SYSTEM_POWER_MODE Mode)
+{
+	uint8_t previous = s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER ? 1U : 0U;
+	uint8_t divider = Mode == SYSTEM_POWER_MODE_LOW_POWER ? 1U : 0U;
+
+	if ((SysTickTimerEnabled != NULL && SysTickTimerEnabled()) ||
+		PM_REGS->PM_CPUSEL != previous || PM_REGS->PM_APBASEL != previous ||
+		PM_REGS->PM_APBBSEL != previous || PM_REGS->PM_APBCSEL != previous)
+	{
+		return false;
+	}
+	// Keep APB clocks at or below the CPU clock throughout the change.
+	if (Mode == SYSTEM_POWER_MODE_PERFORMANCE)
+	{
+		PM_REGS->PM_CPUSEL = divider;
+	}
+	PM_REGS->PM_APBASEL = divider;
+	PM_REGS->PM_APBBSEL = divider;
+	PM_REGS->PM_APBCSEL = divider;
+	if (Mode == SYSTEM_POWER_MODE_LOW_POWER)
+	{
+		PM_REGS->PM_CPUSEL = divider;
+	}
+	__DSB();
+	__ISB();
+	SystemCoreClockUpdate();
+	s_PowerMode = Mode;
+	return true;
+}
+
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t state;
+	bool result;
+
+	if (__get_IPSR() != 0U ||
+		(Mode != SYSTEM_POWER_MODE_LOW_POWER && Mode != SYSTEM_POWER_MODE_PERFORMANCE))
+	{
+		return false;
+	}
+	state = __get_PRIMASK();
+	__disable_irq();
+	result = Mode == s_PowerMode || SamdSetRunningMode(Mode);
+	__set_PRIMASK(state);
+	return result;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return s_PowerMode;
 }

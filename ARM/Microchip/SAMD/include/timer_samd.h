@@ -155,6 +155,7 @@ struct __Samd_Timer_Data {
 	uint8_t CntBits;			//!< Counter size in bits
 	int8_t EvUser;				//!< Event user of the capture channel, -1 none
 	bool bRunning;
+	bool ClockEnabled;
 	bool bOverflow;				//!< Overflow event to report
 	bool bResetOvf;				//!< RTC overflow flag from before a reset to drop
 	bool bCapture;				//!< Last compare channel captures the external trigger

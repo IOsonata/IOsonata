@@ -444,7 +444,7 @@ void SystemSleep(void);
  * Unsupported targets, interrupt context, masked interrupts or unavailable
  * timers return false. Zero seconds succeeds immediately.
  *
- * Implemented initially for the Nordic nRF52 and both nRF5340 cores.
+ * The MCU port selects an available LF timer for this operation.
  * CoreClockTest can measure an MCU-specific overhead correction; normal
  * operation never performs calibration.
  */

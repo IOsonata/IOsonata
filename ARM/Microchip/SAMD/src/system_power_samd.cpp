@@ -43,3 +43,42 @@ uint32_t SystemResetReason(void)
 
 	return reason;
 }
+
+uint32_t SystemPowerCapabilitiesGet(void)
+{
+	return SYSTEM_POWER_CAP_SLEEP |
+		SYSTEM_POWER_CAP_TIMER_WAKE |
+		SYSTEM_POWER_CAP_WAKE_PIN |
+		SYSTEM_POWER_CAP_LOW_POWER;
+}
+
+// Standby resumes execution. These parts have no reset-on-wake power mode.
+void SystemPowerOff(void)
+{
+}
+
+int SystemRetRegCount(void)
+{
+	return 0;
+}
+
+uint32_t SystemRetRegRead(int Idx)
+{
+	(void)Idx;
+	return 0U;
+}
+
+bool SystemRetRegWrite(int Idx, uint32_t Value)
+{
+	(void)Idx;
+	(void)Value;
+	return false;
+}
+
+bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool Retain)
+{
+	(void)Addr;
+	(void)Size;
+	(void)Retain;
+	return false;
+}

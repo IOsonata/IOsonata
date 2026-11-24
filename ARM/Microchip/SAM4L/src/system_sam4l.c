@@ -100,6 +100,10 @@ __WEAK McuOsc_t g_McuOsc = {
 // Delay-loop iterations per microsecond, with 16 fractional bits.
 extern uint32_t SystemMicroSecLoopCnt;
 
+static uint32_t s_CoreSource = UINT32_MAX;
+static uint32_t s_HfUsers;
+static SYSTEM_POWER_MODE s_PowerMode;
+static uint32_t s_LfUsers;
 uint32_t SystemCoreClock = RCSYS_FREQ;
 uint32_t SystemnsDelayFactor = 1000000UL;
 static uint32_t s_MainClock = RCSYS_FREQ;
@@ -1219,6 +1223,7 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 			return Sam4lClockFailed(SAM4L_STARTUP_GCLK);
 		}
 	}
+	s_CoreSource = SAM4L_PM->PM_MCCTRL & PM_MCCTRL_MCSEL_Msk;
 	return true;
 }
 
@@ -1377,7 +1382,8 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	uint32_t rate;
 	uint32_t difference;
 
-	if (Idx < 0 || Idx > 3 || Freq == 0U || __get_IPSR() != 0U)
+	if (Idx < 0 || Idx > 3 || Freq == 0U || __get_IPSR() != 0U ||
+		s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER)
 	{
 		return 0U;
 	}
@@ -1425,6 +1431,30 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 // The caller MUST stop all clock consumers first (USB, DMA, timers and other
 // peripherals) and retime/reinitialize them afterwards. IRQ masking alone
 // does not quiesce those engines. Do not call from an interrupt handler.
+static bool Sam4lCoreSourceReady(void)
+{
+	uint32_t ready;
+
+	switch (s_CoreSource)
+	{
+		case PM_MCCTRL_MCSEL_PLL0:
+			ready = SCIF_PCLKSR_OSC0RDY | SCIF_PCLKSR_PLL0LOCK;
+			break;
+		case PM_MCCTRL_MCSEL_DFLL0:
+			ready = SCIF_PCLKSR_DFLL0RDY | SCIF_PCLKSR_DFLL0LOCKC |
+				SCIF_PCLKSR_DFLL0LOCKF;
+			break;
+		case PM_MCCTRL_MCSEL(1U):
+			ready = SCIF_PCLKSR_OSC0RDY;
+			break;
+		case PM_MCCTRL_MCSEL_RC80M:
+			return (SAM4L_SCIF->SCIF_RC80MCR & SCIF_RC80MCR_EN) != 0U;
+		default:
+			return false;
+	}
+	return (SAM4L_SCIF->SCIF_PCLKSR & ready) == ready;
+}
+
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 {
 	McuOsc_t previous = g_McuOsc;
@@ -1436,7 +1466,14 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 	}
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
-	if (Sam4lCoreClockBusy())
+	if (ClkSrc == GetHighFreqOscType() && Freq == GetHighFreqOscFreq() &&
+		(SAM4L_PM->PM_MCCTRL & PM_MCCTRL_MCSEL_Msk) == s_CoreSource &&
+		Sam4lCoreSourceReady() && Sam4lMainClockGet() != 0U)
+	{
+		__set_PRIMASK(primask);
+		return true;
+	}
+	if (s_HfUsers || s_LfUsers || s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER || Sam4lCoreClockBusy())
 	{
 		__set_PRIMASK(primask);
 		return false;
@@ -1518,7 +1555,14 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	}
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
-	if (Sam4lLowClockBusy())
+	if (ClkSrc == GetLowFreqOscType() && OscFreq == GetLowFreqOscFreq() &&
+		SystemLowFreqClockEnable())
+	{
+		SystemLowFreqClockDisable();
+		__set_PRIMASK(primask);
+		return true;
+	}
+	if (s_LfUsers || Sam4lLowClockBusy())
 	{
 		__set_PRIMASK(primask);
 		return false;
@@ -1540,4 +1584,131 @@ void SystemOscInit(void)
 {
 	// SystemInit and the clock selectors configure the oscillators. SAM4L
 	// has no programmable crystal load capacitance to apply separately.
+}
+
+bool SystemHighFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	ready = s_HfUsers != UINT32_MAX && (SystemCoreClockGet() != 0U);
+	if (ready)
+	{
+		s_HfUsers++;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (s_HfUsers != 0U)
+	{
+		s_HfUsers--;
+	}
+	__set_PRIMASK(state);
+}
+
+bool SystemHighFreqClockCalibrate(void)
+{
+	return false;
+}
+
+bool SystemLowFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	ready = s_LfUsers != UINT32_MAX && (((SAM4L_BPM->BPM_PMCON & BPM_PMCON_CK32S) != 0U ?
+		(GetLowFreqOscType() == OSC_TYPE_RC &&
+		 (SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_RC32KRDY) != 0U) :
+		(GetLowFreqOscType() != OSC_TYPE_RC &&
+		 (SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_OSC32RDY) != 0U)));
+	if (ready)
+	{
+		s_LfUsers++;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+void SystemLowFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (s_LfUsers != 0U)
+	{
+		s_LfUsers--;
+	}
+	__set_PRIMASK(state);
+}
+
+bool SystemLowFreqClockCalibrate(void)
+{
+	return false;
+}
+
+static bool Sam4lSetRunningMode(SYSTEM_POWER_MODE Mode)
+{
+	static uint32_t performance;
+	uint32_t previous = SAM4L_PM->PM_CPUSEL;
+	uint32_t divider;
+
+	if (s_HfUsers || Sam4lCoreClockBusy() || SAM4L_PM->PM_PBASEL != previous ||
+		SAM4L_PM->PM_PBBSEL != previous || SAM4L_PM->PM_PBCSEL != previous ||
+		SAM4L_PM->PM_PBDSEL != previous)
+	{
+		return false;
+	}
+	divider = performance;
+	if (Mode == SYSTEM_POWER_MODE_LOW_POWER)
+	{
+		performance = previous;
+		if (previous == (PM_CPUSEL_CPUDIV | PM_CPUSEL_CPUSEL_Msk))
+		{
+			return false;
+		}
+		divider = previous == 0U ? PM_CPUSEL_CPUDIV : previous + 1U;
+	}
+	if (!Sam4lSetSyncClkDividers(divider))
+	{
+		(void)Sam4lSetSyncClkDividers(previous);
+		SystemCoreClockUpdate();
+		return false;
+	}
+	SystemCoreClockUpdate();
+	s_PowerMode = Mode;
+	return true;
+}
+
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t state;
+	bool result;
+
+	if (__get_IPSR() != 0U ||
+		(Mode != SYSTEM_POWER_MODE_LOW_POWER && Mode != SYSTEM_POWER_MODE_PERFORMANCE))
+	{
+		return false;
+	}
+	state = __get_PRIMASK();
+	__disable_irq();
+	result = Mode == s_PowerMode || Sam4lSetRunningMode(Mode);
+	__set_PRIMASK(state);
+	return result;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return s_PowerMode;
 }

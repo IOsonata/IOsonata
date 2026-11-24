@@ -1,5 +1,27 @@
 # MCU core power and clock ports
 
+## Microchip 0.14 port status, November 24
+
+The SAM D11/D21, SAM4L and SAM4E ports report power capabilities and
+implement the shared HF/LF clock requests. Timers hold their clock while
+running. The system keeps the root clocks available for CPU and peripheral
+users after the last explicit request. Runtime oscillator calibration returns
+false on these ports.
+
+| Family | Resumable sleep and seconds delay | System OFF | Running CPU mode |
+| --- | --- | --- | --- |
+| SAM D11/D21 | Standby with RTC or configured EIC wake. The seconds delay borrows an unassigned RTC. | Unavailable | Divides the CPU and APB clocks by two. Peripheral generic-clock frequencies are preserved. |
+| SAM4L | SLEEP0, WAIT or RETENTION according to the wake source. The seconds delay borrows an unassigned AST. | Backup with wake pins and backup registers | Changes synchronous dividers together. Active peripherals can refuse the change. |
+| SAM4E | CPU sleep keeps TC and MCK running for interrupt wake. A nonzero seconds delay is unavailable because the Timer driver exposes TC channels only. | Backup with wake pins and backup registers | Changes the MCK prescaler when peripheral clock users permit it. |
+
+Arm GCC linked CoreClockTest and CorePowerTest in Debug and Release for
+SAMD21, SAM4LCxC, SAM4LSxC and SAM4E16E using the project sources and
+linker scripts. Both full test programs exceed the SAMD11D14AM flash region.
+Register models cover clock requests, timer power-down and shared-clock
+preservation. Board verification of the new running modes, delay accuracy
+and wake behavior remains open.
+
+
 ## SAM4L implementation and board evidence, November 17
 
 The SAM4L generic power/clock entry points are implemented for SAM4LC and

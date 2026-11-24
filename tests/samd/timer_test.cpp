@@ -81,6 +81,23 @@ static void NVIC_SetPriority(int, unsigned);
 static unsigned NVIC_GetPriority(int);
 static void NVIC_SetPendingIRQ(int);
 static void NVIC_ClearPendingIRQ(int);
+static unsigned s_TestHfUsers;
+static unsigned s_TestLfUsers;
+extern "C" bool SystemHighFreqClockEnable() { ++s_TestHfUsers; return true; }
+extern "C" bool SystemLowFreqClockEnable() { ++s_TestLfUsers; return true; }
+extern "C" void SystemHighFreqClockDisable() { assert(s_TestHfUsers); --s_TestHfUsers; }
+extern "C" void SystemLowFreqClockDisable() { assert(s_TestLfUsers); --s_TestLfUsers; }
+static uint32_t s_TestScr;
+static struct { uint32_t &SCR; } s_Scb = {s_TestScr};
+#define SCB (&s_Scb)
+#define SCB_SCR_SLEEPDEEP_Msk 4U
+#define SCB_SCR_SLEEPONEXIT_Msk 2U
+static uint32_t __get_IPSR() { return 0U; }
+static uint32_t __get_PRIMASK() { return 0U; }
+static void __DSB() {}
+static void __ISB() {}
+static void __WFI();
+#include "../../ARM/Microchip/include/sam_sleep_delay.h"
 #include "timer_driver.h"
 
 static void StopSysTick(TimerDev_t *)
@@ -214,11 +231,18 @@ static void Advance(int DevNo, uint64_t Ticks)
 	s_Count[DevNo].Matched = (1U << d->NbTrig) - 1;
 	SamdTimerIrq(DevNo);
 }
+static void __WFI()
+{
+	Advance(0, g_SamdTimerData[0].pTrig[0].Ticks);
+}
 int main()
 {
 	TimerDev_t timer = {};
 	TimerCfg_t cfg = { .DevNo = 0, .IntPrio = 1, .EvtHandler = Event };
 
+	assert(sDelay(0));
+	assert(sDelay(1));
+	s_Events[0][0] = 0;
 	for (int dev = 0; dev < 4; dev++)
 	{
 		if (dev > 0) TimerDisable(&timer);

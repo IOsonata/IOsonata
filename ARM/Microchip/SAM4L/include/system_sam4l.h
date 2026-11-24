@@ -59,10 +59,11 @@ void SystemCoreClockUpdate(void);
 bool Sam4lTimerClockBusy(uint32_t ClockMask);
 
 
+extern uint32_t SystemCoreClock; // System Clock Frequency (Core Clock) in Hz
+
 #ifdef __cplusplus
 }
 #endif
 
-extern uint32_t SystemCoreClock; // System Clock Frequency (Core Clock) in Hz
 
 #endif // __SYSTEM_SAM4L_H__

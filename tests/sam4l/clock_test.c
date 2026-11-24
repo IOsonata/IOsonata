@@ -325,6 +325,17 @@ int main(void)
 	// Releasing every checked user permits the next clock change.
 	assert(SystemCoreClockSelect(OSC_TYPE_RC, 80000000));
 
+	uint32_t performance = SystemCoreClockGet();
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+	assert(SystemCoreClockGet() == performance / 2U);
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+	assert(SystemCoreClockGet() == performance);
+	assert(SystemHighFreqClockEnable());
+	assert(SystemHighFreqClockEnable());
+	SystemHighFreqClockDisable();
+	assert(SystemCoreClockSelect(OSC_TYPE_RC, 80000000));
+	assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000));
+	SystemHighFreqClockDisable();
 	// APB dividers choose the nearest rate without changing the CPU.
 	for (unsigned mask = 0; mask < 2; mask++)
 	{

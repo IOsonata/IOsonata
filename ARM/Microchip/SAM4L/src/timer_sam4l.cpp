@@ -86,12 +86,40 @@ static void Irq(Sam4l_TimerData_t &d, bool enable)
 		if (!d.TcReg) NVIC_DisableIRQ(AST_OVF_IRQn);
 	}
 }
+static void Sam4lTimerClockDisable(Sam4l_TimerData_t &d)
+{
+	if (d.ClockEnabled)
+	{
+		if (d.TcReg)
+		{
+			SystemHighFreqClockDisable();
+		}
+		else
+		{
+			SystemLowFreqClockDisable();
+		}
+		d.ClockEnabled = false;
+	}
+}
+
 static bool Run(Sam4l_TimerData_t &d, bool run)
 {
+	if (run && !d.ClockEnabled)
+	{
+		d.ClockEnabled = d.TcReg ? SystemHighFreqClockEnable() : SystemLowFreqClockEnable();
+		if (!d.ClockEnabled)
+		{
+			return false;
+		}
+	}
 	if (d.TcReg) Sam4lTcRun(d, run);
 	else if (!Sam4lAstRun(d, run)) d.Healthy = false;
 	d.Running = run && d.Healthy;
 	Irq(d, d.Running);
+	if (!d.Running)
+	{
+		Sam4lTimerClockDisable(d);
+	}
 	return d.Healthy;
 }
 static uint64_t Count(Sam4l_TimerData_t &d)
@@ -222,6 +250,7 @@ static bool PowerOff(TimerDev_t *t)
 			s_TcClockMask &= ~d->ClockMask;
 		}
 	}
+	Sam4lTimerClockDisable(*d);
 	d->Timer = nullptr;
 	d->Healthy = false;
 	d->Running = false;
@@ -450,3 +479,10 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 int TimerGetLowFreqDevCount(void) { return SAM4L_AST_TIMER_MAXCNT; }
 int TimerGetHighFreqDevCount(void) { return SAM4L_TC_TIMER_MAXCNT; }
 int TimerGetHighFreqDevNo(void) { return SAM4L_AST_TIMER_MAXCNT; }
+
+#include "../../include/sam_sleep_delay.h"
+
+bool sDelay(uint32_t Seconds)
+{
+	return SamSleepDelay(Seconds, &g_Sam4lTimerData[0].Timer);
+}

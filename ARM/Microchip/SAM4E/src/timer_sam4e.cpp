@@ -41,6 +41,7 @@ typedef struct {
 	IRQn_Type Irq;
 	uint8_t ClockSelect;
 	bool Running;
+	bool ClockEnabled;
 	uint32_t LastHwCount;
 	uint32_t Epoch;
 	uint64_t Elapsed;
@@ -198,10 +199,18 @@ static void Sam4eCheckPassed(Sam4eTimerData_t *pData)
 	}
 }
 
-static void Sam4eRun(Sam4eTimerData_t *pData, bool Enable)
+static bool Sam4eRun(Sam4eTimerData_t *pData, bool Enable)
 {
 	if (Enable)
 	{
+		if (!pData->ClockEnabled)
+		{
+			pData->ClockEnabled = SystemHighFreqClockEnable();
+			if (!pData->ClockEnabled)
+			{
+				return false;
+			}
+		}
 		(void)pData->pReg->TC_SR;
 		NVIC_ClearPendingIRQ(pData->Irq);
 		NVIC_EnableIRQ(pData->Irq);
@@ -213,7 +222,13 @@ static void Sam4eRun(Sam4eTimerData_t *pData, bool Enable)
 		pData->pReg->TC_CCR = TC_CCR_CLKDIS;
 		NVIC_DisableIRQ(pData->Irq);
 		pData->Running = false;
+		if (pData->ClockEnabled)
+		{
+			SystemHighFreqClockDisable();
+			pData->ClockEnabled = false;
+		}
 	}
+	return true;
 }
 
 static void Sam4eDisable(TimerDev_t *pTimer)
@@ -233,6 +248,7 @@ static void Sam4eDisable(TimerDev_t *pTimer)
 
 static bool Sam4eEnable(TimerDev_t *pTimer)
 {
+	bool enabled;
 	Sam4eTimerData_t *pData;
 	uint32_t state;
 
@@ -242,9 +258,9 @@ static bool Sam4eEnable(TimerDev_t *pTimer)
 		return false;
 	}
 	state = DisableInterrupt();
-	Sam4eRun(pData, true);
+	enabled = Sam4eRun(pData, true);
 	EnableInterrupt(state);
-	return true;
+	return enabled;
 }
 
 static void Sam4eReset(TimerDev_t *pTimer)
@@ -636,7 +652,12 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pData->pReg->TC_IER = TC_IER_COVFS;
 	NVIC_ClearPendingIRQ(pData->Irq);
 	NVIC_SetPriority(pData->Irq, pCfg->IntPrio);
-	Sam4eRun(pData, true);
+	if (!Sam4eRun(pData, true))
+	{
+		(void)Sam4ePowerOff(pTimer);
+		EnableInterrupt(state);
+		return false;
+	}
 	EnableInterrupt(state);
 	return true;
 }
@@ -654,4 +675,10 @@ int TimerGetHighFreqDevCount(void)
 int TimerGetHighFreqDevNo(void)
 {
 	return 0;
+}
+
+// The Timer driver exposes TC channels only. A seconds delay requires an LF timer.
+bool sDelay(uint32_t Seconds)
+{
+	return Seconds == 0U;
 }

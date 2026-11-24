@@ -183,3 +183,33 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 	(void)bRetain;
 	return false;
 }
+
+uint32_t SystemPowerCapabilitiesGet(void)
+{
+	return SYSTEM_POWER_CAP_SLEEP |
+		SYSTEM_POWER_CAP_TIMER_WAKE |
+		SYSTEM_POWER_CAP_WAKE_PIN |
+		SYSTEM_POWER_CAP_SYSTEM_OFF |
+		SYSTEM_POWER_CAP_RET_REG |
+		SYSTEM_POWER_CAP_LOW_POWER;
+}
+
+// Sleep keeps MCK available to the TC and serial peripherals.
+void SystemSleep(void)
+{
+	uint32_t state;
+	uint32_t scr;
+
+	if (__get_IPSR() != 0U)
+	{
+		return;
+	}
+	state = DisableInterrupt();
+	scr = SCB->SCR;
+	SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
+	__DSB();
+	__WFI();
+	__ISB();
+	SCB->SCR = scr;
+	EnableInterrupt(state);
+}

@@ -355,7 +355,20 @@ static bool SamdTimerRun(SamdTimerData_t *pData, bool bRun)
 	uint32_t state;
 	uint64_t now;
 	bool res = false;
+	uint32_t irqState;
 
+	irqState = DisableInterrupt();
+
+	if (bRun && !pData->ClockEnabled)
+	{
+		pData->ClockEnabled = SamdTimerIsRtc(pData) ?
+			SystemLowFreqClockEnable() : SystemHighFreqClockEnable();
+		if (!pData->ClockEnabled)
+		{
+			EnableInterrupt(irqState);
+			return false;
+		}
+	}
 	if (SamdTimerLock(pData, &state, &now, false))
 	{
 		res = pData->pOps->Run(pData, bRun);
@@ -379,6 +392,19 @@ static bool SamdTimerRun(SamdTimerData_t *pData, bool bRun)
 		res = false;
 	}
 
+	if (!pData->bRunning && pData->ClockEnabled)
+	{
+		if (SamdTimerIsRtc(pData))
+		{
+			SystemLowFreqClockDisable();
+		}
+		else
+		{
+			SystemHighFreqClockDisable();
+		}
+		pData->ClockEnabled = false;
+	}
+	EnableInterrupt(irqState);
 	return res;
 }
 
@@ -1464,4 +1490,11 @@ int TimerGetHighFreqDevCount(void)
 int TimerGetHighFreqDevNo(void)
 {
 	return SAMD_RTC_TIMER_MAXCNT;
+}
+
+#include "../../include/sam_sleep_delay.h"
+
+bool sDelay(uint32_t Seconds)
+{
+	return SamSleepDelay(Seconds, &g_SamdTimerData[0].pTimer);
 }

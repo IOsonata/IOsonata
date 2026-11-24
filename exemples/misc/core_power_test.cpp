@@ -441,7 +441,7 @@ int main(void)
 			(reason & (SYSTEM_RESET_WAKE_PIN | SYSTEM_RESET_WAKE_TIMER)) != 0U &&
 			SystemRetRegRead(1) == CORE_POWER_TEST_MARKER;
 		CorePowerTestResult("Retention register write/read",
-			SystemRetRegWrite(0, startCount + 1U) &&
+			SystemRetRegWrite(0, (startCount + 1U) & 0xFFU) &&
 			SystemRetRegRead(0) == ((startCount + 1U) & 0xFFU));
 		CorePowerTestResult("Retention register invalid index",
 			SystemRetRegRead(-1) == 0U && !SystemRetRegWrite(-1, 1U) &&

@@ -459,3 +459,13 @@ bool SystemRamRetain(uintptr_t Addr, uint32_t Size, bool bRetain)
 	(void)bRetain;
 	return false;
 }
+
+uint32_t SystemPowerCapabilitiesGet(void)
+{
+	return SYSTEM_POWER_CAP_SLEEP |
+		SYSTEM_POWER_CAP_TIMER_WAKE |
+		SYSTEM_POWER_CAP_WAKE_PIN |
+		SYSTEM_POWER_CAP_SYSTEM_OFF |
+		SYSTEM_POWER_CAP_RET_REG |
+		SYSTEM_POWER_CAP_LOW_POWER;
+}

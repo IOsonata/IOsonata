@@ -80,6 +80,23 @@ AstStatus::operator uint32_t() {
 	clock=ast.AST_CLOCK;
 	return value;
 }
+static unsigned s_TestHfUsers;
+static unsigned s_TestLfUsers;
+extern "C" bool SystemHighFreqClockEnable() { ++s_TestHfUsers; return true; }
+extern "C" bool SystemLowFreqClockEnable() { ++s_TestLfUsers; return true; }
+extern "C" void SystemHighFreqClockDisable() { assert(s_TestHfUsers); --s_TestHfUsers; }
+extern "C" void SystemLowFreqClockDisable() { assert(s_TestLfUsers); --s_TestLfUsers; }
+static uint32_t s_TestScr;
+static struct { uint32_t &SCR; } s_Scb = {s_TestScr};
+#define SCB (&s_Scb)
+#define SCB_SCR_SLEEPDEEP_Msk 4U
+#define SCB_SCR_SLEEPONEXIT_Msk 2U
+static uint32_t __get_IPSR() { return 0U; }
+static uint32_t __get_PRIMASK() { return 0U; }
+static void __DSB() {}
+static void __ISB() {}
+static void __WFI();
+#include "../../ARM/Microchip/include/sam_sleep_delay.h"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l.cpp"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp"
@@ -122,6 +139,10 @@ void Advance(int dev,uint32_t ticks,bool service=true) {
 		if(service)Service(dev);
 	}
 }
+static void __WFI()
+{
+	Advance(0, g_Sam4lTimerData[0].Trigger[0].Ticks);
+}
 int main() {
 	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0));
 	g_McuOsc.LowPwrOsc.Freq=32768;
@@ -158,6 +179,7 @@ int main() {
 	for(int dev=0;dev<7;++dev) {
 		cfg.DevNo=dev; timers[dev].pObj=&timers[dev];
 		assert(TimerInit(&timers[dev],&cfg));
+		assert(!sDelay(1));
 		if (dev == 0) {
 			assert(!s_AstBusyUntilClock);
 			assert(!(ast.AST_SR.value & AST_SR_BUSY));
@@ -311,6 +333,9 @@ int main() {
 	assert(TimerPowerOff(&a));
 	assert(ast.AST_IMR == 0U && ast.AST_WER == 0U);
 	assert(!(pm.PM_PBDMASK & PM_PBDMASK_AST));
+	assert(sDelay(0U));
+	assert(sDelay(1U));
+	assert(!s_TestLfUsers);
 	for (int dev = 1; dev <= 3; dev++)
 	{
 		assert(TimerPowerOff(&timers[dev]));
