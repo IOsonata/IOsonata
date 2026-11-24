@@ -202,5 +202,27 @@ class Nrf91PowerClock(unittest.TestCase):
 			sample.index("enabled = TimerEnable(&s_Timer)"))
 		self.assertIn("TimerDisable(&s_Timer);", sample)
 
+	def test_sdelay_pending_stop_is_not_warm(self):
+		# A release just before sDelay leaves a STOP pending. The enable
+		# then waits for it and restarts LFCLK, so the call is cold and
+		# both waits are counted.
+		src = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
+		start = src.index('extern "C" bool nRFxSleepLfClockRunning(void)')
+		query = src[start:src.index("bool SystemLowFreqClockEnable(void)", start)]
+		self.assertIn("nRFxLfclkStopSettle();", query)
+		self.assertIn("!s_bNRFxLfclkStopPending &&", query)
+		self.assertLess(src.index("static void nRFxLfclkStopSettle(void)"), start)
+		wait = src[src.index("static bool nRFxLfclkWaitStopped(void)"):
+			src.index("nRFxSleepLfClockStartupWaitUs(void)")]
+		self.assertIn("s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;", wait)
+		begin = src[src.index("static bool nRFxLfclkStart(uint32_t Src)"):
+			src.index("static bool nRFxLfclkWaitStopped(void)")]
+		self.assertNotIn("s_nRFxLfclkStartWaitUs = 0U;", begin)
+		enable = src[src.index("bool SystemLowFreqClockEnable(void)"):
+			src.index("void SystemLowFreqClockDisable(void)")]
+		self.assertLess(enable.index("s_nRFxLfclkStartWaitUs = 0U;"),
+			enable.index("nRFxLfclkWaitStopped()"))
+
+
 if __name__ == "__main__":
 	unittest.main()
