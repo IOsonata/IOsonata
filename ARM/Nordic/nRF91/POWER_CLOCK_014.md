@@ -281,3 +281,33 @@ Do not change generic CoreClockTest source to add nRF91-only
 conditionals. Use the new nRF91 source/model regressions and a
 hardware follow-up for active compares, duplicate handles and
 long interval rejection.
+
+## CoreClockTest TIMER0 handle reuse regression
+
+After the nRF91 exclusive HF TIMER ownership fix, the nRF9160 DK
+CoreClockTest ran with one failure: `Timer device 2` (TIMER0) reported
+`Timer initialization: FAIL`. RTC0/RTC1, TIMER1/TIMER2 and all other
+timing, sDelay and clock checks passed.
+
+This is a generic CoreClockTest handle-lifecycle issue, not a
+failed TIMER0 peripheral. The test first initializes the first HF
+timer as `s_RetainedTimer` for CPU delay calibration, sDelay
+measurements and independent RTC timing. It disables that timer
+between measurements, but correctly retains the device handle.
+The later timer matrix tried to initialize TIMER0 as `s_Timer`,
+which the exclusive ownership guard correctly rejected.
+
+The generic test now uses the already-initialized
+`s_RetainedTimer` handle when its device number matches the timer
+under test. Otherwise it uses `s_Timer`. Both the timer matrix
+and its trigger callback checks operate on that selected handle.
+This adjustment applies identically to every MCU and contains no
+target-specific branching.
+
+Do not remove or relax the HF timer's active/disabled ownership
+guard. This correction has source-level regression coverage but
+still requires an updated nRF9160 CoreClockTest hardware run.
+The previously reported two zero-failure hardware runs predated
+the stricter HF ownership check; do not use them as validation
+of this specific update.
+

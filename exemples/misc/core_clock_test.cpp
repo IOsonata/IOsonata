@@ -111,7 +111,7 @@ static volatile bool s_UartTxEmpty = true;
 static DelayCalibrationPoint_t s_DelayHigh;
 static DelayCalibrationPoint_t s_DelayLow;
 static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event);
-static void CoreClockTestTimerTriggers(void);
+static void CoreClockTestTimerTriggers(TimerDev_t *pTimer);
 static void CoreClockTestDelayCalibrationRecord(void);
 static void CoreClockTestFlush(void);
 
@@ -721,13 +721,13 @@ static void CoreClockTestDelayCalibrationReport(void)
 	CoreClockTestPrint("Delay two-point calibration: two CPU speeds measured\r\n");
 }
 
-static bool CoreClockTestTimerInit(int DevNo)
+static bool CoreClockTestTimerInit(int DevNo, TimerDev_t *pTimer)
 {
 	TimerCfg_t cfg;
 
 	cfg = s_TimerCfg;
 	cfg.DevNo = DevNo;
-	if (!TimerInit(&s_Timer, &cfg))
+	if (!TimerInit(pTimer, &cfg))
 	{
 		CoreClockTestResult("Timer initialization", false);
 		return false;
@@ -775,11 +775,21 @@ static void CoreClockTestTimer(int DevNo)
 	uint64_t tickStart;
 	uint64_t tickEnd;
 	TimerCfg_t hfCfg;
+	TimerDev_t *pTimer;
 	bool hfReady;
 	bool enabled;
 
+	// The retained high-frequency reference remains owned after Disable.
+	// When it is the device being tested, reuse the same Timer handle.
+	// This is generic for any MCU with persistent timer ownership.
+	pTimer = &s_Timer;
+	if (s_RetainedTimer.Enable != nullptr &&
+		s_RetainedTimer.DevNo == DevNo)
+	{
+		pTimer = &s_RetainedTimer;
+	}
 	CoreClockTestPrint("Timer device %u\r\n", (unsigned)DevNo);
-	if (!CoreClockTestTimerInit(DevNo))
+	if (!CoreClockTestTimerInit(DevNo, pTimer))
 	{
 		return;
 	}
@@ -806,21 +816,21 @@ static void CoreClockTestTimer(int DevNo)
 	for (delay = 0U; delay < 2U; delay++)
 	{
 		// Refresh the divider after a peripheral-clock change, with timer stopped.
-		frequency = TimerSetFrequency(&s_Timer, s_TimerCfg.Freq);
+		frequency = TimerSetFrequency(pTimer, s_TimerCfg.Freq);
 		s_InterruptCount = 0U;
-		period = nsTimerEnableTrigger(&s_Timer, 0, 10000000ULL,
+		period = nsTimerEnableTrigger(pTimer, 0, 10000000ULL,
 			TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
 		// Evaluate all three independently. Short-circuiting would conceal
 		// whether frequency, compare setup or clock ownership caused failure.
-		enabled = TimerEnable(&s_Timer);
+		enabled = TimerEnable(pTimer);
 		if (frequency == 0U || period == 0U || !enabled)
 		{
 			CoreClockTestPrint("Timer start diagnostic: device %u, frequency %u Hz, "
 				"period %u ns, enable %u, LF source %u\r\n",
 				(unsigned)DevNo, (unsigned)frequency, (unsigned)period,
 				(unsigned)enabled, (unsigned)GetLowFreqOscType());
-			TimerDisableTrigger(&s_Timer, 0);
-			TimerDisable(&s_Timer);
+			TimerDisableTrigger(pTimer, 0);
+			TimerDisable(pTimer);
 			CoreClockTestResult("Timer start", false);
 			if (hfReady)
 			{
@@ -828,8 +838,8 @@ static void CoreClockTestTimer(int DevNo)
 			}
 			return;
 		}
-		tickStart = hfReady ? TimerGetTickCount(&s_Timer) : 0U;
-		start = TimerGetMicrosecond(&s_Timer);
+		tickStart = hfReady ? TimerGetTickCount(pTimer) : 0U;
+		start = TimerGetMicrosecond(pTimer);
 		hfStart = hfReady ? TimerGetMicrosecond(&s_RetainedTimer) : 0U;
 		if (delay == 0U)
 		{
@@ -839,13 +849,13 @@ static void CoreClockTestTimer(int DevNo)
 		{
 			nsDelay(250000000U);
 		}
-		elapsed = TimerGetMicrosecond(&s_Timer) - start;
-		tickEnd = hfReady ? TimerGetTickCount(&s_Timer) : 0U;
+		elapsed = TimerGetMicrosecond(pTimer) - start;
+		tickEnd = hfReady ? TimerGetTickCount(pTimer) : 0U;
 		hfElapsed = hfReady ?
 			TimerGetMicrosecond(&s_RetainedTimer) - hfStart : 0U;
-		TimerDisable(&s_Timer);
+		TimerDisable(pTimer);
 		count = s_InterruptCount;
-		TimerDisableTrigger(&s_Timer, 0);
+		TimerDisableTrigger(pTimer, 0);
 		expected = (uint64_t)elapsed * 1000U / period;
 		difference = count > expected ? count - expected : expected - count;
 		CoreClockTestPrint("Timer: %u Hz, %s 250 ms measured %u us, IRQ %u\r\n",
@@ -872,13 +882,13 @@ static void CoreClockTestTimer(int DevNo)
 	{
 		TimerDisable(&s_RetainedTimer);
 	}
-	CoreClockTestTimerTriggers();
+	CoreClockTestTimerTriggers(pTimer);
 }
 
 
 // Exercise the public Timer trigger API on each enumerated hardware timer.
 // Keep this separate from the clock-change timing and IRQ measurements.
-static void CoreClockTestTimerTriggers(void)
+static void CoreClockTestTimerTriggers(TimerDev_t *pTimer)
 {
 	uint64_t period;
 	uint64_t before;
@@ -888,26 +898,26 @@ static void CoreClockTestTimerTriggers(void)
 	bool enabled;
 	bool valid;
 
-	valid = s_Timer.FindAvailTrigger != nullptr &&
-		TimerGetMaxTrigger(&s_Timer) > 0;
+	valid = pTimer->FindAvailTrigger != nullptr &&
+		TimerGetMaxTrigger(pTimer) > 0;
 	CoreClockTestResult("Timer trigger availability", valid);
 	if (!valid)
 	{
 		return;
 	}
-	trigger = s_Timer.FindAvailTrigger(&s_Timer);
+	trigger = pTimer->FindAvailTrigger(pTimer);
 	CoreClockTestResult("Timer free trigger",
-		trigger >= 0 && trigger < TimerGetMaxTrigger(&s_Timer));
-	if (trigger < 0 || trigger >= TimerGetMaxTrigger(&s_Timer))
+		trigger >= 0 && trigger < TimerGetMaxTrigger(pTimer));
+	if (trigger < 0 || trigger >= TimerGetMaxTrigger(pTimer))
 	{
 		return;
 	}
 
 	// One-shot must invoke the callback once, not periodically.
 	s_TriggerCount = 0U;
-	period = nsTimerEnableTrigger(&s_Timer, trigger, 20000000ULL,
+	period = nsTimerEnableTrigger(pTimer, trigger, 20000000ULL,
 		TIMER_TRIG_TYPE_SINGLE, CoreClockTestTriggerHandler, nullptr);
-	enabled = TimerEnable(&s_Timer);
+	enabled = TimerEnable(pTimer);
 	if (enabled && period != 0U)
 	{
 		msDelay(75U);
@@ -915,33 +925,33 @@ static void CoreClockTestTimerTriggers(void)
 	fired = s_TriggerCount;
 	CoreClockTestResult("Timer one-shot callback",
 		enabled && period != 0U && fired == 1U);
-	TimerDisableTrigger(&s_Timer, trigger);
+	TimerDisableTrigger(pTimer, trigger);
 	if (!enabled || period == 0U)
 	{
-		TimerDisable(&s_Timer);
+		TimerDisable(pTimer);
 		return;
 	}
 
 	// Switch trigger modes while the timer owns its clock. Disable/Enable
 	// is tested by the timer matrix; this phase validates the trigger API,
 	// not a second asynchronous LFCLK stop/start transition.
-	TimerReset(&s_Timer);
+	TimerReset(pTimer);
 	s_TriggerCount = 0U;
-	period = nsTimerEnableTrigger(&s_Timer, trigger, 20000000ULL,
+	period = nsTimerEnableTrigger(pTimer, trigger, 20000000ULL,
 		TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler, nullptr);
-	before = TimerGetTickCount(&s_Timer);
+	before = TimerGetTickCount(pTimer);
 	if (enabled && period != 0U)
 	{
 		msDelay(110U);
 	}
-	after = TimerGetTickCount(&s_Timer);
+	after = TimerGetTickCount(pTimer);
 	fired = s_TriggerCount;
 	if (!enabled || period == 0U || fired < 4U || fired > 7U ||
 		after <= before)
 	{
 		CoreClockTestPrint("Timer continuous diagnostics: device %u, enabled %u, "
 			"period %u ns, callbacks %u, before %u, after %u\r\n",
-			(unsigned)s_Timer.DevNo, (unsigned)enabled,
+			(unsigned)pTimer->DevNo, (unsigned)enabled,
 			(unsigned)period, (unsigned)fired,
 			(unsigned)before, (unsigned)after);
 	}
@@ -949,14 +959,14 @@ static void CoreClockTestTimerTriggers(void)
 		enabled && period != 0U && fired >= 4U && fired <= 7U);
 	CoreClockTestResult("Timer counter advances",
 		enabled && after > before);
-	TimerDisableTrigger(&s_Timer, trigger);
-	TimerDisable(&s_Timer);
+	TimerDisableTrigger(pTimer, trigger);
+	TimerDisable(pTimer);
 	before = s_TriggerCount;
 	msDelay(40U);
 	CoreClockTestResult("Timer trigger disabled",
 		s_TriggerCount == before);
 	CoreClockTestResult("Timer trigger slot reusable",
-		s_Timer.FindAvailTrigger(&s_Timer) == trigger);
+		pTimer->FindAvailTrigger(pTimer) == trigger);
 }
 
 // Check that an initialized but disabled LF timer remains owned.

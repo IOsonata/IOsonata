@@ -298,5 +298,28 @@ class Nrf91PowerClock(unittest.TestCase):
 			accept_rc = selected_rc
 			accept_xtal = not selected_rc
 			self.assertNotEqual(accept_rc, accept_xtal)
+
+	def test_core_clock_test_reuses_retained_hf_timer(self):
+		# nRF9160 TIMER0 (DevNo 2) was already initialized through
+		# s_RetainedTimer during CPU delay calibration and LF RTC timing.
+		# Disable stops it, but the exclusive HF ownership is retained.
+		# The timer matrix must reuse that handle, not claim TIMER0 from
+		# s_Timer and silently weaken the ownership guard.
+		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
+		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
+		start = example.index("static void CoreClockTestTimer(int DevNo)")
+		end = example.index("// Exercise the public Timer trigger API", start)
+		matrix = example[start:end]
+		self.assertIn("s_RetainedTimer.Enable != nullptr", matrix)
+		self.assertIn("s_RetainedTimer.DevNo == DevNo", matrix)
+		self.assertIn("pTimer = &s_RetainedTimer;", matrix)
+		self.assertIn("CoreClockTestTimerInit(DevNo, pTimer)", matrix)
+		self.assertIn("CoreClockTestTimerTriggers(pTimer);", matrix)
+		self.assertNotIn("NRF91_SERIES", matrix)
+		guard = hf[hf.index("bool nRFxTimerInit("):]
+		self.assertIn("s_pnRFxTimerDev[devno] != pTimer", guard)
+		self.assertIn("s_bTimerEnabled[devno]", guard)
+		self.assertIn("s_pnRFxTimerDev[devno] = pTimer;", guard)
+
 if __name__ == "__main__":
 	unittest.main()

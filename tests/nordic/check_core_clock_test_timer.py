@@ -13,15 +13,11 @@ class CoreClockTestTimer(unittest.TestCase):
         start = source.index("static void CoreClockTestTimer(int DevNo)\n{")
         end = source.index("// Check that disabling one timer", start)
         timer = source[start:end]
-        self.assertIn(
-            "elapsed = TimerGetMicrosecond(&s_Timer) - start;\n"
-            "\t\tTimerDisable(&s_Timer);",
-            timer,
-        )
-        self.assertLess(
-            timer.index("elapsed = TimerGetMicrosecond(&s_Timer) - start;"),
-            timer.index("count = s_InterruptCount;"),
-        )
+        self.assertIn("elapsed = TimerGetMicrosecond(pTimer) - start;", timer)
+        measure = timer.index("elapsed = TimerGetMicrosecond(pTimer) - start;")
+        disable = timer.index("TimerDisable(pTimer);", measure)
+        self.assertLess(measure, disable)
+        self.assertLess(disable, timer.index("count = s_InterruptCount;", measure))
 
     def test_low_frequency_timer_has_independent_hf_reference(self):
         source = TEST.read_text(encoding="utf-8")
@@ -43,11 +39,11 @@ class CoreClockTestTimer(unittest.TestCase):
 class CoreClockTestInitialization(unittest.TestCase):
     def test_initialization_does_not_restart_lfclk(self):
         source = TEST.read_text(encoding="utf-8")
-        start = source.index("static bool CoreClockTestTimerInit(int DevNo)")
+        start = source.index("static bool CoreClockTestTimerInit(int DevNo, TimerDev_t *pTimer)")
         end = source.index("static void CoreClockTestFlush(void)", start)
         setup = source[start:end]
-        self.assertIn("TimerInit(&s_Timer, &cfg)", setup)
-        self.assertNotIn("TimerDisable(&s_Timer);", setup)
+        self.assertIn("TimerInit(pTimer, &cfg)", setup)
+        self.assertNotIn("TimerDisable(pTimer);", setup)
 
     def test_factors_use_public_nsdelay(self):
         source = TEST.read_text(encoding="utf-8")
@@ -319,18 +315,18 @@ class NordicSleepDelay(unittest.TestCase):
 
     def test_core_clock_test_validates_timer_trigger_implementations(self):
         source = TEST.read_text(encoding="utf-8")
-        self.assertIn("static void CoreClockTestTimerTriggers(void)", source)
-        self.assertIn("CoreClockTestTimerTriggers();", source)
-        self.assertIn("TimerGetMaxTrigger(&s_Timer)", source)
-        self.assertIn("s_Timer.FindAvailTrigger(&s_Timer)", source)
+        self.assertIn("static void CoreClockTestTimerTriggers(TimerDev_t *pTimer)", source)
+        self.assertIn("CoreClockTestTimerTriggers(pTimer);", source)
+        self.assertIn("TimerGetMaxTrigger(pTimer)", source)
+        self.assertIn("pTimer->FindAvailTrigger(pTimer)", source)
         self.assertIn("TIMER_TRIG_TYPE_SINGLE, CoreClockTestTriggerHandler", source)
         self.assertIn("TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler", source)
         self.assertIn('CoreClockTestResult("Timer one-shot callback",', source)
-        self.assertIn("TimerReset(&s_Timer);", source)
+        self.assertIn("TimerReset(pTimer);", source)
         self.assertIn("Switch trigger modes while the timer owns its clock.", source)
-        self.assertNotIn("enabled = TimerEnable(&s_Timer);\n\tperiod = enabled ? nsTimerEnableTrigger", source)
+        self.assertNotIn("enabled = TimerEnable(pTimer);\n\tperiod = enabled ? nsTimerEnableTrigger", source)
         self.assertIn("Timer continuous diagnostics:", source)
-        self.assertLess(source.index("TimerReset(&s_Timer);"),
+        self.assertLess(source.index("TimerReset(pTimer);"),
             source.index("TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler"))
         self.assertIn('CoreClockTestResult("Timer continuous callback",', source)
         self.assertIn('CoreClockTestResult("Timer counter advances",', source)
@@ -338,6 +334,26 @@ class NordicSleepDelay(unittest.TestCase):
         self.assertIn('CoreClockTestResult("Timer trigger slot reusable",', source)
         self.assertNotIn("nRFxRtcSleepClaim(", source)
         self.assertNotIn("nRFxRtcSleepRelease(", source)
+
+
+    def test_matrix_reuses_the_existing_reference_timer_handle(self):
+        source = TEST.read_text(encoding="utf-8")
+        matrix_start = source.index("static void CoreClockTestTimer(int DevNo)")
+        matrix_end = source.index("// Exercise the public Timer trigger API", matrix_start)
+        matrix = source[matrix_start:matrix_end]
+        self.assertIn("pTimer = &s_Timer;", matrix)
+        self.assertIn("s_RetainedTimer.Enable != nullptr", matrix)
+        self.assertIn("s_RetainedTimer.DevNo == DevNo", matrix)
+        self.assertIn("pTimer = &s_RetainedTimer;", matrix)
+        self.assertLess(matrix.index("pTimer = &s_RetainedTimer;"),
+            matrix.index("CoreClockTestTimerInit(DevNo, pTimer)"))
+        self.assertIn("CoreClockTestTimerTriggers(pTimer);", matrix)
+        self.assertNotIn("NRF91_SERIES", matrix)
+        # TIMER0 is the first HF reference, and its handle remains owned
+        # across Disable. A second independent handle must not claim it.
+        self.assertIn("cfg.DevNo = TimerGetHighFreqDevNo();", source)
+        self.assertIn("TimerInit(&s_RetainedTimer, &cfg)", source)
+        self.assertIn("TimerDisable(&s_RetainedTimer);", source)
 
     def test_clock_test_runs_contention_after_timer_matrix(self):
         source = TEST.read_text(encoding="utf-8")
