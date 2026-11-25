@@ -83,7 +83,7 @@ class StandbySourceTest(unittest.TestCase):
 	def test_samd11_board_selects_sw0(self):
 		board = (ROOT / "ARM/Microchip/SAMD/SAMD11/exemples/CorePowerTest/src/board.h").read_text(encoding="utf-8")
 		self.assertIn("#define WAKE_BUT_PIN 14", board)
-		self.assertIn("#define POWER_DEMO_RESUME_WAKE 1", board)
+		self.assertIn("#define CORE_POWER_TEST_WAKE_MS 0", board)
 
 	def test_maskable_wake_is_pending_through_wfi(self):
 		s = body(SLEEP, "void SystemSleep(")
@@ -124,7 +124,7 @@ class StandbySourceTest(unittest.TestCase):
 		sleep = body(SLEEP, 'void SystemSleep(')
 		self.assertIn('s_SamdSysTickOwner != NULL', check)
 		self.assertIn('SAMD_RTC_TIMER_MAXCNT', check)
-		self.assertIn('g_SamdTimerData[i].bRunning', check)
+		self.assertIn('s_SamdTimerData[i]->bRunning', check)
 		self.assertLess(sleep.index('SamdTimerAllowStandby()'), sleep.index('SamdAdcPrepareSleep()'))
 
 	def test_rearm_does_not_change_gpio_ownership(self):

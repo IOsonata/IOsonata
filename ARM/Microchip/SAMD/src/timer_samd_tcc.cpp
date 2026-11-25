@@ -61,11 +61,6 @@ static inline tcc_registers_t *SamdTccReg(SamdTimerData_t *pData)
 	return (tcc_registers_t *)pData->pReg;
 }
 
-static inline uint32_t SamdTccMax(const SamdTimerData_t *pData)
-{
-	return (uint32_t)((1ULL << pData->CntBits) - 1U);
-}
-
 static bool SamdTccSync(tcc_registers_t *pReg, uint32_t Mask)
 {
 	for (uint32_t i = 0; i < SAMD_TCC_SYNC_TIMEOUT; i++)
@@ -120,7 +115,7 @@ bool SamdTccSetup(SamdTimerData_t *pData)
 	{
 		return false;
 	}
-	reg->TCC_PER = SamdTccMax(pData);
+	reg->TCC_PER = pData->CountMask;
 	if (!SamdTccSync(reg, TCC_SYNCBUSY_PER_Msk))
 	{
 		return false;
@@ -210,7 +205,7 @@ bool SamdTccRead(SamdTimerData_t *pData, uint32_t *pCount)
 			return false;
 		}
 	}
-	*pCount = reg->TCC_COUNT & SamdTccMax(pData);
+	*pCount = reg->TCC_COUNT & pData->CountMask;
 
 	return true;
 }
@@ -250,7 +245,7 @@ bool SamdTccArm(SamdTimerData_t *pData, int TrigNo, bool bEnable)
 		{
 			return false;
 		}
-		reg->TCC_CC[TrigNo] = (uint32_t)pData->pTrig[TrigNo].Deadline & SamdTccMax(pData);
+		reg->TCC_CC[TrigNo] = (uint32_t)pData->pTrig[TrigNo].Deadline & pData->CountMask;
 		if (!SamdTccSync(reg, sync))
 		{
 			return false;
@@ -332,7 +327,7 @@ bool SamdTccCaptured(SamdTimerData_t *pData, uint32_t *pCount)
 	{
 		return false;
 	}
-	*pCount = reg->TCC_CC[ch] & SamdTccMax(pData);
+	*pCount = reg->TCC_CC[ch] & pData->CountMask;
 
 	return true;
 }

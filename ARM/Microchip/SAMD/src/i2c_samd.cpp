@@ -132,31 +132,34 @@ typedef enum {
 
 #pragma pack(push, 4)
 
-typedef struct {
+typedef struct SamdI2cDev SamdI2cDev_t;
+
+struct SamdI2cDev {
+	void (*DmaStop)(SamdI2cDev_t *, bool);
 	int DevNo;						//!< SERCOM number
 	sercom_registers_t *pReg;
 	I2CDev_t *pI2cDev;				//!< Generic I2C device data
 	uint32_t CtrlA;					//!< CTRLA without ENABLE
 	uint32_t Baud;					//!< Master BAUD
-	uint8_t DevAddr;				//!< Master target address
-	bool bNeedStart;				//!< Master: the next byte goes after the address
-	bool bBusHeld;					//!< Master owns the bus, no STOP sent
-	volatile SAMD_I2C_OP Op;		//!< Master interrupt transfer
-	bool bAddrPhase;				//!< Master interrupt transmit: address sent, not acknowledged
 	const uint8_t *pTxData;
 	uint8_t *pRxData;
 	int Remain;
 	int Count;
+	int SlaveCount;
+	volatile SAMD_I2C_OP Op;		//!< Master interrupt transfer
+	uint16_t DmaLen;				//!< Bytes of the running block
+	int8_t DmaChan;					//!< DMAC channel of the master, both directions
+	uint8_t DevAddr;				//!< Master target address
+	bool bNeedStart;				//!< Master: the next byte goes after the address
+	bool bBusHeld;					//!< Master owns the bus, no STOP sent
+	bool bAddrPhase;				//!< Master interrupt transmit: address sent, not acknowledged
 	bool bSlaveTx;					//!< Slave transmit, master read
 	bool bSlaveRx;					//!< Slave receive, master write
 	bool bSlaveFirst;				//!< First data interrupt of a slave transmit
 	bool bDma;						//!< DmaChan taken
-	int SlaveCount;
 	volatile bool bDmaRun;			//!< Master DMA block ended by the DMAC interrupt
 	bool bSleepPaused;			//!< Master suspended by SystemSleep
-	int8_t DmaChan;					//!< DMAC channel of the master, both directions
-	uint16_t DmaLen;				//!< Bytes of the running block
-} SamdI2cDev_t;
+};
 
 #pragma pack(pop)
 
@@ -1066,6 +1069,27 @@ static void SamdI2cDmaGive(SamdI2cDev_t *pDev)
 	}
 }
 
+// Disable and Reset abort the block. PowerOff and Init release the channel.
+static void SamdI2cDmaStop(SamdI2cDev_t *pDev, bool bRelease)
+{
+	if (bRelease)
+	{
+		SamdI2cDmaGive(pDev);
+	}
+	else
+	{
+		SamdI2cmDmaEnd(pDev, true);
+	}
+}
+
+static void SamdI2cStopDma(SamdI2cDev_t *pDev, bool bRelease)
+{
+	if (pDev->DmaStop != NULL)
+	{
+		pDev->DmaStop(pDev, bRelease);
+	}
+}
+
 static void SamdI2cIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
 	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
@@ -1320,6 +1344,21 @@ static bool SamdI2cStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return SamdI2cStartTx(pDev, DevAddr);
 }
 
+// A polling master has no SERCOM interrupt or DMAC channel.
+static int SamdI2cTxPoll(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
+{
+	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
+
+	return pData != NULL && DataLen > 0 ? SamdI2cmTxPolling(dev, pData, DataLen) : 0;
+}
+
+static int SamdI2cRxPoll(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
+{
+	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
+
+	return pBuff != NULL && BuffLen > 0 ? SamdI2cmRxPolling(dev, pBuff, BuffLen) : 0;
+}
+
 static int SamdI2cTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
@@ -1376,7 +1415,7 @@ static void SamdI2cDisable(DevIntrf_t * const pDev)
 	{
 		// A channel running is stopped, its transfer is not reported: Reset
 		// ends it
-		SamdI2cmDmaEnd(dev, true);
+		SamdI2cStopDma(dev, false);
 		SamdI2cmStop(dev);
 		reg->I2CM.SERCOM_INTENCLR = SAMD_I2CM_INTS;
 	}
@@ -1485,7 +1524,7 @@ static void SamdI2cReset(DevIntrf_t * const pDev)
 
 	uint32_t state = DisableInterrupt();
 
-	SamdI2cmDmaEnd(dev, true);
+	SamdI2cStopDma(dev, false);
 	dev->Op = SAMD_I2C_OP_NONE;
 	dev->bBusHeld = false;
 	dev->bSlaveTx = false;
@@ -1507,7 +1546,7 @@ static void SamdI2cPowerOff(DevIntrf_t * const pDev)
 
 	uint32_t state = DisableInterrupt();
 
-	SamdI2cDmaGive(dev);
+	SamdI2cStopDma(dev, true);
 	EnableInterrupt(state);
 
 	IOPinDis(dev->pI2cDev->Cfg.pIOPinMap, 2);
@@ -1536,6 +1575,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 	// The slave runs on interrupts
 	bool intEn = pCfgData->Mode == I2CMODE_SLAVE || pCfgData->bIntEn;
+	bool polling = !intEn && !pCfgData->bDmaEn;
 
 	if (intEn && pCfgData->IntPrio < 0)
 	{
@@ -1567,12 +1607,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	}
 
 	// Channel of an earlier I2CInit given back
-	SamdI2cDmaGive(dev);
+	SamdI2cStopDma(dev, true);
 	memset(dev, 0, sizeof(SamdI2cDev_t));
 	dev->DevNo = pCfgData->DevNo;
 	dev->pReg = SamdSercomGetReg(pCfgData->DevNo);
 	dev->pI2cDev = pDev;
 	dev->DmaChan = -1;
+	dev->DmaStop = pCfgData->bDmaEn ? SamdI2cDmaStop : NULL;
 
 	memcpy(&pDev->Cfg, pCfgData, sizeof(I2CCfg_t));
 	pDev->Cfg.bIntEn = intEn;
@@ -1602,10 +1643,10 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.GetRate = SamdI2cGetRate;
 	pDev->DevIntrf.SetRate = SamdI2cSetRate;
 	pDev->DevIntrf.StartRx = SamdI2cStartRx;
-	pDev->DevIntrf.RxData = SamdI2cRxData;
+	pDev->DevIntrf.RxData = polling ? SamdI2cRxPoll : SamdI2cRxData;
 	pDev->DevIntrf.StopRx = SamdI2cStopRx;
 	pDev->DevIntrf.StartTx = SamdI2cStartTx;
-	pDev->DevIntrf.TxData = SamdI2cTxData;
+	pDev->DevIntrf.TxData = polling ? SamdI2cTxPoll : SamdI2cTxData;
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.StopTx = SamdI2cStopTx;
 	pDev->DevIntrf.Reset = SamdI2cReset;
@@ -1617,7 +1658,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, SamdI2cIrqHandler);
+	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, intEn ? SamdI2cIrqHandler : NULL);
 
 	IOPinCfg(pCfgData->pIOPinMap, 2);
 
@@ -1625,7 +1666,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 	if (!res)
 	{
-		SamdI2cDmaGive(dev);
+		SamdI2cStopDma(dev, true);
 		SharedIntrfSetIrqHandler(pCfgData->DevNo, NULL, NULL);
 		IOPinDis(pCfgData->pIOPinMap, 2);
 		SamdSercomClockDisable(pCfgData->DevNo);

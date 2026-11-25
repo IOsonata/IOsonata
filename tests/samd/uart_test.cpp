@@ -15,7 +15,11 @@
 #define __IO volatile
 #include "component/sercom.h"
 #include "component/dmac.h"
+#include "component/pm.h"
+static pm_registers_t s_Pm;
+#define PM_REGS (&s_Pm)
 #define SAMD_SERCOM_CNT 3
+SharedIntrf_t g_SharedIntrf[SAMD_SERCOM_CNT];
 #define SAMD_GCLK_MAIN 0
 #define SAMD_DMAC_COUNT_MAX 65535
 #define SAMD_DMAC_TRIG_SERCOM_TX(n) (2 + 2 * (n))
@@ -57,14 +61,26 @@ static void NVIC_SetPriority(int, uint32_t) {}
 static int SamdSercomIrq(int DevNo) { return DevNo; }
 static uint32_t SamdIrqPrio(int Prio) { return Prio > 3 ? 3 : Prio; }
 static bool SamdSercomOwned(int, const DevIntrf_t *) { return false; }
-static bool SamdSercomClockEnable(int) { return true; }
-static void SamdSercomClockDisable(int) {}
+static bool SamdSercomClockEnable(int DevNo)
+{
+	PM_REGS->PM_APBCMASK = PM_REGS->PM_APBCMASK | (PM_APBCMASK_SERCOM0_Msk << DevNo);
+	return true;
+}
+static void SamdSercomClockDisable(int DevNo)
+{
+	PM_REGS->PM_APBCMASK = PM_REGS->PM_APBCMASK & ~(PM_APBCMASK_SERCOM0_Msk << DevNo);
+}
 static sercom_registers_t *SamdSercomGetReg(int DevNo) { return &s_Regs[DevNo]; }
 static int SamdSercomPad(int, const IOPinCfg_t *pPin) { return pPin->PinNo; }
 static uint32_t SystemPeriphClockGet(int) { return 48000000; }
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
 void IOPinDisable(int, int) {}
-void SharedIntrfSetIrqHandler(int, DevIntrf_t *, IrqHandler_t Handler) { s_Handler = Handler; }
+void SharedIntrfSetIrqHandler(int DevNo, DevIntrf_t *pIntrf, IrqHandler_t Handler)
+{
+	g_SharedIntrf[DevNo].pIntrf = pIntrf;
+	g_SharedIntrf[DevNo].Handler = Handler;
+	s_Handler = Handler;
+}
 static int SamdDmacOpen(int, SamdDmacHandler_t Handler, void *Ctx, int)
 {
 	assert(!s_Channel);

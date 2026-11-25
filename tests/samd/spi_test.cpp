@@ -14,8 +14,12 @@
 #define __IO volatile
 #include "component/sercom.h"
 #include "component/dmac.h"
+#include "component/pm.h"
+static pm_registers_t s_Pm;
+#define PM_REGS (&s_Pm)
 
 #define SAMD_SERCOM_CNT 3
+SharedIntrf_t g_SharedIntrf[SAMD_SERCOM_CNT];
 #define SAMD_GCLK_MAIN 0
 #define SAMD_DMAC_COUNT_MAX 65535
 #define SAMD_DMAC_TRIG_SERCOM_RX(n) (1 + 2 * (n))
@@ -95,13 +99,15 @@ static bool SamdSercomOwned(int, const DevIntrf_t *)
 {
 	return false;
 }
-static bool SamdSercomClockEnable(int)
+static bool SamdSercomClockEnable(int DevNo)
 {
+	PM_REGS->PM_APBCMASK = PM_REGS->PM_APBCMASK | (PM_APBCMASK_SERCOM0_Msk << DevNo);
 	s_Clock = true;
 	return true;
 }
-static void SamdSercomClockDisable(int)
+static void SamdSercomClockDisable(int DevNo)
 {
+	PM_REGS->PM_APBCMASK = PM_REGS->PM_APBCMASK & ~(PM_APBCMASK_SERCOM0_Msk << DevNo);
 	s_Clock = false;
 }
 static sercom_registers_t *SamdSercomGetReg(int DevNo)
@@ -132,8 +138,10 @@ void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
 void IOPinDisable(int, int)
 {
 }
-void SharedIntrfSetIrqHandler(int, DevIntrf_t *pIntrf, IrqHandler_t Handler)
+void SharedIntrfSetIrqHandler(int DevNo, DevIntrf_t *pIntrf, IrqHandler_t Handler)
 {
+	g_SharedIntrf[DevNo].pIntrf = pIntrf;
+	g_SharedIntrf[DevNo].Handler = Handler;
 	s_Intrf = pIntrf;
 	s_Handler = Handler;
 }

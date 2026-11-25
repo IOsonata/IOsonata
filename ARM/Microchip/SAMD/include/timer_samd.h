@@ -152,7 +152,7 @@ struct __Samd_Timer_Data {
 	SamdTimerTrig_t *pTrig;		//!< Triggers of the device
 	uint8_t GclkId;				//!< Generic clock channel
 	uint8_t NbTrig;				//!< Number of triggers
-	uint8_t CntBits;			//!< Counter size in bits
+	uint8_t Prescaler;			//!< PRESCALER field value
 	int8_t EvUser;				//!< Event user of the capture channel, -1 none
 	bool bRunning;
 	bool ClockEnabled;
@@ -168,17 +168,14 @@ struct __Samd_Timer_Data {
 	IRQn_Type IrqNo;
 	uint32_t ApbMask;			//!< PM APBC bit of the TC or TCC
 	uint32_t BaseFreq;			//!< Counter clock before the prescaler
-	uint32_t Prescaler;			//!< PRESCALER field value
+	uint32_t CountMask;			//!< Hardware counter mask
 	uint32_t Epoch;				//!< Changed by a counter reset
 	uint64_t Floor;				//!< Last count returned, counts never go back
 	uint32_t Compare;			//!< RTC compare value written last
 	uint32_t StopCount;			//!< TCC count when the counter stopped
-	uint64_t ExtCount;			//!< Count captured at the last external trigger
 };
 
 #pragma pack(pop)
-
-extern SamdTimerData_t g_SamdTimerData[SAMD_TIMER_MAXCNT];
 
 #ifdef __cplusplus
 extern "C" {
