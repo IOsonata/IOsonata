@@ -174,8 +174,21 @@ static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
 		return false;
 	}
 
-	usFactor = ((uint64_t)CpuHz * 1000000ULL) / UsDivisor;
-	nsFactor = ((uint64_t)CpuHz * 1000000ULL) / NsDivisor;
+#ifdef __GNUC__
+	// Integral cycles per loop cancel the common million in both ratios.
+	if (__builtin_constant_p(UsDivisor) && __builtin_constant_p(NsDivisor) &&
+		UsDivisor % 1000000U == 0U && NsDivisor % 1000000U == 0U &&
+		UsDivisor / 1000000U <= UINT32_MAX && NsDivisor / 1000000U <= UINT32_MAX)
+	{
+		usFactor = CpuHz / (uint32_t)(UsDivisor / 1000000U);
+		nsFactor = CpuHz / (uint32_t)(NsDivisor / 1000000U);
+	}
+	else
+#endif
+	{
+		usFactor = ((uint64_t)CpuHz * 1000000ULL) / UsDivisor;
+		nsFactor = ((uint64_t)CpuHz * 1000000ULL) / NsDivisor;
+	}
 
 	if (usFactor == 0U || nsFactor == 0U ||
 		usFactor > UINT32_MAX || nsFactor > UINT32_MAX)

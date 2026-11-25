@@ -71,6 +71,7 @@ def main():
             else:
                 assert all(n in symbols for n in ('SamdRtcSetup', 'SamdTcSetup', 'SamdTccSetup'))
             if selected == 0:
+                assert 'SysTickTimerPowerOff' not in symbols, (name, 'Unused SysTick shutdown linked')
                 assert 'SamdTimerStorage(int)::tc' not in symbols, (name, 'Unused TC/TCC storage linked')
             if demo:
                 assert 'SamdUartDmaService' not in symbols and 'SamdUartPoll(' not in symbols

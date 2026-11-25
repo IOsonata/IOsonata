@@ -75,8 +75,19 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 	uint32_t chunk;
 	uint32_t remaining;
 
-	loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 999999ULL) /
-		1000000ULL;
+#ifdef __GNUC__
+	// A constant interval that divides one second needs only a 32-bit
+	// ceiling division. Subtract before dividing to avoid overflow.
+	if (__builtin_constant_p(cnt) && cnt != 0U && 1000000U % cnt == 0U)
+	{
+		uint32_t rate = SystemMicroSecLoopCnt;
+		loops = rate ? 1U + (rate - 1U) / (1000000U / cnt) : 0U;
+	}
+	else
+#endif
+	{
+		loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 999999ULL) / 1000000ULL;
+	}
 
 	// Keep the original ten-NOP signed countdown inside usDelay.
 	// Each chunk is bounded because BGT compares a signed counter.
@@ -130,8 +141,19 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 	uint32_t chunk;
 	uint32_t remaining;
 
-	loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) /
-		1000000000ULL;
+#ifdef __GNUC__
+	// A constant interval that divides one second needs only a 32-bit
+	// ceiling division. Subtract before dividing to avoid overflow.
+	if (__builtin_constant_p(cnt) && cnt != 0U && 1000000000U % cnt == 0U)
+	{
+		uint32_t rate = SystemnsDelayFactor;
+		loops = rate ? 1U + (rate - 1U) / (1000000000U / cnt) : 0U;
+	}
+	else
+#endif
+	{
+		loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) / 1000000000ULL;
+	}
 
 	while (loops != 0U)
 	{

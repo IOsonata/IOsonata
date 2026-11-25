@@ -1106,9 +1106,11 @@ static void SamdI2cIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	}
 }
 
-static uint64_t SamdI2cCeilDiv(uint64_t Num, uint64_t Den)
+// All SAMD11/D21 phase times are multiples of 20 or 100 ns. Reducing
+// the fraction first keeps the product within 32 bits at up to 48 MHz.
+static uint32_t SamdI2cCycles(uint32_t Clock, uint32_t Units, uint32_t UnitsPerSecond)
 {
-	return (Num + Den - 1U) / Den;
+	return 1U + (Clock * Units - 1U) / UnitsPerSecond;
 }
 
 // Speed and SDA hold of CTRLA and the master BAUD of a rate. Returns the SCL
@@ -1118,6 +1120,7 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 	uint32_t fclk = SystemPeriphClockGet(SAMD_GCLK_MAIN);
 	uint32_t tlow;
 	uint32_t thigh;
+	uint32_t unitsPerSecond;
 
 	if (Rate == 0U || fclk == 0U)
 	{
@@ -1130,8 +1133,9 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 
 	if (Rate > I2C_SCL_FAST_MODE_MAX_SPEED * 1000U)
 	{
-		tlow = I2C_SCL_TLOW_FAST_MODE_PLUS_MIN;
-		thigh = I2C_SCL_THIGH_FAST_MODE_PLUS_MIN;
+		unitsPerSecond = 50000000U;
+		tlow = I2C_SCL_TLOW_FAST_MODE_PLUS_MIN / 20U;
+		thigh = I2C_SCL_THIGH_FAST_MODE_PLUS_MIN / 20U;
 		// Fast mode plus, 50 to 100 ns SDA hold
 		*pCtrla = SERCOM_I2CM_CTRLA_SPEED(1U) | SERCOM_I2CM_CTRLA_SDAHOLD(1U);
 	}
@@ -1139,13 +1143,15 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 	{
 		if (Rate > I2C_SCL_STD_MODE_MAX_SPEED * 1000U)
 		{
-			tlow = I2C_SCL_TLOW_FAST_MODE_MIN;
-			thigh = I2C_SCL_THIGH_FAST_MODE_MIN;
+			unitsPerSecond = 10000000U;
+			tlow = I2C_SCL_TLOW_FAST_MODE_MIN / 100U;
+			thigh = I2C_SCL_THIGH_FAST_MODE_MIN / 100U;
 		}
 		else
 		{
-			tlow = I2C_SCL_TLOW_STD_MODE_MIN;
-			thigh = I2C_SCL_THIGH_STD_MODE_MIN;
+			unitsPerSecond = 10000000U;
+			tlow = I2C_SCL_TLOW_STD_MODE_MIN / 100U;
+			thigh = I2C_SCL_THIGH_STD_MODE_MIN / 100U;
 		}
 		// 300 to 600 ns SDA hold
 		*pCtrla = SERCOM_I2CM_CTRLA_SPEED(0U) | SERCOM_I2CM_CTRLA_SDAHOLD(2U);
@@ -1154,10 +1160,10 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 	// fSCL = fclk / (10 + BAUD + BAUDLOW + fclk * Trise)
 	// Tlow = (BAUDLOW + 5) / fclk, Thigh = (BAUD + 5) / fclk, the rise time
 	// apart: the high time counts from SCL seen high
-	int32_t rise = (int32_t)SamdI2cCeilDiv((uint64_t)fclk * SAMD_I2C_TRISE_NS, 1000000000ULL);
+	int32_t rise = (int32_t)SamdI2cCycles(fclk, SAMD_I2C_TRISE_NS / 5U, 200000000U);
 	int32_t period = (int32_t)((fclk + Rate / 2U) / Rate);
-	int32_t low = (int32_t)SamdI2cCeilDiv((uint64_t)fclk * tlow, 1000000000ULL) - 5;
-	int32_t high = (int32_t)SamdI2cCeilDiv((uint64_t)fclk * thigh, 1000000000ULL) - 5;
+	int32_t low = (int32_t)SamdI2cCycles(fclk, tlow, unitsPerSecond) - 5;
+	int32_t high = (int32_t)SamdI2cCycles(fclk, thigh, unitsPerSecond) - 5;
 	int32_t avail = period - 10 - rise;
 
 	if (low < 1)

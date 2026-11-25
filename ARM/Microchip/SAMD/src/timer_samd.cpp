@@ -567,7 +567,7 @@ static bool SamdTimerPlan(SamdTimerData_t *pData, uint32_t Request, uint32_t *pP
 }
 
 // Counts of a period, rounded, the closest supported value
-static bool SamdTimerPeriod(uint32_t Freq, uint64_t nsPeriod, uint32_t *pTicks, uint64_t *pActual)
+static __attribute__((noinline)) bool SamdTimerPeriod(uint32_t Freq, uint64_t nsPeriod, uint32_t *pTicks, uint64_t *pActual)
 {
 	uint64_t ticks = UINT32_MAX;
 
@@ -1457,13 +1457,9 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	{
 		return false;
 	}
-	if (s_SamdSysTickOwner == pTimer)
+	if (s_SamdSysTickOwner == pTimer && !TimerPowerOff(pTimer))
 	{
-		if (!SysTickTimerPowerOff(pTimer))
-		{
-			return false;
-		}
-		s_SamdSysTickOwner = NULL;
+		return false;
 	}
 
 	d->bCapture = false;

@@ -23,8 +23,8 @@ One flash wait state, the datasheet value at 48 MHz for VDD 2.7 to 3.63 V.
 The 32.768 kHz clock is set right after the main clock is on OSC8M, it
 does not depend on the steps after it. A main clock step that fails, an
 oscillator that does not start for example, leaves the main clock on OSC8M
-at 8 MHz. s_SamdStartupError tells the first stage that failed and
-s_SamdStartupLine the source line, SystemCoreClock the main clock.
+at 8 MHz. SystemCoreClock reports the main clock. With SAMD_CLOCK_DIAGNOSTICS
+enabled, s_SamdStartupError and s_SamdStartupLine identify the first failure.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 28, 2026
@@ -143,6 +143,19 @@ static uint32_t s_LfUsers;
 uint32_t SystemCoreClock = SAMD_OSC8M_FREQ / 8UL;
 uint32_t SystemnsDelayFactor = 1000000UL;
 
+static uint32_t SamdGclkGenFreq(uint32_t Gen);
+static uint32_t SamdSourceFreq(uint32_t Src);
+
+// Enable in the library build to inspect oscillator failures in the debugger.
+#ifndef SAMD_CLOCK_DIAGNOSTICS
+#if defined(DEBUG) || defined(_DEBUG)
+#define SAMD_CLOCK_DIAGNOSTICS 1
+#else
+#define SAMD_CLOCK_DIAGNOSTICS 0
+#endif
+#endif
+
+#if SAMD_CLOCK_DIAGNOSTICS
 // The frequencies of the DFLL48M and the FDPLL96M come from their registers:
 // the C startup clears .bss after SystemInit, a variable set there is lost.
 // The startup stage and line are kept in .data for the same reason.
@@ -166,9 +179,6 @@ __attribute__((section(".data"))) static volatile uint32_t s_SamdStartupLog[SAMD
 #define SAMD_STARTUP_REG_LEN	12U
 __attribute__((section(".data"))) static volatile uint32_t s_SamdStartupReg[SAMD_STARTUP_REG_LEN];
 
-static uint32_t SamdGclkGenFreq(uint32_t Gen);
-static uint32_t SamdSourceFreq(uint32_t Src);
-
 // Failure of a startup step, the caller returns false
 static bool SamdStartupFailed(uint32_t Error, uint32_t Line)
 {
@@ -189,6 +199,15 @@ static bool SamdStartupFailed(uint32_t Error, uint32_t Line)
 
 	return false;
 }
+
+#else
+static inline bool SamdStartupFailed(uint32_t Error, uint32_t Line)
+{
+	(void)Error;
+	(void)Line;
+	return false;
+}
+#endif
 
 static bool SamdGclkSync(void)
 {
@@ -911,8 +930,7 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 	return true;
 }
 
-// Reduce 65536 / 1000000 to 1024 / 15625 before scaling. Splitting
-// the quotient and remainder keeps both products within 32 bits.
+// Refresh both calibrated loop rates when the CPU clock changes.
 void SystemCoreClockUpdate(void)
 {
 	uint32_t freq = SamdGclkGenFreq(SAMD_GCLK_MAIN);
@@ -923,6 +941,7 @@ void SystemCoreClockUpdate(void)
 		13ULL * 1000000ULL, (uint64_t)SAMD_NSDELAY_LOOP_CLK * 1000000ULL);
 }
 
+#if SAMD_CLOCK_DIAGNOSTICS
 // Clock registers at the end of the startup, see s_SamdStartupReg
 static void SamdStartupRegs(void)
 {
@@ -940,6 +959,8 @@ static void SamdStartupRegs(void)
 	s_SamdStartupReg[10] = SYSCTRL_REGS->SYSCTRL_DFLLCTRL;
 	s_SamdStartupReg[11] = ((uint32_t)SYSCTRL_REGS->SYSCTRL_DPLLSTATUS << 8) | SYSCTRL_REGS->SYSCTRL_DPLLCTRLA;
 }
+
+#endif
 
 // FDPLL96M from OSC8M / 8 on generator 2, 1 MHz reference x 96
 static bool SamdDpllFromOsc8m(void)
@@ -1130,12 +1151,14 @@ static bool SamdSystemClockInit(void)
 
 	__disable_irq();
 
+#if SAMD_CLOCK_DIAGNOSTICS
 	s_SamdStartupError = SAMD_STARTUP_OK;
 	s_SamdStartupLine = 0U;
 	for (uint32_t i = 0; i < SAMD_STARTUP_LOG_LEN; i++)
 	{
 		s_SamdStartupLog[i] = 0U;
 	}
+#endif
 
 	result = SamdClockInit();
 	s_CoreSource = result ?
@@ -1146,7 +1169,9 @@ static bool SamdSystemClockInit(void)
 		(void)SamdMainOsc8m();
 	}
 
+#if SAMD_CLOCK_DIAGNOSTICS
 	SamdStartupRegs();
+#endif
 
 	SystemCoreClockUpdate();
 
