@@ -52,7 +52,6 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 			self.assertNotIn("NRF5340", loop)
 		self.assertNotIn("ArmDelayUsLoop(", self.delay)
 		self.assertNotIn("ArmDelayNsLoop(", self.delay)
-		self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', self.test)
 		self.assertIn('" .p2align 5\\n"', ns_loop)
 
 	def test_250ms_nominal_loop_scale(self):

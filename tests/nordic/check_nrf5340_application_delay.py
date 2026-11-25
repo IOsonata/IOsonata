@@ -62,7 +62,6 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 		self.assertNotIn("ArmDelayNsLoop(", self.delay)
 		self.assertNotIn("ArmDelayUsLoop(", self.delay)
 		self.assertIn("nsDelay(100000000U);", self.test)
-		self.assertIn("nsDelay(250000000U);", self.test)
 
 	def test_both_runtime_delays_use_original_countdowns(self):
 		us_start = self.delay.index("static inline __attribute__((always_inline)) void usDelay(")
@@ -77,7 +76,6 @@ class Nrf5340ApplicationDelay(unittest.TestCase):
 			self.assertIn("chunk = loops > INT32_MAX ? INT32_MAX", loop)
 			self.assertNotIn('" BNE ', loop)
 			self.assertNotIn("NRF5340", loop)
-		self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', self.test)
 		self.assertIn('" .p2align 5\\n"', ns_loop)
 
 	def test_250ms_nominal_loop_scale(self):

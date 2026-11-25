@@ -226,14 +226,76 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; optional 160 MHz PLL profile and RTC/LP SRAM retention implemented, hardware validation pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
-## SAM D11/D21 low-power work (0.14, unmerged)
+## SAM D11/D21 power and clock port (0.14)
 
-The consolidated `review_system_power_014` branch contains
-`SystemSleep()` (resume execution after Standby), EIC asynchronous wake
-configuration, and the PM RCAUSE-based `SystemResetReason()` convenience
-function. The shared `CorePowerTest` selects the resumable path for SAMD
-without changing existing reset-on-wake power-off behavior on other MCUs.
-No separate `ResetReasonDemo` is retained in the consolidated branch.
+SAM D is the first port converted to the port rules of
+[system-clock-timer-lifecycle.md](system-clock-timer-lifecycle.md).
+
+### Design, November 25, 2026
+
+- The clock sources are fixed by `g_McuOsc` at startup. There is no run time
+  source selection. The clock code stores the frequencies of generators 0
+  and 1 when it sets them and reads no device or driver state.
+- `SystemHighFreqClockEnable/Disable` and `SystemLowFreqClockEnable/Disable`
+  count the users of a shared clock, so that one user's disable does not
+  stop a clock another user needs. The counts refuse nothing.
+- `SystemPeriphClockGet(0)` is the main generator and `(1)` the 32 kHz
+  generator. `SystemPeriphClockSet` returns the current frequency: the
+  dividers are not changed at run time.
+- `SystemPowerModeSet` changes the CPU and bus dividers. The caller handles
+  the device timing that depends on them, a SysTick on the CPU clock
+  included.
+- `SystemSleep` enters Standby and returns after an interrupt. It calls no
+  device driver. The drivers have no sleep, pause or resume functions.
+- A wake source is a device interrupt. A pin interrupt enabled with
+  `IOPinEnableInterrupt` or `IOPinAllocateInterrupt` wakes the MCU: the EIC
+  requests the low frequency clock with its first pin interrupt or event
+  and releases it with the last one, and that clock runs in Standby. Pin
+  edges are sampled at 32 kHz, the timer external trigger through an EIC
+  event included. On D11, PA14 is the NMI input; its pin interrupt uses the
+  NMI, whose handler sets the EIC interrupt pending.
+- `SystemHighFreqClockCalibrate` and `SystemLowFreqClockCalibrate` return
+  false: the port has no run time RC calibration.
+- `SystemResetReason` reads PM RCAUSE. `SystemPowerOff` is not supported.
+
+Sizes at -Os with Arm GNU 14.2.1, code and initialized data: the clock file
+2,418 bytes, the sleep file 60, the pin driver 1,861 on D11 and 1,866 on D21.
+Linked with the managed project options, D11 `CorePowerTest` uses 15,776 of
+16,384 flash bytes and D11 `CoreClockTest` 14,396.
+
+### Hardware, November 25, 2026
+
+SAM D11 Xplained Pro: `CorePowerTest` passed 30 checks with no failure,
+three Standby wakes from the RTC and three from SW0 (PA14), with the CPU and
+peripheral clocks, the UART rate and the RAM samples checked after every
+wake. `CoreClockTest` passed with no failure, with and without the delay
+calibration; the measured delay loop cost agreed at 48 MHz and 24 MHz within
+0.04 percent.
+
+Not run on hardware: the D21 EIC edge wake, Standby current with the EIC on
+the low frequency clock, and the timer external trigger at the 32 kHz
+sampling.
+
+### Timer
+
+Timer Enable refuses a source frequency different from its cached BaseFreq.
+After the source frequency changed, call Frequency to select a rate using the
+new source. This existing operation resets the counter, recalculates active trigger
+periods and starts it. A missing source or failed reconfiguration returns zero.
+A stop, setup, reset or start failure invalidates the cached source frequency,
+so Enable refuses partial configuration even when the source is unchanged.
+A successful Frequency retry restores the cached value. This does not claim
+that hardware stopped when a stop synchronization failed. The final RTC read
+synchronization after start or stop is also checked: failure suppresses timer
+interrupt dispatch, invalidates the saved frequency and requires reconfiguration.
+The period calculation uses an aligned local value before assigning the packed
+64-bit trigger field. An unchanged source allows normal Disable/Enable resume.
+
+### Earlier hardware results
+
+These runs predate the November 25 change. They used the earlier code, with
+run time clock selection and level sense wake, both since removed. They are
+kept as a record of the reset cause, Standby, RAM and delay results.
 
 Maintainer-reported reset-cause tests passed 128/128 combinations for
 each MCU, and Arm GNU source compilation passed for D11/D21 including
@@ -270,102 +332,6 @@ measured 250093 us and nsDelay 250107 us; post-wake measurements were
 250103-250104 us and 250114-250115 us respectively. Every sample had 25
 interrupts. CPU/APB clocks, LF descriptors and APB restoration passed, with
 zero failures. UART interrupt/DMA receive modes were not exercised.
-
-SAMD runtime clock selection returns the clock setup result. A failed
-core-clock change attempts the same OSC8M fallback used at startup, updates
-`SystemCoreClock` from the registers and returns false. Low-frequency
-selection returns false when oscillator startup or generator synchronization
-fails. Repeating the same request executes setup again, so a saved oscillator
-descriptor cannot hide a previous failure. The descriptors retain the requested
-configuration; a failed operation does not promise to restore the previous
-clock tree. Frequency queries return zero for an oscillator that is not ready,
-a disabled or unlocked DPLL, an unlocked closed-loop DFLL, or a failed GCLK
-register read. USB recovery retains its nominal frequency before USB lock.
-OSC8M does not require OSC8MRDY when already enabled, preserving the D11
-startup behavior observed on hardware. Channel and generator reads share the
-same bounded synchronization sequence.
-
-Disabling the last EIC user releases its generic-clock channel after successful
-synchronization. Interrupt, event, wake, NMI and sense users are checked before
-stopping the shared controller. SW0 NMI wake polarity can be changed after
-initial configuration. Failed wake/event reconfiguration retains ownership
-until the line configuration succeeds, allowing a retry. Standby entry
-continues to preserve the existing NMI/IRQ pending-state handling.
-
-The caller must stop and release affected clock consumers before either
-selector, including a repeated request. Under the interrupt mask, both selectors
-now refuse enabled watchdog, RTC, EIC, USB or CRC operation, armed or active
-DMA channels, pending DMA completions, allocated
-peripheral generic-clock channels, and enabled clock outputs. A gated register
-interface or a generic-clock synchronization timeout also causes refusal.
-Watchdog state is only read; clock selection never enables or disables it.
-
-Core selection rebuilds the clock tree, including the low-frequency generator,
-and refuses enabled application generators beyond the three system generators.
-Low-frequency selection refuses a running DFLL, a DPLL using XOSC32K or
-generator 1, and other generators using OSC32K, XOSC32K or generator 1. A DPLL
-using XOSC or generator 2 on OSC8M can continue. These checks are conservative:
-USB-recovery DFLL operation and peripheral channels on unrelated sources also
-block low-frequency changes. The GCLK inspection writes only register selector
-IDs, without changing channel or generator configuration.
-
-Stopped RTC, TC and TCC timers may retain their generic-clock connections
-across selection. Every counter sharing the channel must have ENABLE and
-SWRST clear and no synchronization pending. TC/TCC register bus gates are
-opened temporarily for inspection and restored before returning; counter
-configuration, pending flags and generic-clock connections are preserved.
-A running shared-clock peer blocks selection even if its register bus was gated.
-
-Timer Enable refuses a source frequency different from its cached BaseFreq.
-After a successful clock change, call Frequency to select a rate using the new
-source. This existing operation resets the counter, recalculates active trigger
-periods and starts it. A missing source or failed reconfiguration returns zero.
-A stop, setup, reset or start failure invalidates the cached source frequency,
-so Enable refuses partial configuration even when the source is unchanged.
-A successful Frequency retry restores the cached value. This does not claim
-that hardware stopped when a stop synchronization failed; clock selection still
-checks the counter registers before allowing a change. The final RTC read
-synchronization after start or stop is also checked: failure suppresses timer
-interrupt dispatch, invalidates the saved frequency and requires reconfiguration.
-The period calculation uses an aligned local value before assigning the packed
-64-bit trigger field. An unchanged source allows normal Disable/Enable resume.
-
-DMA initialization leaves the controller enabled, but that
-alone no longer blocks selection: every channel must be disabled, with no busy
-or pending transfer, active arbitration level, completion awaiting its ISR, or
-reset in progress. The inspection preserves CHID, descriptors and interrupt
-flags. An idle DMA allocation can be reused after clock selection once its
-peripheral is reconfigured. SysTick and scheduler
-retiming remain the application's responsibility; reading SysTick CTRL here
-would clear COUNTFLAG. The refusal checks do not retime peripheral drivers.
-
-Validation with Arm GNU 15.2.1:
-
-- Complete managed library source sets compile in Debug and Release:
-  239/239 sources for D11 and 317/317 for D21.
-- CorePowerTest, UartPrbsTxTest and UartLoopback link for both targets and
-  configurations. D21 TimerDemo and every D11 timer-family/runtime selection
-  link, including the native and LTO checks.
-- D11 LCDConsoleDisplayDemo fits all four SPI modes in Debug and Release:
-  polling 14,968 flash bytes, interrupt-only 15,520, DMA-only 15,932, and
-  DMA plus interrupts 16,380 (four bytes free). Equivalent 32-bit clock
-  arithmetic saves 564 bytes and removes the unused 64-bit division routine.
-  The DMA images still omit register-driven SPI transfers and unused UART.
-- ClockDisplayDemo uses 16,308 bytes of flash and 2,892 bytes of static RAM,
-  leaving 76 bytes of flash free. Its unused timer and transport checks pass.
-- Core and low-frequency selector calls link against both target libraries.
-- Existing UART, SPI, reset-reason, timer and Standby checks pass. The timer
-  model includes failed final RTC synchronization after both start and stop.
-- Temporary D11/D21 register checks at O0 and O2 cover clock readiness,
-  failed GCLK reads, shared timer peers, all DMA channels, EIC last-user
-  release, failed release/retry and SW0 polarity changes. Peripheral registers
-  and synchronization are modeled; these are not hardware measurements.
-
-D11 clock re-selection, repeated SW0 wake, delay scaling, timer interrupts
-and polling UART operation passed as recorded above. Oscillator failure
-recovery, D21 wake, full SRAM continuity and sleep-current measurements remain
-pending. The D11 runs do not establish arbitrary CPU/APB rate changes or
-peripheral clock-ownership behavior under concurrent transfers.
 
 ## STM32WBA power port (0.14)
 
