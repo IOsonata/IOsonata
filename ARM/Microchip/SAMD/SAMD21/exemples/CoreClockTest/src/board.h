@@ -63,6 +63,8 @@ SOFTWARE.
 // CoreClockTest has no wake-pin profile; CorePowerTest tests SW0/standby.
 
 // LF selection omitted because a running DFLL/DPLL may own its reference.
+// Keep the 100 ms calibration sample within one 16-bit TC period.
+#define CORE_CLOCK_TEST_HF_TIMER_FREQ 250000U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif // __BOARD_H__
