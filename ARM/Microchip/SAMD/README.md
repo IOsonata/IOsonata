@@ -66,7 +66,14 @@ On D11, PA14 has no EXTINT line; its pin interrupt uses the NMI. PRIMASK
 does not hold an NMI, so the NMI handler only acknowledges it and sets the
 EIC interrupt pending. The pin handler runs from the EIC interrupt, and a
 pending EIC interrupt wakes a WFI entered with interrupts disabled. D21 uses
-its ordinary masked EIC interrupt. This needs a hardware run on both boards.
+its ordinary masked EIC interrupt.
+
+Hardware, SAM D11 Xplained Pro, 2026-11-25: `CorePowerTest` passed 30 checks
+with no failure, three Standby wakes from the RTC and three from SW0 (PA14,
+the NMI path), with the CPU and peripheral clocks, the UART rate and the RAM
+samples checked after every wake. `CoreClockTest` passed with no failure,
+with and without the delay calibration. The EIC edge wake of the D21 has not
+been run on hardware.
 The sleep instruction remains WFI as specified in the
 [SAMD11 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-42363-SAM-D11_Datasheet.pdf),
 section 15.6.2.8.2.
