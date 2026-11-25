@@ -55,6 +55,7 @@ SOFTWARE.
 #define WAKE_BUT_PORT		0
 #define WAKE_BUT_PIN		23
 #define WAKE_BUT_PINOP		0
+#define WAKE_BUT_SYSTEM_OFF	1
 #else
 // nRF5340 Audio DK (PCA10121), VCOM and PLAY/PAUSE button.
 #define UART_RX_PORT		1
@@ -66,6 +67,7 @@ SOFTWARE.
 #define WAKE_BUT_PORT		0
 #define WAKE_BUT_PIN		4
 #define WAKE_BUT_PINOP		0
+#define WAKE_BUT_SYSTEM_OFF	1
 #endif
 
 // Test two sections in RAM1. Normal data and stack are in RAM;

@@ -60,10 +60,7 @@ SOFTWARE.
 #define UART_DMA_MODE		false
 #define UART_INT_PRIO		2
 
-// Asynchronous level-detection wake from SAM D Standby.
-// SW0 is PA15 (EXTINT15), active low. No external switch is required.
-#define POWER_DEMO_RESUME_WAKE 1
-#define POWER_DEMO_STANDBY_RAM_TEST 1
+// SW0 is PA15 (EXTINT15). Its falling edge wakes the MCU from Standby.
 #define WAKE_BUT_PORT IOPORTA
 #define WAKE_BUT_PIN 15
 #define WAKE_BUT_PINOP IOPINOP_GPIO

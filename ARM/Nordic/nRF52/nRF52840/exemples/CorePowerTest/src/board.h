@@ -59,5 +59,6 @@ SOFTWARE.
 #define WAKE_BUT_PORT		0
 #define WAKE_BUT_PIN		11
 #define WAKE_BUT_PINOP		0
+#define WAKE_BUT_SYSTEM_OFF	1
 
 #endif

@@ -65,6 +65,7 @@ SOFTWARE.
 #define WAKE_BUT_PORT		1
 #define WAKE_BUT_PIN		8
 #define WAKE_BUT_PINOP		0
+#define WAKE_BUT_SYSTEM_OFF	1
 
 // RAM1 is unused by this example's linker script (normal data/stack use RAM).
 #define POWER_DEMO_RAM_RET_TEST	1
@@ -87,6 +88,7 @@ SOFTWARE.
 #define WAKE_BUT_PORT		1
 #define WAKE_BUT_PIN		9
 #define WAKE_BUT_PINOP		0
+#define WAKE_BUT_SYSTEM_OFF	1
 
 #else
 #error "Unsupported nRF54L15 CorePowerTest board"

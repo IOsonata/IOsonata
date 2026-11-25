@@ -64,6 +64,7 @@ SOFTWARE.
 // Wake up button, to ground
 #define WAKE_BUT_PORT		0
 #define WAKE_BUT_PINOP		0
+#define WAKE_BUT_SYSTEM_OFF	1
 
 // One VMC RAM section, excluded from startup initialization.
 #define POWER_DEMO_RAM_RET_TEST	1

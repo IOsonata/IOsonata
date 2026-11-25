@@ -51,10 +51,11 @@ frequency clock: the pin driver requests it when the first pin interrupt or
 event is enabled and releases it with the last one. That clock keeps running
 in Standby, so the EIC detects the edge there. Pin edges are therefore
 sampled at 32 kHz, awake or asleep: about 0.1 ms from the edge to the
-interrupt with the filter, and a shorter pulse is not seen. The existing generic
-`exemples/misc/core_power_test.cpp` has a board-selected resumable mode,
-with Eclipse managed CorePowerTest projects for D11 and D21. No separate
-reset-only application is required.
+interrupt with the filter, and a shorter pulse is not seen. The shared CorePowerTest runs three RTC wake cycles
+and then three button wake cycles on boards configured for timed wake.
+Press and release the button at each Standby button prompt. The pin interrupt
+callback records the press. Each cycle also checks the clocks, UART rate,
+and static and stack data after wake.
 
 SAMD11 Xplained Pro uses its onboard SW0/PA14, the dedicated EIC NMI input.
 No external wiring is needed. SAMD21 Xplained Pro uses its

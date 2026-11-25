@@ -52,6 +52,7 @@ SOFTWARE.
 #define WAKE_BUT_PORT		1
 #define WAKE_BUT_PIN		26
 #define WAKE_BUT_PINOP		0
+#define WAKE_BUT_SYSTEM_OFF	1
 
 // RAM1 is outside the default .data/.bss/stack allocation.
 // Two independent 32 KB sections exercise retention on and off.

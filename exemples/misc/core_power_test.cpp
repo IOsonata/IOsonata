@@ -7,7 +7,8 @@ For Standby, CORE_POWER_TEST_WAKE_MS selects timed wake (milliseconds) or
 button wake (zero). Boards with a wake pin and no System OFF also test
 button wake after timed Standby.
 
-System OFF is last: the next boot validates reset-on-wake and retention.
+WAKE_BUT_SYSTEM_OFF identifies a board button whose pin driver arms wake
+from System OFF. The next boot checks reset-on-wake and retention.
 The normal CPU-resumable sleep tests run on every boot before System OFF.
 
 MIT License. Copyright (c) 2026, I-SYST inc.
@@ -44,6 +45,10 @@ MIT License. Copyright (c) 2026, I-SYST inc.
 #endif
 #ifndef WAKE_BUT_SENSE
 #define WAKE_BUT_SENSE	IOPINSENSE_LOW_TRANSITION
+#endif
+
+#ifndef WAKE_BUT_SYSTEM_OFF
+#define WAKE_BUT_SYSTEM_OFF 0
 #endif
 
 #ifndef CORE_POWER_TEST_POLLING_CONSOLE
@@ -107,6 +112,10 @@ static const SysLogCfg_t s_LogCfg = {
 #endif
 
 static UARTDev_t s_Uart;
+#if defined(WAKE_BUT_PIN)
+static int s_WakeIntNo = -1;
+static volatile bool s_ButtonWoke;
+#endif
 #if CORE_POWER_TEST_WAKE_MS > 0
 static TimerDev_t s_WakeTimer;
 static volatile bool s_TimerWoke;
@@ -390,17 +399,29 @@ static bool CorePowerTestTimedWake(void)
 #if defined(WAKE_BUT_PIN)
 static bool CorePowerTestButtonWake(void)
 {
-	while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
-		(WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 1 : 0))
+	uint32_t state;
+
+	do
 	{
-		msDelay(1);
-	}
-	PowerTestText("Entering Standby; press and hold wake button\r\n");
-	msDelay(100);
-	SystemSleep();
-	CorePowerTestResult("Standby button wake",
-		IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
-		(WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 1 : 0));
+		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
+			(WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 1 : 0))
+		{
+			msDelay(1);
+		}
+		s_ButtonWoke = false;
+		PowerTestText("Entering Standby; press wake button\r\n");
+		msDelay(100);
+		state = DisableInterrupt();
+		if (!s_ButtonWoke)
+		{
+			SystemSleep();
+			EnableInterrupt(state);
+			break;
+		}
+		// A press during the prompt already ran the handler. Arm another trial.
+		EnableInterrupt(state);
+	} while (true);
+	CorePowerTestResult("Standby button wake", s_ButtonWoke);
 	return true;
 }
 #endif
@@ -497,13 +518,12 @@ static void CorePowerTestSleep(uint32_t Caps, bool Button = (CORE_POWER_TEST_WAK
 #define CORE_POWER_TEST_WAKE_INT_PRIO	6
 #endif
 
-static int s_WakeIntNo = -1;
-
-// The interrupt only has to wake the MCU.
+// Record the edge even if the button is released before the test resumes.
 static void CorePowerTestWakeHandler(int IntNo, void *pCtx)
 {
 	(void)IntNo;
 	(void)pCtx;
+	s_ButtonWoke = true;
 }
 #endif
 
@@ -530,9 +550,6 @@ static bool CorePowerTestWakePin(uint32_t Caps)
 	{
 		return false;
 	}
-	CorePowerTestResult("Wake pin invalid index",
-		IOPinAllocateInterrupt(CORE_POWER_TEST_WAKE_INT_PRIO, WAKE_BUT_PORT,
-		-1, WAKE_BUT_SENSE, CorePowerTestWakeHandler, nullptr) < 0);
 	IOPinDisableInterrupt(s_WakeIntNo);
 	s_WakeIntNo = IOPinAllocateInterrupt(CORE_POWER_TEST_WAKE_INT_PRIO,
 		WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE, CorePowerTestWakeHandler,
@@ -641,7 +658,7 @@ int main(void)
 	{
 		CorePowerTestUnsupported("System OFF");
 	}
-	else if (pinWake)
+	else if (pinWake && WAKE_BUT_SYSTEM_OFF)
 	{
 		if (retCount > 1)
 		{
@@ -664,8 +681,15 @@ int main(void)
 	}
 	else
 	{
-		CorePowerTestUnsupported("System OFF: no validated wake source");
+		CorePowerTestUnsupported("System OFF: no board button configured for wake");
 	}
+
+#if defined(WAKE_BUT_PIN)
+	if (pinWake)
+	{
+		IOPinDisableInterrupt(s_WakeIntNo);
+	}
+#endif
 
 	while (1)
 	{
