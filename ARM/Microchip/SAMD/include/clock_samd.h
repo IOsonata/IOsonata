@@ -66,9 +66,6 @@ extern "C" {
  * GCLK requires before a change of generator. CLKEN is written and not read
  * back, as in ASF and Harmony: the peripheral shows whether its clock runs.
  *
- * The channel is counted as a user of the main clock on generator 0 and of
- * the 32 kHz clock on generator 1 until SamdGclkChannelDisable.
- *
  * @param	Channel   : Channel ID of the device header
  * @param	Generator : Generator number
  *

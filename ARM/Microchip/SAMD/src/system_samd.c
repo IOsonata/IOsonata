@@ -365,14 +365,17 @@ bool SamdLowFreqClockStandbyEnable(void)
 	return ready;
 }
 
-// Channel on a generator, no clock user counted: the startup uses it for the
-// DFLL48M and FDPLL96M references
-static bool SamdGclkChannelSet(uint8_t Channel, uint8_t Generator)
+bool SamdGclkChannelEnable(uint8_t Channel, uint8_t Generator)
 {
 	uint32_t want = GCLK_CLKCTRL_ID(Channel) | GCLK_CLKCTRL_GEN(Generator) | GCLK_CLKCTRL_CLKEN_Msk;
 	uint32_t state;
 	uint16_t ctrl;
 	bool res = true;
+
+	if (Channel > (GCLK_CLKCTRL_ID_Msk >> GCLK_CLKCTRL_ID_Pos) || Generator >= GCLK_GEN_NUM)
+	{
+		return false;
+	}
 
 	state = DisableInterrupt();
 
@@ -416,55 +419,6 @@ static bool SamdGclkChannelSet(uint8_t Channel, uint8_t Generator)
 	return res;
 }
 
-// A peripheral with its channel on the main or the 32 kHz generator is a user
-// of that clock. Interrupts disabled.
-static void SamdClockUser(uint32_t Generator, bool bAdd)
-{
-	uint32_t *users = Generator == SAMD_GCLK_MAIN ? &s_HfUsers :
-					  Generator == SAMD_GCLK_LF ? &s_LfUsers : NULL;
-
-	if (users != NULL)
-	{
-		if (bAdd)
-		{
-			(*users)++;
-		}
-		else if (*users != 0U)
-		{
-			(*users)--;
-		}
-	}
-}
-
-bool SamdGclkChannelEnable(uint8_t Channel, uint8_t Generator)
-{
-	uint32_t state;
-	uint16_t ctrl;
-	bool res;
-
-	if (Channel > (GCLK_CLKCTRL_ID_Msk >> GCLK_CLKCTRL_ID_Pos) || Generator >= GCLK_GEN_NUM)
-	{
-		return false;
-	}
-
-	state = DisableInterrupt();
-
-	ctrl = SamdGclkChannelRead(Channel);
-	res = SamdGclkChannelSet(Channel, Generator);
-	if (res)
-	{
-		if ((ctrl & GCLK_CLKCTRL_CLKEN_Msk) != 0U)
-		{
-			SamdClockUser((ctrl & GCLK_CLKCTRL_GEN_Msk) >> GCLK_CLKCTRL_GEN_Pos, false);
-		}
-		SamdClockUser(Generator, true);
-	}
-
-	EnableInterrupt(state);
-
-	return res;
-}
-
 bool SamdGclkChannelDisable(uint8_t Channel)
 {
 	uint32_t state;
@@ -483,10 +437,6 @@ bool SamdGclkChannelDisable(uint8_t Channel)
 	if ((ctrl & GCLK_CLKCTRL_CLKEN_Msk) != 0U)
 	{
 		res = (ctrl & GCLK_CLKCTRL_WRTLOCK_Msk) == 0U && SamdGclkChannelStop(ctrl);
-		if (res)
-		{
-			SamdClockUser((ctrl & GCLK_CLKCTRL_GEN_Msk) >> GCLK_CLKCTRL_GEN_Pos, false);
-		}
 	}
 
 	EnableInterrupt(state);
@@ -1020,7 +970,7 @@ static bool SamdDpllFromOsc8m(void)
 		return SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
 	}
 
-	if (!SamdGclkChannelSet(GCLK_CLKCTRL_ID_FDPLL_Val, SAMD_GCLK_DPLLREF))
+	if (!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_FDPLL_Val, SAMD_GCLK_DPLLREF))
 	{
 		return SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
 	}
@@ -1039,7 +989,7 @@ static bool SamdDfllFromLf(void)
 		return SamdStartupFailed(SAMD_STARTUP_DFLL, __LINE__);
 	}
 
-	if (!SamdGclkChannelSet(GCLK_CLKCTRL_ID_DFLL48_Val, SAMD_GCLK_LF))
+	if (!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_DFLL48_Val, SAMD_GCLK_LF))
 	{
 		return SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
 	}
@@ -1291,7 +1241,9 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		__set_PRIMASK(primask);
 		return true;
 	}
-	if (s_HfUsers || s_LfUsers || s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER)
+	// A peripheral bus clock on means a clock consumer was not stopped
+	if (s_HfUsers || s_LfUsers || s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER ||
+		PM_REGS->PM_APBCMASK != PM_APBCMASK_RESETVALUE)
 	{
 		__set_PRIMASK(primask);
 

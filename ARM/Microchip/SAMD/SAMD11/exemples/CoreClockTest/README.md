@@ -16,12 +16,9 @@ the enabled checks. Timer triggers, concurrent timers, timer power-off and
 delay calibration and accuracy are outside this image.
 
 `SystemPeriphClockSet` returns the generator frequency set at startup; it
-does not change a divider. A peripheral asks for its clock with
-`SamdGclkChannelEnable` and gives it back with `SamdGclkChannelDisable`;
-the channel on generator 0 counts as a user of the main clock, on generator 1
-as a user of the 32 kHz clock. `SystemCoreClockSelect` is refused while
-either clock has a user, `SystemLowFreqClockSelect` while the 32 kHz clock
-has one. The clock code does not read the peripherals.
+does not change a divider. `SystemCoreClockSelect` is refused while a timer
+holds the HF or LF clock or a peripheral bus clock is on in `PM_APBCMASK`;
+`SystemLowFreqClockSelect` is refused while a timer holds the LF clock.
 
 ### Test a timer
 
