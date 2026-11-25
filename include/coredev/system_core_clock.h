@@ -312,8 +312,10 @@ void SystemLowFreqClockDisable(void);
 
 /** @brief Calibrate the configured high-frequency RC clock.
  *
- * Called by a higher-level subsystem when it needs recalibration.
- * This operation does not own a timer or start periodic work.
+ * For periodic calibration of the RC oscillator. One call runs one
+ * calibration. The application or subsystem that needs it handles the
+ * period and calls this function each time. This operation does not own a
+ * timer or start periodic work.
  * Call from thread/foreground context, never a timer interrupt callback.
  *
  * @return true if calibration completed, false when unavailable or failed.
@@ -323,9 +325,9 @@ bool SystemHighFreqClockCalibrate(void);
 /** @brief Calibrate the configured low-frequency RC clock.
  *
  * The LF clock must already be enabled. The implementation preserves its
- * existing users and does not take ownership of their timers. A higher-level
- * subsystem chooses the calibration interval and calls from foreground
- * context, not from an interrupt.
+ * existing users and does not take ownership of their timers. One call runs
+ * one calibration. The application or subsystem that needs it handles the
+ * period and calls from foreground context, not from an interrupt.
  *
  * @return true if calibration completed, false when unavailable or failed.
  */

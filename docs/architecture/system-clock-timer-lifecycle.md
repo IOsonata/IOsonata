@@ -77,6 +77,17 @@ the architecture, not in `system_core_clock.h`. `sDelay` sleeps for a number
 of seconds on a low frequency timer. Each MCU port implements it in its
 timer driver; a port without it does not define it.
 
+### RC oscillator calibration
+
+`SystemHighFreqClockCalibrate()` and `SystemLowFreqClockCalibrate()` are
+for periodic calibration of an RC oscillator. The oscillator and its
+calibration belong to the MCU power and clock code: one call runs one
+calibration and returns its result. The period does not. The application
+or subsystem that needs the accuracy decides when, and calls the function
+each time, from its own timer or event loop in foreground context. The MCU
+code owns no timer for it and schedules nothing. A port whose oscillator
+cannot be calibrated returns false.
+
 ### Low-power operation
 
 Before calling `SystemSleep()`, the application decides which operations
@@ -151,6 +162,8 @@ For the author of an MCU port and of its drivers.
    code defines no wake device function such as a wake pin selection.
 8. A function that only `CoreClockTest` or `CorePowerTest` calls is not a
    reason to keep code in the library.
+9. The calibrate functions run one RC calibration per call. The port does
+   not start a timer or schedule a repeat; the caller handles the period.
 
 `SystemCoreClockSelect()` and `SystemLowFreqClockSelect()` are not services
 for applications or drivers. Some ports still call them from their own
