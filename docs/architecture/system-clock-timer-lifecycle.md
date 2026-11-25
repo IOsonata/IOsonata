@@ -103,7 +103,10 @@ For the author of an MCU port and of its drivers.
    them. Each driver of the port requests the one its device runs from.
 3. The device asks for its clock. The clock code does not read device
    registers, does not search the clock tree for users, and does not ask a
-   driver whether a clock is in use.
+   driver whether a clock is in use. This also applies to
+   `SystemPowerModeSet()`. The port checks the clock hardware limits for
+   the requested mode. The caller handles any device timing affected by
+   the change, including a SysTick driven by the CPU clock.
 4. `Enable` counts a user and starts the oscillator on the first one.
    `Disable` releases one user and stops the oscillator after the last one,
    where the hardware can stop it. Use the count for nothing else.
