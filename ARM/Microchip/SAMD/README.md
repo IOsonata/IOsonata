@@ -151,7 +151,8 @@ yet.
 Generic clock generators: 0 is the main clock (CPU, buses, SERCOM, TC and EIC
 core clocks), 1 is 32.768 kHz from XOSC32K or the calibrated OSC32K (RTC,
 DFLL48M reference), 2 is OSC8M / 8 (FDPLL96M reference without crystal).
-`SystemPeriphClockGet(n)` returns the frequency of generator n. One flash
+`SystemPeriphClockGet(n)` returns the frequency of generator 0 or 1 as the
+clock setup left it, 0 for the other generators. One flash
 wait state is used, the datasheet value at 48 MHz for VDD 2.7 to 3.63 V.
 
 Order: main clock on OSC8M at 8 MHz, the 32.768 kHz clock on generator 1,
