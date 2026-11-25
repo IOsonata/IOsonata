@@ -16,11 +16,10 @@ the enabled checks. Timer triggers, concurrent timers, timer power-off and
 delay calibration and accuracy are outside this image.
 
 `SystemPeriphClockSet` returns the generator frequency set at startup; it
-does not change a divider. `SystemCoreClockSelect` and
-`SystemLowFreqClockSelect` set the clock asked; the caller stops the clock
-consumers first and sets them up again after. The user counts of
-`SystemHighFreqClockEnable` and `SystemLowFreqClockEnable` do not refuse a
-selection.
+does not change a divider. The clock sources are those of `g_McuOsc`, set
+once by `SystemInit`: `SystemCoreClockSelect` and `SystemLowFreqClockSelect`
+return true for the configured source and false for any other, and change
+nothing.
 
 ### Test a timer
 

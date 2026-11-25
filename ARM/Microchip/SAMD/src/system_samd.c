@@ -1216,73 +1216,19 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	return SystemPeriphClockGet(Idx);
 }
 
-// Full clock tree setup again. The caller stops the clock consumers first
-// (USB, DMA, timers, serial interfaces) and sets them up again after.
+// The clock sources are those of g_McuOsc, set once by SystemInit. They are
+// not changed at run time: a request for the configured source succeeds when
+// that source runs, any other request fails.
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-	McuOsc_t requested = g_McuOsc;
-	uint32_t primask;
-	bool result;
-
-	requested.CoreOsc.Type = ClkSrc;
-	requested.CoreOsc.Freq = OscFreq;
-
-	if (__get_IPSR() != 0U || !SamdConfigValid(&requested))
-	{
-		return false;
-	}
-
-	primask = __get_PRIMASK();
-	__disable_irq();
-	if (ClkSrc == GetHighFreqOscType() && OscFreq == GetHighFreqOscFreq() &&
-		s_CoreSource == (SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_MAIN) &
-			GCLK_GENCTRL_SRC_Msk) && SamdGclkGenFreq(SAMD_GCLK_MAIN) != 0U)
-	{
-		__set_PRIMASK(primask);
-		return true;
-	}
-	if (s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER)
-	{
-		__set_PRIMASK(primask);
-
-		return false;
-	}
-
-	g_McuOsc.CoreOsc = requested.CoreOsc;
-	result = SamdSystemClockInit();
-	__set_PRIMASK(primask);
-
-	return result;
+	return ClkSrc == g_McuOsc.CoreOsc.Type && OscFreq == g_McuOsc.CoreOsc.Freq &&
+		   s_CoreSource != UINT32_MAX;
 }
 
-// The low frequency oscillator and generator 1 only. The consumers of
-// generator 1 (RTC, DFLL48M reference) are stopped by the caller first.
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-	uint32_t primask;
-	bool result;
-
-	if (__get_IPSR() != 0U || !SamdLowFreqValid(ClkSrc, OscFreq))
-	{
-		return false;
-	}
-
-	primask = __get_PRIMASK();
-	__disable_irq();
-	if (ClkSrc == GetLowFreqOscType() && OscFreq == GetLowFreqOscFreq() &&
-		(SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_LF) & GCLK_GENCTRL_SRC_Msk) ==
-			(ClkSrc == OSC_TYPE_RC ? GCLK_GENCTRL_SRC_OSC32K : GCLK_GENCTRL_SRC_XOSC32K) &&
-		SamdGclkGenFreq(SAMD_GCLK_LF) != 0U)
-	{
-		__set_PRIMASK(primask);
-		return true;
-	}
-	g_McuOsc.LowPwrOsc.Type = ClkSrc;
-	g_McuOsc.LowPwrOsc.Freq = OscFreq;
-	result = SamdLowFreqInit();
-	__set_PRIMASK(primask);
-
-	return result;
+	return ClkSrc == g_McuOsc.LowPwrOsc.Type && OscFreq == g_McuOsc.LowPwrOsc.Freq &&
+		   SamdGclkGenFreq(SAMD_GCLK_LF) != 0U;
 }
 
 void SystemOscInit(void)
