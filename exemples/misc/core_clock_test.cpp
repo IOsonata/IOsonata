@@ -188,8 +188,9 @@ static void CoreClockTestPrint(const char *pFormat, ...)
 {
 	va_list args;
 	const char *pString;
+	char ch;
 	char block[CORE_CLOCK_TEST_TX_BLOCK_SIZE];
-	char digits[11];
+	char digits[10];
 	unsigned used;
 	unsigned digitCount;
 	unsigned value;
@@ -198,44 +199,34 @@ static void CoreClockTestPrint(const char *pFormat, ...)
 	va_start(args, pFormat);
 	while (*pFormat != 0)
 	{
-		if (*pFormat != '%')
+		ch = *pFormat++;
+		if (ch != '%')
 		{
-			CoreClockTestAppend(block, &used, *pFormat);
-			pFormat++;
+			CoreClockTestAppend(block, &used, ch);
 			continue;
 		}
-		pFormat++;
-		if (*pFormat == 's')
+		// Test messages use only non-null strings and unsigned integers.
+		if (*pFormat++ == 's')
 		{
 			pString = va_arg(args, const char *);
-			if (pString != nullptr)
+			while (*pString != 0)
 			{
-				while (*pString != 0)
-				{
-					CoreClockTestAppend(block, &used, *pString);
-					pString++;
-				}
+				CoreClockTestAppend(block, &used, *pString++);
 			}
 		}
-		else if (*pFormat == 'u')
+		else
 		{
 			value = va_arg(args, unsigned);
-			digitCount = 0U;
+			digitCount = sizeof(digits);
 			do
 			{
-				digits[digitCount] = '0' + value % 10U;
-				digitCount++;
+				digits[--digitCount] = '0' + value % 10U;
 				value /= 10U;
 			} while (value != 0U);
-			while (digitCount != 0U)
+			while (digitCount < sizeof(digits))
 			{
-				digitCount--;
-				CoreClockTestAppend(block, &used, digits[digitCount]);
+				CoreClockTestAppend(block, &used, digits[digitCount++]);
 			}
-		}
-		if (*pFormat != 0)
-		{
-			pFormat++;
 		}
 	}
 	va_end(args);
@@ -317,13 +308,13 @@ static void CoreClockTestSharedClock(bool high)
 	CoreClockTestResult("Shared clock", shared);
 	if (present)
 	{
-		CoreClockTestResult("Timer clock request", running);
+		CoreClockTestResult("Timer request", running);
 	}
 	if (running)
 	{
 		start = TimerGetTickCount(&s_Timer);
 		msDelay(10);
-		CoreClockTestResult("Timer clock after release", TimerGetTickCount(&s_Timer) != start);
+		CoreClockTestResult("Count after release", TimerGetTickCount(&s_Timer) != start);
 		CoreClockTestReleaseTimer();
 	}
 }
@@ -340,31 +331,31 @@ static void CoreClockTestPowerMode(void)
 
 	if (SystemPowerModeSet == nullptr || SystemPowerModeGet == nullptr)
 	{
-		CoreClockTestPrint("CPU low-power mode: UNSUPPORTED\r\n");
+		CoreClockTestPrint("CPU low power: UNSUPPORTED\r\n");
 		return;
 	}
 
 	if (!SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE))
 	{
-		CoreClockTestResult("CPU performance mode", false);
+		CoreClockTestResult("CPU performance", false);
 		return;
 	}
 	fastest = SystemCoreClockGet();
-	CoreClockTestResult("CPU performance mode",
+	CoreClockTestResult("CPU performance",
 		SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
 
 	CoreClockTestFlush();
 	changed = SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER);
 	if (!changed)
 	{
-		CoreClockTestPrint("CPU low-power mode: UNSUPPORTED\r\n");
+		CoreClockTestPrint("CPU low power: UNSUPPORTED\r\n");
 		return;
 	}
 
 	reduced = SystemCoreClockGet();
-	CoreClockTestPrint("CPU %u Hz (performance %u Hz)\r\n",
+	CoreClockTestPrint("CPU %u Hz (max %u)\r\n",
 		(unsigned)reduced, (unsigned)fastest);
-	CoreClockTestResult("CPU low-power mode",
+	CoreClockTestResult("CPU low power",
 		SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER &&
 		reduced != 0U && reduced < fastest);
 
@@ -373,7 +364,7 @@ static void CoreClockTestPowerMode(void)
 	CoreClockTestFlush();
 	restoredOk = SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);
 	restored = SystemCoreClockGet();
-	CoreClockTestResult("CPU performance restored",
+	CoreClockTestResult("CPU restored",
 		restoredOk && SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE &&
 		restored == fastest);
 }
@@ -403,14 +394,14 @@ static void CoreClockTestCalibrationTest(void)
 	if (SystemLowFreqClockEnable == nullptr ||
 		SystemLowFreqClockDisable == nullptr)
 	{
-		CoreClockTestResult("LF RC calibration clock API", false);
+		CoreClockTestResult("LF RC clock API", false);
 		return;
 	}
 	enabled = SystemLowFreqClockEnable();
 
 	if (!enabled)
 	{
-		CoreClockTestResult("LF RC calibration clock enable", false);
+		CoreClockTestResult("LF RC clock enable", false);
 		return;
 	}
 	calibrated = SystemLowFreqClockCalibrate();
@@ -470,7 +461,7 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 
 	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
 	{
-		CoreClockTestPrint("Delay timing: no CPU counter or HF Timer\r\n");
+		CoreClockTestPrint("No delay timebase\r\n");
 		return false;
 	}
 	if (!CoreClockTestInitHighTimer())
@@ -520,7 +511,7 @@ static void CoreClockTestDelayCalibrationRecord(void)
 
 	if (!CoreClockTestDelaySample(&sample))
 	{
-		CoreClockTestResult("Delay calibration measurement", false);
+		CoreClockTestResult("Delay measurement", false);
 	}
 }
 
@@ -553,7 +544,7 @@ static void CoreClockTestComplete(void)
 
 	while (1)
 	{
-		msDelay(1000);
+		__WFI();
 	}
 }
 
@@ -574,7 +565,7 @@ int main(void)
 		return 1;
 	}
 	msDelay(1000);
-	CoreClockTestPrint("CoreClockTest\r\nCPU %u Hz, peripheral 0 %u Hz\r\n",
+	CoreClockTestPrint("CoreClockTest\r\nCPU %u Hz, PCLK0 %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	CoreClockTestFlush();
 	CoreClockTestResult("Startup clock", SystemCoreClockGet() != 0U);
@@ -616,19 +607,19 @@ int main(void)
 				readback = SystemPeriphClockGet(clockIdx);
 				CoreClockTestPrint("Clock %u: %u -> %u Hz\r\n",
 					(unsigned)clockIdx, (unsigned)request, (unsigned)actual);
-				CoreClockTestResult("Peripheral clock", actual != 0U &&
+				CoreClockTestResult("PCLK", actual != 0U &&
 					readback == actual);
 			}
 
 			actual = SystemPeriphClockSet(clockIdx, bus);
-			CoreClockTestResult("Peripheral clock restore",
+			CoreClockTestResult("PCLK restore",
 				actual == bus && SystemPeriphClockGet(clockIdx) == bus);
 		}
 
 	}
 
 	CoreClockTestCalibrationTest();
-	CoreClockTestResult("Peripheral clock invalid index",
+	CoreClockTestResult("Invalid PCLK index",
 		SystemPeriphClockGet(-1) == 0U);
 	CoreClockTestResult("Clock scan limit",
 		SystemPeriphClockGet(32) == 0U);

@@ -1028,7 +1028,7 @@ static bool SamdTimerTickOpen(SamdTimerData_t *pData, int IntPrio)
 // Interrupt of a timer device: overflow event, then the triggers whose
 // deadline is reached, all from one count. The callbacks run with
 // interrupts enabled.
-static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData_t *d, bool bRtc, int NbTrig)
+static void SamdTimerService(SamdTimerData_t *d, bool bRtc, int NbTrig)
 {
 	TimerDev_t *timer = d->pTimer;
 	struct {

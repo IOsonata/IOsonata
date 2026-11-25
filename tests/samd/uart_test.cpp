@@ -172,5 +172,44 @@ int main()
 	assert(!s_Channel);
 	assert(uart.DevIntrf.TxData(&uart.DevIntrf, data, sizeof(data)) == 0);
 	assert(s_Opens == s_Closes && s_Starts == 2);
+	IOPinCfg_t txPins[] = {{0, -1}, {0, 0}};
+	cfg.pIOPinMap = txPins;
+	for (int mode : {0, 1, 2, 3})
+	{
+		cfg.bIntMode = (mode & 1) != 0;
+		cfg.bDMAMode = (mode & 2) != 0;
+		assert(UARTInit(&uart, &cfg));
+		assert(uart.hRxFifo == nullptr && s_SamdUartDev[2].NbIOPins == 1);
+		assert((reg.SERCOM_CTRLB & SERCOM_USART_INT_CTRLB_RXEN_Msk) == 0);
+		assert(reg.SERCOM_CTRLB & SERCOM_USART_INT_CTRLB_TXEN_Msk);
+		reg.SERCOM_INTFLAG = 0;
+		assert(uart.DevIntrf.TxData(&uart.DevIntrf, data, sizeof(data)) == 4);
+		reg.SERCOM_INTFLAG = SERCOM_USART_INT_INTFLAG_DRE_Msk;
+		if (cfg.bDMAMode)
+		{
+			s_Busy = false;
+			if (cfg.bIntMode)
+			{
+				s_DmaHandler(0, DMAC_CHINTFLAG_TCMPL_Msk, s_DmaCtx);
+			}
+		}
+		else if (cfg.bIntMode)
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				s_Handler(2, &uart.DevIntrf);
+			}
+		}
+		assert(uart.DevIntrf.RxData(&uart.DevIntrf, received, 1) == 0);
+		assert(CFifoUsed(uart.hTxFifo) == 0);
+		uart.DevIntrf.Disable(&uart.DevIntrf);
+		uart.DevIntrf.Enable(&uart.DevIntrf);
+		assert((reg.SERCOM_CTRLB & SERCOM_USART_INT_CTRLB_RXEN_Msk) == 0);
+		uart.DevIntrf.PowerOff(&uart.DevIntrf);
+	}
+	cfg.pIOPinMap = s_Pins;
+	assert(UARTInit(&uart, &cfg));
+	assert(uart.hRxFifo && (reg.SERCOM_CTRLB & SERCOM_USART_INT_CTRLB_RXEN_Msk));
+	uart.DevIntrf.PowerOff(&uart.DevIntrf);
 	puts("SAMD UART DMA/poll selection, FIFO transfers and lifecycle: PASS");
 }

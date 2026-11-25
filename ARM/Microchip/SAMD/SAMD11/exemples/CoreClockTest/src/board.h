@@ -40,11 +40,10 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
-// EDBG virtual COM port on SERCOM2, function D: RX PA11 pad 3, TX PA10 pad 2.
-// Configure RX before TX in the pin map.
+// Transmit test results to EDBG on SERCOM2, PA10 function D, pad 2.
 #define UART_DEVNO			2
 #define UART_RX_PORT		IOPORTA
-#define UART_RX_PIN			11
+#define UART_RX_PIN			-1
 #define UART_RX_PINOP		IOPINOP_PERIPHD
 #define UART_TX_PORT		IOPORTA
 #define UART_TX_PIN			10
