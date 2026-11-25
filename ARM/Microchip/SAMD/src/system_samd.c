@@ -143,34 +143,6 @@ static uint32_t s_LfUsers;
 uint32_t SystemCoreClock = SAMD_OSC8M_FREQ / 8UL;
 uint32_t SystemnsDelayFactor = 1000000UL;
 
-// TC and TCC counters on each generic clock channel, in device order
-typedef struct {
-	void *pReg;
-	uint8_t Channel;
-	uint8_t ApbcBit;
-	bool bTcc;
-} SamdCounterClock_t;
-
-#define SAMD_TC_CLOCK(n, Chan)	{ TC##n##_REGS, Chan, PM_APBCMASK_TC##n##_Pos, false }
-#define SAMD_TCC_CLOCK(n, Chan)	{ TCC##n##_REGS, Chan, PM_APBCMASK_TCC##n##_Pos, true }
-
-static const SamdCounterClock_t s_SamdCounterClock[] = {
-#if defined(__SAMD11D14AM__)
-	SAMD_TC_CLOCK(1, GCLK_CLKCTRL_ID_TC1_TC2_Val),
-	SAMD_TC_CLOCK(2, GCLK_CLKCTRL_ID_TC1_TC2_Val),
-	SAMD_TCC_CLOCK(0, GCLK_CLKCTRL_ID_TCC0_Val),
-#else
-	SAMD_TCC_CLOCK(0, GCLK_CLKCTRL_ID_TCC0_TCC1_Val),
-	SAMD_TCC_CLOCK(1, GCLK_CLKCTRL_ID_TCC0_TCC1_Val),
-	SAMD_TCC_CLOCK(2, GCLK_CLKCTRL_ID_TCC2_TC3_Val),
-	SAMD_TC_CLOCK(3, GCLK_CLKCTRL_ID_TCC2_TC3_Val),
-	SAMD_TC_CLOCK(4, GCLK_CLKCTRL_ID_TC4_TC5_Val),
-	SAMD_TC_CLOCK(5, GCLK_CLKCTRL_ID_TC4_TC5_Val),
-	SAMD_TC_CLOCK(6, GCLK_CLKCTRL_ID_TC6_TC7_Val),
-	SAMD_TC_CLOCK(7, GCLK_CLKCTRL_ID_TC6_TC7_Val),
-#endif
-};
-
 static uint32_t SamdGclkGenFreq(uint32_t Gen);
 static uint32_t SamdSourceFreq(uint32_t Src);
 
@@ -1235,190 +1207,6 @@ uint32_t SystemPeriphClockGet(int Idx)
 	return SamdGclkGenFreq((uint32_t)Idx);
 }
 
-// DMAC register clock accessible, interrupts disabled. An initialized but
-// idle controller does not own a clock rate. Preserve the channel selector.
-static bool SamdDmaClockBusy(void)
-{
-	uint8_t selected = DMAC_REGS->DMAC_CHID;
-	bool busy = false;
-
-	if ((DMAC_REGS->DMAC_CTRL & (DMAC_CTRL_CRCENABLE_Msk | DMAC_CTRL_SWRST_Msk)) != 0U)
-	{
-		return true;
-	}
-
-	for (uint32_t i = 0; i < DMAC_CH_NUM; i++)
-	{
-		DMAC_REGS->DMAC_CHID = (uint8_t)i;
-		if ((DMAC_REGS->DMAC_CHCTRLA & (DMAC_CHCTRLA_ENABLE_Msk | DMAC_CHCTRLA_SWRST_Msk)) != 0U)
-		{
-			busy = true;
-			break;
-		}
-	}
-	DMAC_REGS->DMAC_CHID = selected;
-
-	// Include a final beat, queued request and a completion awaiting its ISR.
-	return busy || DMAC_REGS->DMAC_BUSYCH != 0U || DMAC_REGS->DMAC_PENDCH != 0U ||
-		   DMAC_REGS->DMAC_INTSTATUS != 0U ||
-		   (DMAC_REGS->DMAC_ACTIVE & (DMAC_ACTIVE_ABUSY_Msk | DMAC_ACTIVE_LVLEX_Msk)) != 0U;
-}
-
-// Temporarily open the register interface to inspect a shared-clock peer.
-// This does not enable its counter or change its generic clock connection.
-static bool SamdCounterClockBusy(const SamdCounterClock_t *pCounter)
-{
-	uint32_t saved = PM_REGS->PM_APBCMASK;
-	bool busy;
-
-	PM_REGS->PM_APBCMASK = saved | (1UL << pCounter->ApbcBit);
-	if (pCounter->bTcc)
-	{
-		tcc_registers_t *tcc = (tcc_registers_t *)pCounter->pReg;
-
-		busy = (tcc->TCC_CTRLA & (TCC_CTRLA_ENABLE_Msk | TCC_CTRLA_SWRST_Msk)) != 0U ||
-			   tcc->TCC_SYNCBUSY != 0U;
-	}
-	else
-	{
-		tc_registers_t *tc = (tc_registers_t *)pCounter->pReg;
-
-		busy = (tc->COUNT16.TC_CTRLA & (TC_CTRLA_ENABLE_Msk | TC_CTRLA_SWRST_Msk)) != 0U ||
-			   (tc->COUNT16.TC_STATUS & TC_STATUS_SYNCBUSY_Msk) != 0U;
-	}
-	PM_REGS->PM_APBCMASK = saved;
-
-	return busy;
-}
-
-// Every counter sharing the channel must be stopped and synchronized.
-// Other peripheral channels retain the conservative allocated-clock check.
-static bool SamdTimerClockBusy(uint32_t Channel)
-{
-	bool known = false;
-
-	if (Channel == GCLK_CLKCTRL_ID_RTC_Val)
-	{
-		return (RTC_REGS->MODE0.RTC_CTRL & (RTC_MODE0_CTRL_ENABLE_Msk | RTC_MODE0_CTRL_SWRST_Msk)) != 0U ||
-			   (RTC_REGS->MODE0.RTC_STATUS & RTC_STATUS_SYNCBUSY_Msk) != 0U;
-	}
-
-	for (uint32_t i = 0; i < sizeof(s_SamdCounterClock) / sizeof(s_SamdCounterClock[0]); i++)
-	{
-		if (s_SamdCounterClock[i].Channel == Channel)
-		{
-			known = true;
-			if (SamdCounterClockBusy(&s_SamdCounterClock[i]))
-			{
-				return true;
-			}
-		}
-	}
-
-	return !known;
-}
-
-// Runtime changes require stopped timers and released peripheral clocks.
-// Bus masks alone do not show activity: several are enabled at reset.
-// Interrupts are disabled.
-static bool SamdClockBusy(bool LowFreq)
-{
-	uint32_t apba = PM_APBAMASK_SYSCTRL_Msk | PM_APBAMASK_GCLK_Msk |
-					PM_APBAMASK_WDT_Msk | PM_APBAMASK_RTC_Msk | PM_APBAMASK_EIC_Msk;
-	uint32_t apbb = PM_APBBMASK_DMAC_Msk | PM_APBBMASK_USB_Msk;
-
-	// A gated register interface cannot prove that its peripheral is stopped.
-	if ((PM_REGS->PM_APBAMASK & apba) != apba || (PM_REGS->PM_APBBMASK & apbb) != apbb)
-	{
-		return true;
-	}
-
-	if ((WDT_REGS->WDT_CTRL & (WDT_CTRL_ENABLE_Msk | WDT_CTRL_ALWAYSON_Msk)) != 0U ||
-		(RTC_REGS->MODE0.RTC_CTRL & RTC_MODE0_CTRL_ENABLE_Msk) != 0U ||
-		(EIC_REGS->EIC_CTRL & EIC_CTRL_ENABLE_Msk) != 0U ||
-		SamdDmaClockBusy())
-	{
-		return true;
-	}
-
-#if defined(__SAMD11D14AM__)
-	uint8_t usb = USB_REGS->USB_CTRLA;
-#else
-	uint8_t usb = USB_REGS->DEVICE.USB_CTRLA;
-#endif
-	if ((usb & USB_CTRLA_ENABLE_Msk) != 0U || !SamdGclkSync())
-	{
-		return true;
-	}
-
-	// A running DFLL may depend on either low-frequency source. Do not stop
-	// its reference while the CPU or another generator uses its output.
-	if (LowFreq && (SYSCTRL_REGS->SYSCTRL_DFLLCTRL & SYSCTRL_DFLLCTRL_ENABLE_Msk) != 0U)
-	{
-		return true;
-	}
-	if (LowFreq && (SYSCTRL_REGS->SYSCTRL_DPLLCTRLA & SYSCTRL_DPLLCTRLA_ENABLE_Msk) != 0U)
-	{
-		uint32_t ref = SYSCTRL_REGS->SYSCTRL_DPLLCTRLB & SYSCTRL_DPLLCTRLB_REFCLK_Msk;
-		uint32_t channel = SamdGclkRead(&GCLK_REGS->GCLK_CLKCTRL, GCLK_CLKCTRL_ID_FDPLL_Val, true);
-
-		if (channel == UINT32_MAX ||
-			(ref != SYSCTRL_DPLLCTRLB_REFCLK_REF1 && ref != SYSCTRL_DPLLCTRLB_REFCLK_GCLK) ||
-			(ref == SYSCTRL_DPLLCTRLB_REFCLK_GCLK &&
-			 (channel & GCLK_CLKCTRL_GEN_Msk) == GCLK_CLKCTRL_GEN(SAMD_GCLK_LF)))
-		{
-			return true;
-		}
-	}
-
-	for (uint32_t i = 0; i < GCLK_NUM; i++)
-	{
-		uint32_t channel = SamdGclkRead(&GCLK_REGS->GCLK_CLKCTRL, i, true);
-
-		if (channel == UINT32_MAX)
-		{
-			return true;
-		}
-		if (i == GCLK_CLKCTRL_ID_DFLL48_Val || i == GCLK_CLKCTRL_ID_FDPLL_Val ||
-			i == GCLK_CLKCTRL_ID_FDPLL32K_Val)
-		{
-			if (!LowFreq || (channel & GCLK_CLKCTRL_GEN_Msk) != GCLK_CLKCTRL_GEN(SAMD_GCLK_LF))
-			{
-				continue;
-			}
-		}
-		if ((channel & GCLK_CLKCTRL_CLKEN_Msk) != 0U && SamdTimerClockBusy(i))
-		{
-			return true;
-		}
-	}
-
-	for (uint32_t i = 0; i < GCLK_GEN_NUM; i++)
-	{
-		uint32_t gen = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, i);
-		uint32_t src = gen & GCLK_GENCTRL_SRC_Msk;
-
-		if (gen == UINT32_MAX)
-		{
-			return true;
-		}
-		if ((gen & GCLK_GENCTRL_GENEN_Msk) == 0U)
-		{
-			continue;
-		}
-		if ((gen & GCLK_GENCTRL_OE_Msk) != 0U ||
-			(!LowFreq && i > SAMD_GCLK_DPLLREF) ||
-			(LowFreq && i != SAMD_GCLK_LF &&
-			 (src == GCLK_GENCTRL_SRC_OSC32K || src == GCLK_GENCTRL_SRC_XOSC32K ||
-			  src == GCLK_GENCTRL_SRC_GCLKGEN1)))
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
 // The generator dividers are set at startup. The closest frequency is the
 // one there is, as on the other ports.
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
@@ -1453,7 +1241,9 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		__set_PRIMASK(primask);
 		return true;
 	}
-	if (s_HfUsers || s_LfUsers || s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER || SamdClockBusy(false))
+	// A peripheral bus clock on means a clock consumer was not stopped
+	if (s_HfUsers || s_LfUsers || s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER ||
+		PM_REGS->PM_APBCMASK != PM_APBCMASK_RESETVALUE)
 	{
 		__set_PRIMASK(primask);
 
@@ -1489,7 +1279,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		__set_PRIMASK(primask);
 		return true;
 	}
-	if (s_LfUsers || SamdClockBusy(true))
+	if (s_LfUsers)
 	{
 		__set_PRIMASK(primask);
 

@@ -10,10 +10,15 @@
 ## SAMD11D14AM Release
 
 The 16 KiB build exercises shared HF/LF clocks, oscillator selection and
-restoration, peripheral clock dividers, and CPU running modes over the EDBG
+restoration, peripheral clock requests, and CPU running modes over the EDBG
 UART. The board sets `CORE_CLOCK_TEST_TIMERS=0`. The completion count covers
 the enabled checks. Timer triggers, concurrent timers, timer power-off and
 delay calibration and accuracy are outside this image.
+
+`SystemPeriphClockSet` returns the generator frequency set at startup; it
+does not change a divider. `SystemCoreClockSelect` is refused while a timer
+holds the HF or LF clock or a peripheral bus clock is on in `PM_APBCMASK`;
+`SystemLowFreqClockSelect` is refused while a timer holds the LF clock.
 
 ### Test a timer
 
