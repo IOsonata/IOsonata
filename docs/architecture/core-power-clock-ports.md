@@ -6,16 +6,25 @@ State of each port against "Rules for an MCU port" in
 [MCU core power, clock and timer lifecycle](system-clock-timer-lifecycle.md),
 November 25, 2026.
 
-| Port | No run time source selection | Clock code reads no device or driver state | `SystemSleep` leaves the drivers alone |
-| --- | --- | --- | --- |
-| SAM D11, SAM D21 | Yes | Yes | Yes |
-| SAM4L | No | No | No |
-| SAM4E | No | No | Not reviewed |
-| Nordic | No | No | Not reviewed |
-| ST | No | Not reviewed | Not reviewed |
-| NXP | No | Not reviewed | Not reviewed |
-| Renesas | No | Not reviewed | Not reviewed |
-| Espressif | No | Not reviewed | No |
+| Port | No run time source selection | Clock code reads no device or driver state | `SystemSleep` leaves the drivers alone | Wake source set through the device driver |
+| --- | --- | --- | --- | --- |
+| SAM D11, SAM D21 | Yes | Yes | Yes | No |
+| SAM4L | No | No | No | No |
+| SAM4E | No | No | Not reviewed | No |
+| Nordic | No | No | Not reviewed | No |
+| ST | No | Not reviewed | Not reviewed | No |
+| NXP | No | Not reviewed | Not reviewed | No |
+| Renesas | No | Not reviewed | Not reviewed | No |
+| Espressif | No | Not reviewed | No | No |
+
+The last column: every port still defines `SystemWakePin`, which is no
+longer an application function. `CorePowerTest` enables the wake button
+with `IOPinAllocateInterrupt`. Until the pin driver of a port makes its pin
+interrupt wake the MCU, the button wake of `CorePowerTest` is not expected
+to work on that port, and the `SystemWakePin` text in this document and in
+the port documents describes code to be removed. On SAM D, `SystemSleep`
+also still calls the pin driver to rearm the wake lines; that call goes
+with the same change.
 
 Nordic: the clock code refuses a source selection while a request count is
 not zero.
