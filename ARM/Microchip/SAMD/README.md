@@ -113,7 +113,9 @@ libraries define `__PROGRAM_START`, as the other ports: the CMSIS 6 startup
 function of `cmsis_gcc_m.h` does not compile in C++ without the device
 header first. Both libraries include `ARM/src/timer_systick.cpp` with
 `SYSTICK_TIMER_NO_DEFAULT_INIT`: `timer_samd.cpp` owns `TimerInit` and selects
-SysTick through `SysTickTimerInit` for the last device number. The SAM
+SysTick through `SysTickTimerInit` for the last device number. With
+`SYSTICK_TIMER_SHARED_VECTOR`, that initializer installs the timer interrupt
+handler. The startup vector alone does not pull in the SysTick timer driver. The SAM
 D21 library links the UART transport of the HCI host,
 `bt_hci_ctlr_uart.cpp`, not the IPC one of a dual core part, which defines
 `BtHciCtlrH4Open` too. The examples were run on a peripheral model

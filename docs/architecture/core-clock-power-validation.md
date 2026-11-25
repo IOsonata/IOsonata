@@ -28,8 +28,9 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
 ## CoreClockTest coverage
 
 - Startup CPU frequency, CPU reduced-speed mode and performance restoration.
-- Shared HF and LF clock enable and disable. On a port with an LF timer,
-  its counter must advance after the test releases its clock requests.
+- Shared LF and HF clock enable and disable. For each available timer class,
+  use one timer and check that it keeps counting after the test releases its
+  clock requests. Reuse the HF timer for delay calibration when DWT is unavailable.
 - Numbered peripheral clock requests, actual rate, readback, restoration
   and invalid indices.
 - One calibration request for each configured RC oscillator where supported.

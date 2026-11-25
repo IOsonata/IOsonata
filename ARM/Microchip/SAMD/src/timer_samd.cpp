@@ -166,6 +166,7 @@ static const SamdTimerHw_t s_SamdTimerHw[SAMD_TIMER_MAXCNT] = {
 static SamdTimerData_t s_SamdRtcData;
 static SamdTimerData_t *s_SamdTimerData[SAMD_TIMER_MAXCNT];
 static TimerDev_t *s_SamdSysTickOwner;
+static bool (*s_SamdSysTickBusy)(void);
 static bool (*s_SamdReleaseHardware)(TimerDev_t *pTimer, int DevNo);
 
 static bool SamdTimerTickOpen(SamdTimerData_t *pData, int IntPrio);
@@ -1299,6 +1300,7 @@ static bool SamdSysTickPowerOff(TimerDev_t * const pTimer)
 	if (stopped)
 	{
 		s_SamdSysTickOwner = NULL;
+		s_SamdSysTickBusy = NULL;
 	}
 	EnableInterrupt(state);
 	return stopped;
@@ -1356,51 +1358,49 @@ static bool SamdTimerPowerOff(TimerDev_t * const pTimer)
 	return true;
 }
 
-bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+// Keep TimerInit small so LTO can discard the unused initializer at each call.
+static __attribute__((noinline)) bool SamdSysTickInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
-	if (pTimer != NULL && pCfg != NULL && pCfg->DevNo == SAMD_SYSTICK_TIMER_DEVNO)
-	{
-		if (pCfg->bTickInt || pCfg->IntPrio < 0 || SysTickTimerEnabled())
-		{
-			return false;
-		}
-		if (s_SamdReleaseHardware != NULL && !s_SamdReleaseHardware(pTimer, -1))
-		{
-			return false;
-		}
-		if (!SysTickTimerInit(pTimer, pCfg))
-		{
-			return false;
-		}
-		pTimer->DevNo = pCfg->DevNo;
-		pTimer->PowerOff = SamdSysTickPowerOff;
-		s_SamdSysTickOwner = pTimer;
-
-		return true;
-	}
-
-	// Tick interrupt on the RTC only
-	if (pTimer == NULL || pCfg == NULL || pCfg->DevNo < 0 || pCfg->DevNo >= SAMD_TIMER_MAXCNT ||
-		(pCfg->bTickInt && pCfg->DevNo >= SAMD_RTC_TIMER_MAXCNT) || pCfg->IntPrio < 0)
+	if (SysTickTimerEnabled())
 	{
 		return false;
 	}
-
-	if (s_SamdSysTickOwner == pTimer && SysTickTimerEnabled())
+	if (s_SamdReleaseHardware != NULL && !s_SamdReleaseHardware(pTimer, -1))
 	{
 		return false;
 	}
-	SamdTimerData_t *d = SamdTimerStorage(pCfg->DevNo);
+	if (!SysTickTimerInit(pTimer, pCfg))
+	{
+		return false;
+	}
+	pTimer->DevNo = pCfg->DevNo;
+	pTimer->PowerOff = SamdSysTickPowerOff;
+	s_SamdSysTickBusy = SysTickTimerEnabled;
+	s_SamdSysTickOwner = pTimer;
+
+	return true;
+}
+
+static __attribute__((noinline)) bool SamdHardwareTimerInit(TimerDev_t *pTimer,
+	const TimerCfg_t *pCfg, SamdTimerData_t *d, const SamdTimerOps_t *ops,
+	const SamdTimerTickOps_t *tickOps, decltype(pTimer->EnableExtTrigger) enableExt,
+	decltype(pTimer->DisableExtTrigger) disableExt)
+{
+	int DevNo = pCfg->DevNo;
+
+	if (s_SamdSysTickOwner == pTimer && s_SamdSysTickBusy())
+	{
+		return false;
+	}
 
 	if (d->bRunning)
 	{
 		return false;
 	}
-	const SamdTimerHw_t *hw = &s_SamdTimerHw[pCfg->DevNo];
+	const SamdTimerHw_t *hw = &s_SamdTimerHw[DevNo];
 
 	// Constants of the DevNo, the same if the device is bound
-	d->pOps = pCfg->DevNo < SAMD_RTC_TIMER_MAXCNT ? &s_SamdRtcOps :
-			  (pCfg->DevNo < SAMD_RTC_TIMER_MAXCNT + SAMD_TC_TIMER_MAXCNT ? &s_SamdTcOps : &s_SamdTccOps);
+	d->pOps = ops;
 	d->pReg = hw->pReg;
 	d->IrqNo = hw->IrqNo;
 	d->ApbMask = hw->ApbMask;
@@ -1435,7 +1435,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	uint32_t freq;
 
 	s_SamdReleaseHardware = SamdTimerReleaseBinding;
-	if (!SamdTimerReleaseBinding(pTimer, pCfg->DevNo))
+	if (!SamdTimerReleaseBinding(pTimer, DevNo))
 	{
 		return false;
 	}
@@ -1446,7 +1446,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	d->bCapture = false;
 	d->bTick = pCfg->bTickInt;
-	d->pTickOps = pCfg->bTickInt ? &s_SamdTickOps : NULL;
+	d->pTickOps = tickOps;
 
 	if (!SamdTimerPlan(d, pCfg->Freq, &presc, &freq))
 	{
@@ -1462,7 +1462,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	d->bOverflow = false;
 	d->bResetOvf = false;
 
-	pTimer->DevNo = pCfg->DevNo;
+	pTimer->DevNo = DevNo;
 	pTimer->Freq = freq;
 	pTimer->nsPeriod = (1000000000U + freq / 2U) / freq;
 	pTimer->Rollover = 0;
@@ -1478,13 +1478,11 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->FindAvailTrigger = SamdTimerFindAvailTrigger;
 	pTimer->DisableTrigger = SamdTimerDisableTrigger;
 	pTimer->EnableTrigger = SamdTimerEnableTrigger;
-	pTimer->DisableExtTrigger = pCfg->DevNo < SAMD_RTC_TIMER_MAXCNT ?
-		SamdTimerNoExtDisable : SamdTimerDisableExtTrigger;
-	pTimer->EnableExtTrigger = pCfg->DevNo < SAMD_RTC_TIMER_MAXCNT ?
-		SamdTimerNoExtEnable : SamdTimerEnableExtTrigger;
+	pTimer->DisableExtTrigger = disableExt;
+	pTimer->EnableExtTrigger = enableExt;
 
 	d->pTimer = pTimer;
-	s_SamdTimerData[pCfg->DevNo] = d;
+	s_SamdTimerData[DevNo] = d;
 
 	bool res = SamdTimerStart(d, pCfg->IntPrio);
 
@@ -1496,6 +1494,39 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	return res;
 }
+
+// Keep the public symbol for native callers. LTO must inline the device selection
+// at each call site so constant device numbers do not retain other timer drivers.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wattributes"
+__attribute__((always_inline)) bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+{
+	int dev;
+	bool rtc;
+	const SamdTimerOps_t *ops;
+
+	if (pTimer == NULL || pCfg == NULL || pCfg->IntPrio < 0)
+	{
+		return false;
+	}
+	dev = pCfg->DevNo;
+	rtc = dev == 0;
+	if (dev < 0 || dev > SAMD_SYSTICK_TIMER_DEVNO || (!rtc && pCfg->bTickInt))
+	{
+		return false;
+	}
+	if (dev == SAMD_SYSTICK_TIMER_DEVNO)
+	{
+		return SamdSysTickInit(pTimer, pCfg);
+	}
+	ops = rtc ? &s_SamdRtcOps :
+		(dev < SAMD_RTC_TIMER_MAXCNT + SAMD_TC_TIMER_MAXCNT ? &s_SamdTcOps : &s_SamdTccOps);
+	return SamdHardwareTimerInit(pTimer, pCfg, SamdTimerStorage(dev), ops,
+		pCfg->bTickInt ? &s_SamdTickOps : NULL,
+		rtc ? SamdTimerNoExtEnable : SamdTimerEnableExtTrigger,
+		rtc ? SamdTimerNoExtDisable : SamdTimerDisableExtTrigger);
+}
+#pragma GCC diagnostic pop
 
 int TimerGetLowFreqDevCount(void)
 {

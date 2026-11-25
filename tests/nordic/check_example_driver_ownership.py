@@ -77,7 +77,8 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,", section)
 		self.assertIn("CoreClockTestDelayDivisors(pSample);", section)
 		self.assertIn("TimerGetHighFreqDevCount()", section)
-		self.assertIn("TimerGetHighFreqDevNo()", section)
+		self.assertIn("CoreClockTestInitHighTimer()", section)
+		self.assertIn("cfg.DevNo = TimerGetHighFreqDevNo();", source)
 		self.assertLess(section.index("DelayCalibrationMeasure(pSample)"),
 			section.index("TimerGetHighFreqDevCount()"))
 		self.assertIn("TimerGetMicrosecond(&s_Timer)", section)
@@ -88,9 +89,9 @@ class DemoDriverOwnership(unittest.TestCase):
 
 	def test_core_clock_peripheral_clock_interface(self):
 		source = CLOCK.read_text(encoding="utf-8")
-		self.assertIn("unsigned dividerIdx;", source)
-		self.assertIn("for (dividerIdx = 1U; dividerIdx <= 4U;", source)
-		self.assertIn("request = bus / dividerIdx;", source)
+		self.assertIn("unsigned shift;", source)
+		self.assertIn("for (shift = 0U; shift < 3U;", source)
+		self.assertIn("request = bus >> shift;", source)
 		self.assertIn("actual = SystemPeriphClockSet(clockIdx, request);", source)
 		self.assertIn("readback = SystemPeriphClockGet(clockIdx);", source)
 		self.assertIn("clockIdx < 32", source)
@@ -119,15 +120,15 @@ class DemoDriverOwnership(unittest.TestCase):
 
 	def test_core_clock_checks_shared_clock_lifecycle(self):
 		source = CLOCK.read_text(encoding="utf-8")
-		self.assertIn("CoreClockTestSharedClockTest();", source)
+		self.assertIn("CoreClockTestSharedClock(false);", source)
+		self.assertIn("CoreClockTestSharedClock(true);", source)
 		for api in ("SystemHighFreqClockEnable",
 			"SystemHighFreqClockDisable", "SystemLowFreqClockEnable",
 			"SystemLowFreqClockDisable"):
 			self.assertIn("#pragma weak " + api, source)
 		self.assertIn("CoreClockTestRequests(SystemHighFreqClockEnable, SystemHighFreqClockDisable)", source)
 		self.assertIn("CoreClockTestRequests(SystemLowFreqClockEnable, SystemLowFreqClockDisable)", source)
-		self.assertIn('CoreClockTestResult("HF shared clock lifecycle",', source)
-		self.assertIn('CoreClockTestResult("LF shared clock lifecycle",', source)
+		self.assertIn('CoreClockTestResult("Shared clock", shared);', source)
 
 	def test_core_clock_calibration_api(self):
 		source = CLOCK.read_text(encoding="utf-8")

@@ -58,10 +58,8 @@ SOFTWARE.
 #ifndef CORE_CLOCK_TEST_DELAY_CALIBRATION
 #define CORE_CLOCK_TEST_DELAY_CALIBRATION 0
 #endif
-#if CORE_CLOCK_TEST_DELAY_CALIBRATION
-#include "timer_samd.h"
-#define CORE_CLOCK_TEST_DELAY_TIMER_DEVNO SAMD_SYSTICK_TIMER_DEVNO
-#endif
+// Keep the 100 ms calibration sample within one 16-bit TC1 period.
+#define CORE_CLOCK_TEST_HF_TIMER_FREQ 250000U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif // __BOARD_H__

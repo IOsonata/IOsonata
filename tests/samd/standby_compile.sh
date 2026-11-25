@@ -66,7 +66,7 @@ do
 		-c "$ROOT/ARM/Microchip/SAMD/src/timer_samd.cpp" \
 		-o "$OUT/$DEVICE-timer.o"
 	"$GXX" $COMMON -std=gnu++23 -Wno-missing-field-initializers \
-		-fno-exceptions -fno-rtti -D"$PART" -DSYSTICK_TIMER_NO_DEFAULT_INIT \
+		-fno-exceptions -fno-rtti -D"$PART" -DSYSTICK_TIMER_NO_DEFAULT_INIT -DSYSTICK_TIMER_SHARED_VECTOR \
 		$CMSIS $INC -I"$PARTDIR/include" \
 		-c "$ROOT/ARM/src/timer_systick.cpp" \
 		-o "$OUT/$DEVICE-systick.o"

@@ -6,8 +6,8 @@
 Uses the generic clock, UART and Timer interfaces. Oscillator selections
 come from the System Core configuration, not from board-specific test lists.
 Both build configurations log to UART without a debugger.
-A running LF timer checks that releasing a clock request preserves another
-user. Delay calibration uses an HF timer at the supported CPU speeds.
+One LF timer and one HF timer check counting after clock requests are
+released. Delay calibration can reuse the HF timer at each CPU speed.
 
 @license
 
@@ -150,7 +150,10 @@ static void CoreClockTestWrite(const char *pText, unsigned Length)
 	while (offset < Length)
 	{
 		// Completion belongs to the last accepted byte, not a prior DMA.
-		s_UartTxEmpty = false;
+		if (CORE_CLOCK_TEST_UART_INT && CORE_CLOCK_TEST_UART_DMA)
+		{
+			s_UartTxEmpty = false;
+		}
 		accepted = UARTTx(&s_Uart, (uint8_t *)(pText + offset),
 			(int)(Length - offset));
 		if (accepted > 0)
@@ -285,27 +288,42 @@ static bool CoreClockTestRequests(bool (*Enable)(void), void (*Disable)(void))
 	return second && restarted;
 }
 
-static void CoreClockTestSharedClockTest(void)
+static bool CoreClockTestInitHighTimer(void)
 {
-	bool timerRunning = false;
-	uint64_t start;
+	TimerCfg_t cfg = s_TimerCfg;
 
-	CoreClockTestResult("HF shared clock lifecycle",
-		CoreClockTestRequests(SystemHighFreqClockEnable, SystemHighFreqClockDisable));
-	if (TimerGetLowFreqDevCount() > 0)
+	cfg.DevNo = TimerGetHighFreqDevNo();
+#ifdef CORE_CLOCK_TEST_HF_TIMER_FREQ
+	cfg.Freq = CORE_CLOCK_TEST_HF_TIMER_FREQ;
+#endif
+	return TimerInit(&s_Timer, &cfg);
+}
+
+static void CoreClockTestSharedClock(bool high)
+{
+	uint64_t start;
+	bool present;
+	bool running;
+	bool shared;
+	const char *name;
+
+	name = high ? "HF" : "LF";
+	present = high ? TimerGetHighFreqDevCount() > 0 : TimerGetLowFreqDevCount() > 0;
+	running = present && (high ? CoreClockTestInitHighTimer() : TimerInit(&s_Timer, &s_TimerCfg));
+	shared = high ?
+		CoreClockTestRequests(SystemHighFreqClockEnable, SystemHighFreqClockDisable) :
+		CoreClockTestRequests(SystemLowFreqClockEnable, SystemLowFreqClockDisable);
+	CoreClockTestPrint("%s clock\r\n", name);
+	CoreClockTestResult("Shared clock", shared);
+	if (present)
 	{
-		// The timer driver holds its own LF clock request until it stops.
-		timerRunning = TimerInit(&s_Timer, &s_TimerCfg);
-		CoreClockTestResult("LF timer clock request", timerRunning);
+		CoreClockTestResult("Timer clock request", running);
 	}
-	CoreClockTestResult("LF shared clock lifecycle",
-		CoreClockTestRequests(SystemLowFreqClockEnable, SystemLowFreqClockDisable));
-	if (timerRunning)
+	if (running)
 	{
 		start = TimerGetTickCount(&s_Timer);
 		msDelay(10);
-		CoreClockTestResult("LF timer clock after release",
-			TimerGetTickCount(&s_Timer) != start);
+		CoreClockTestResult("Timer clock after release", TimerGetTickCount(&s_Timer) != start);
 		CoreClockTestReleaseTimer();
 	}
 }
@@ -424,7 +442,6 @@ static void CoreClockTestDelayDivisors(const DelayCalibrationPoint_t *pSample)
 
 static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 {
-	TimerCfg_t cfg;
 	uint32_t cpuHz;
 	uint32_t start;
 	uint32_t irqState;
@@ -451,18 +468,12 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 		return true;
 	}
 
-	cfg = s_TimerCfg;
-#ifdef CORE_CLOCK_TEST_DELAY_TIMER_DEVNO
-	cfg.DevNo = CORE_CLOCK_TEST_DELAY_TIMER_DEVNO;
-#else
-	cfg.DevNo = TimerGetHighFreqDevNo();
-	if (TimerGetHighFreqDevCount() <= 0 || cfg.DevNo < 0)
+	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
 	{
 		CoreClockTestPrint("Delay timing: no CPU counter or HF Timer\r\n");
 		return false;
 	}
-#endif
-	if (!TimerInit(&s_Timer, &cfg))
+	if (!CoreClockTestInitHighTimer())
 	{
 		return false;
 	}
@@ -552,7 +563,7 @@ int main(void)
 	uint32_t core;
 	uint32_t bus;
 	uint32_t readback;
-	unsigned dividerIdx;
+	unsigned shift;
 	uint32_t request;
 	uint32_t actual;
 	int clockIdx;
@@ -567,7 +578,8 @@ int main(void)
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	CoreClockTestFlush();
 	CoreClockTestResult("Startup clock", SystemCoreClockGet() != 0U);
-	CoreClockTestSharedClockTest();
+	CoreClockTestSharedClock(false);
+	CoreClockTestSharedClock(true);
 	CoreClockTestDelayCalibrationRecord();
 	CoreClockTestPowerMode();
 	domainCount = 0U;
@@ -590,9 +602,9 @@ int main(void)
 			}
 
 			domainCount++;
-			for (dividerIdx = 1U; dividerIdx <= 4U; dividerIdx *= 2U)
+			for (shift = 0U; shift < 3U; shift++)
 			{
-				request = bus / dividerIdx;
+				request = bus >> shift;
 
 				if (request == 0U)
 				{

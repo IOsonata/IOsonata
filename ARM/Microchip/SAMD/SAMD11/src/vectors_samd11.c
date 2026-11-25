@@ -46,7 +46,14 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void HardFault_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
-__attribute__((weak)) void SysTick_Handler(void) {}
+void (*g_SysTickTimerIrq)(void);
+__attribute__((weak)) void SysTick_Handler(void)
+{
+	if (g_SysTickTimerIrq)
+	{
+		g_SysTickTimerIrq();
+	}
+}
 
 __attribute__((weak, alias("DEF_IRQHandler"))) void PM_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SYSCTRL_Handler(void);

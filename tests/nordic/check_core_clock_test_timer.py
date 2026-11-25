@@ -8,12 +8,15 @@ TEST = ROOT / "exemples/misc/core_clock_test.cpp"
 
 
 class CoreClockTestTimer(unittest.TestCase):
-    def test_lf_timer_keeps_counting_after_release(self):
+    def test_one_lf_and_one_hf_timer_keep_counting_after_release(self):
         src = TEST.read_text()
-        begin = src.index("timerRunning = TimerInit(")
+        begin = src.index("running = present &&")
         end = src.index("static void CoreClockTestPowerMode(", begin)
         lf = src[begin:end]
-        steps = ("CoreClockTestRequests(SystemLowFreqClockEnable, SystemLowFreqClockDisable)",
+        self.assertEqual(src.count("CoreClockTestSharedClock(false);"), 1)
+        self.assertEqual(src.count("CoreClockTestSharedClock(true);"), 1)
+        steps = ("CoreClockTestRequests(SystemHighFreqClockEnable, SystemHighFreqClockDisable)",
+                 "CoreClockTestRequests(SystemLowFreqClockEnable, SystemLowFreqClockDisable)",
                  "start = TimerGetTickCount", "msDelay(10)", "!= start", "CoreClockTestReleaseTimer(")
         positions = [lf.index(step) for step in steps]
         self.assertEqual(positions, sorted(positions))
@@ -51,7 +54,7 @@ class CoreClockTestLfLifecycle(unittest.TestCase):
     def test_enable_sequence_reports_individual_results(self):
         source = TEST.read_text(encoding="utf-8")
         start = source.index("static bool CoreClockTestRequests(")
-        end = source.index("static void CoreClockTestSharedClockTest(", start)
+        end = source.index("static void CoreClockTestSharedClock(", start)
         requests = source[start:end]
         self.assertIn("!Enable()", requests)
         self.assertIn("second = Enable();", requests)

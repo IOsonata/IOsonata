@@ -77,6 +77,11 @@ typedef struct {
 #define SYSTICK_CTRL_STOPPED	(SYSTICK_CTRL_CLKSOURCE | SYSTICK_CTRL_TICKINT)
 #define SYSTICK_CTRL_RUNNING	(SYSTICK_CTRL_STOPPED | SYSTICK_CTRL_ENABLE)
 
+#ifdef SYSTICK_TIMER_SHARED_VECTOR
+extern "C" void (*g_SysTickTimerIrq)(void);
+static void SystickTimerIrq(void);
+#endif
+
 // One SysTick per Cortex-M core
 static SysTick_TimerData_t s_SysTickData;
 static bool s_SysTickEnabled;
@@ -367,6 +372,9 @@ bool SysTickTimerPowerOff(TimerDev_t * const pTimer)
 		return false;
 	}
 	s_SysTickEnabled = false;
+#ifdef SYSTICK_TIMER_SHARED_VECTOR
+	g_SysTickTimerIrq = nullptr;
+#endif
 	SYSTICK_REG->CTRL = 0U;
 	SYSTICK_REG->LOAD = 0U;
 	SYSTICK_REG->VAL = 0U;
@@ -444,6 +452,9 @@ bool SysTickTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	d.CurPeriod = SYSTICK_PERIOD_MAX;
 	d.NextPeriod = SYSTICK_PERIOD_MAX;
 
+#ifdef SYSTICK_TIMER_SHARED_VECTOR
+	g_SysTickTimerIrq = SystickTimerIrq;
+#endif
 	return SystickEnable(pTimer);
 }
 
@@ -458,7 +469,11 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 // Each wrap extends the tick count, unless GetTickCount did it already. The
 // trigger is called once per interrupt with a wrap counted since the last one:
 // a restart in between, from an interrupt of higher priority, drops it.
+#ifdef SYSTICK_TIMER_SHARED_VECTOR
+static void SystickTimerIrq(void)
+#else
 extern "C" void SysTick_Handler(void)
+#endif
 {
 	SysTick_TimerData_t &d = s_SysTickData;
 	TimerDev_t * const pTimer = d.pTimer;
