@@ -54,7 +54,7 @@ SOFTWARE.
 #define UART_RTS_PORT		-1
 #define UART_RTS_PIN		-1
 #define UART_RTS_PINOP		IOPINOP_GPIO
-#define UART_BAUDRATE		115200
+
 // Interrupt mode, no DMA path on SAM D
 #define UART_INT_MODE		true
 #define UART_DMA_MODE		false
