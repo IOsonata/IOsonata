@@ -8,7 +8,7 @@ November 25, 2026.
 
 | Port | No run time source selection | Clock code reads no device or driver state | `SystemSleep` leaves the drivers alone |
 | --- | --- | --- | --- |
-| SAM D11, SAM D21 | Yes | No (SysTick check during CPU mode change) | Yes |
+| SAM D11, SAM D21 | Yes | Yes | Yes |
 | SAM4L | No | No | No |
 | SAM4E | No | No | Not reviewed |
 | Nordic | No | No | Not reviewed |
@@ -19,10 +19,6 @@ November 25, 2026.
 
 Nordic: the clock code refuses a source selection while a request count is
 not zero.
-
-On SAM D11/D21, `SamdSetRunningMode()` still calls `SysTickTimerEnabled()`
-and refuses the mode change while SysTick is enabled. Removing that driver
-check is pending.
 
 During the SAM D refactor, `system_samd.c` went from 4,466 to
 2,366 bytes at `-Os`, and the SAM D11 `CoreClockTest` Release image from

@@ -134,7 +134,6 @@ __attribute__((weak)) McuOsc_t g_McuOsc = {
 extern uint32_t SystemMicroSecLoopCnt;
 
 // CPU clock after reset is OSC8M divided by 8
-extern bool SysTickTimerEnabled(void) __attribute__((weak));
 
 // Frequencies of generators 0 and 1, set by the clock setup. Kept in .data:
 // the C startup clears .bss after SystemInit.
@@ -1171,8 +1170,9 @@ static bool SamdSetRunningMode(SYSTEM_POWER_MODE Mode)
 	uint8_t previous = s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER ? 1U : 0U;
 	uint8_t divider = Mode == SYSTEM_POWER_MODE_LOW_POWER ? 1U : 0U;
 
-	if ((SysTickTimerEnabled != NULL && SysTickTimerEnabled()) ||
-		PM_REGS->PM_CPUSEL != previous || PM_REGS->PM_APBASEL != previous ||
+	// The caller handles the device timing that depends on these clocks,
+	// a SysTick on the CPU clock included.
+	if (PM_REGS->PM_CPUSEL != previous || PM_REGS->PM_APBASEL != previous ||
 		PM_REGS->PM_APBBSEL != previous || PM_REGS->PM_APBCSEL != previous)
 	{
 		return false;
