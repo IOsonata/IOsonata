@@ -41,9 +41,17 @@ reset). Reset reasons are optional diagnostics, **not** a substitute for
 power management.
 
 The sleep implementation enters Standby through SLEEPDEEP/WFI and resumes
-after an interrupt. `SystemWakePin()` configures a selected asynchronous
-EIC level wake source; EIC line ownership and the ordinary GPIO interrupt
-configuration must be preserved. The existing generic
+after an interrupt. `SystemSleep()` only enters Standby: it calls no
+device driver. A wake source is a device interrupt the application enabled
+through the driver of that device.
+
+A pin interrupt enabled with `IOPinEnableInterrupt()` or
+`IOPinAllocateInterrupt()` wakes the MCU. The EIC is a user of the low
+frequency clock: the pin driver requests it when the first pin interrupt or
+event is enabled and releases it with the last one. That clock keeps running
+in Standby, so the EIC detects the edge there. Pin edges are therefore
+sampled at 32 kHz, awake or asleep: about 0.1 ms from the edge to the
+interrupt with the filter, and a shorter pulse is not seen. The existing generic
 `exemples/misc/core_power_test.cpp` has a board-selected resumable mode,
 with Eclipse managed CorePowerTest projects for D11 and D21. No separate
 reset-only application is required.
@@ -53,17 +61,11 @@ No external wiring is needed. SAMD21 Xplained Pro uses its
 onboard PA15 button (EXTINT15). Monitor SAMD11 EDBG VCOM at the default
 1,000,000 baud; SAMD21 currently selects 115200 baud in its board.h.
 
-PRIMASK cannot mask SW0's NMI on D11. During Standby entry the NMI handler
-therefore leaves EIC_IRQn pending so an edge handled just before WFI cannot
-be consumed before the CPU sleeps. Entry also checks the current button
-level. After WFI, the previous EIC NVIC enable state is restored; a prior
-pending IRQ or a real EIC pin interrupt is preserved. The NMI itself is
-acknowledged normally. D21 continues to use its ordinary masked EIC IRQ.
-
-`python3 tests/samd/run_standby_entry.py` checks the extracted production
-entry functions with a host register model: 128 cases at O0 and O2. This
-models event timing and saved interrupt state, not Arm instruction execution
-or electrical timing. The entry change still needs a hardware rerun.
+On D11, PA14 has no EXTINT line; its pin interrupt uses the NMI. PRIMASK
+does not hold an NMI, so the NMI handler only acknowledges it and sets the
+EIC interrupt pending. The pin handler runs from the EIC interrupt, and a
+pending EIC interrupt wakes a WFI entered with interrupts disabled. D21 uses
+its ordinary masked EIC interrupt. This needs a hardware run on both boards.
 The sleep instruction remains WFI as specified in the
 [SAMD11 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-42363-SAM-D11_Datasheet.pdf),
 section 15.6.2.8.2.

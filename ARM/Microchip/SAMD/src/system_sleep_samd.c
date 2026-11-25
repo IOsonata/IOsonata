@@ -22,10 +22,6 @@ Copyright (c) 2026 I-SYST inc.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 
-// EIC wake line ownership is managed in iopincfg_samd.c.
-void SamdStandbyWakeArm(void);
-void SamdStandbyWakeDone(void);
-
 void SystemSleep(void)
 {
 	uint32_t previous;
@@ -37,11 +33,10 @@ void SystemSleep(void)
 	}
 
 	// Keep maskable wake interrupts pending until WFI has completed. An
-	// interrupt between rearming EIC and WFI could otherwise be consumed
-	// before sleeping, leaving no interrupt to wake the CPU. The SAMD11
-	// NMI handler leaves EIC_IRQn pending during this window.
+	// interrupt taken before WFI would otherwise be consumed and leave no
+	// interrupt to wake the CPU. The wake sources are the device interrupts
+	// the application enabled through the device drivers.
 	state = DisableInterrupt();
-	SamdStandbyWakeArm();
 	previous = SCB->SCR;
 	// Standby returns to this caller; never inherit SLEEPONEXIT.
 	SCB->SCR = (previous | SCB_SCR_SLEEPDEEP_Msk) &
@@ -50,7 +45,6 @@ void SystemSleep(void)
 	__WFI();
 	__ISB();
 	SCB->SCR = previous;
-	SamdStandbyWakeDone();
 	(void)SystemCoreClockGet();
 	EnableInterrupt(state);
 }

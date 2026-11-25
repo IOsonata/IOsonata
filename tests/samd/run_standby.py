@@ -40,7 +40,7 @@ FIXTURE = r"""
 #include <stdio.h>
 #include "samdxxx.h"
 MockScb g_Scb;
-static unsigned g_Wfi, g_Arm, g_Done, g_Disable, g_Enable, g_Ipsr;
+static unsigned g_Wfi, g_Disable, g_Enable, g_Ipsr;
 void SystemSleep(void);
 uint32_t MockIpsr(void) { return g_Ipsr; }
 uint32_t DisableInterrupt(void) { g_Disable++; return 0U; }
@@ -51,12 +51,10 @@ void MockWfi(void)
 	assert((g_Scb.SCR & SCB_SCR_SLEEPONEXIT_Msk) == 0U);
 	g_Wfi++;
 }
-void SamdStandbyWakeArm(void) { g_Arm++; }
-void SamdStandbyWakeDone(void) { g_Done++; }
 uint32_t SystemCoreClockGet(void) { return 48000000U; }
 static void Reset(void)
 {
-	g_Wfi = g_Arm = g_Done = g_Disable = g_Enable = g_Ipsr = 0U;
+	g_Wfi = g_Disable = g_Enable = g_Ipsr = 0U;
 	g_Scb.SCR = 0x100U | SCB_SCR_SLEEPONEXIT_Msk;
 }
 int main(void)
@@ -67,7 +65,7 @@ int main(void)
 	assert(g_Wfi == 0U && g_Disable == 0U);
 	Reset();
 	SystemSleep();
-	assert(g_Wfi == 1U && g_Arm == 1U && g_Done == 1U);
+	assert(g_Wfi == 1U);
 	assert(g_Disable == 1U && g_Enable == 1U);
 	assert(g_Scb.SCR == (0x100U | SCB_SCR_SLEEPONEXIT_Msk));
 	puts("SAMD standby entry, SCR restoration and interrupt context refusal PASS");
