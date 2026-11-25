@@ -136,7 +136,6 @@ extern uint32_t SystemMicroSecLoopCnt;
 // CPU clock after reset is OSC8M divided by 8
 extern bool SysTickTimerEnabled(void) __attribute__((weak));
 
-static uint32_t s_CoreSource = UINT32_MAX;
 // Frequencies of generators 0 and 1, set by the clock setup. Kept in .data:
 // the C startup clears .bss after SystemInit.
 static uint32_t s_GenFreq[2] = { SAMD_OSC8M_FREQ / 8UL, 0U };
@@ -1020,7 +1019,6 @@ static bool SamdClockInit(void)
 		return SamdStartupFailed(SAMD_STARTUP_CLOCK_SWITCH, __LINE__);
 	}
 
-	s_CoreSource = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_MAIN) & GCLK_GENCTRL_SRC_Msk;
 	return true;
 }
 
@@ -1047,7 +1045,6 @@ static bool SamdSystemClockInit(void)
 	result = SamdClockInit();
 	if (!result)
 	{
-		s_CoreSource = UINT32_MAX;
 		(void)SamdMainOsc8m();
 		SystemCoreClockUpdate();
 	}
@@ -1098,21 +1095,6 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	(void)Freq;
 
 	return SystemPeriphClockGet(Idx);
-}
-
-// The clock sources are those of g_McuOsc, set once by SystemInit. They are
-// not changed at run time: a request for the configured source succeeds when
-// that source runs, any other request fails.
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	return ClkSrc == g_McuOsc.CoreOsc.Type && OscFreq == g_McuOsc.CoreOsc.Freq &&
-		   s_CoreSource != UINT32_MAX;
-}
-
-bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	return ClkSrc == g_McuOsc.LowPwrOsc.Type && OscFreq == g_McuOsc.LowPwrOsc.Freq &&
-		   SamdGclkGenFreq(SAMD_GCLK_LF) != 0U;
 }
 
 void SystemOscInit(void)

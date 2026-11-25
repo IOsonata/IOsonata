@@ -17,9 +17,7 @@ delay calibration and accuracy are outside this image.
 
 `SystemPeriphClockSet` returns the generator frequency set at startup; it
 does not change a divider. The clock sources are those of `g_McuOsc`, set
-once by `SystemInit`: `SystemCoreClockSelect` and `SystemLowFreqClockSelect`
-return true for the configured source and false for any other, and change
-nothing.
+once by `SystemInit`; there is no run time source selection.
 
 ### Test a timer
 

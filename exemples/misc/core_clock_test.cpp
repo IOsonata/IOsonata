@@ -1182,11 +1182,6 @@ static void CoreClockTestComplete(void)
 int main(void)
 {
 	unsigned cycle;
-	bool selected;
-	OSC_TYPE initialCoreSource;
-	OSC_TYPE initialLfSource;
-	uint32_t initialCoreFreq;
-	uint32_t initialLfFreq;
 	uint32_t core;
 	uint32_t bus;
 	uint32_t readback;
@@ -1229,35 +1224,11 @@ int main(void)
 	{
 		CoreClockTestSleepDelay();
 	}
-	initialCoreSource = GetHighFreqOscType();
-	initialCoreFreq = GetHighFreqOscFreq();
-	initialLfSource = GetLowFreqOscType();
-	initialLfFreq = GetLowFreqOscFreq();
 	domainCount = 0U;
 
 	for (cycle = 1U; cycle <= CLOCK_TEST_CYCLES; cycle++)
 	{
 		CoreClockTestPrint("Cycle %u\r\n", cycle);
-
-		// Exercise the configured core source and RC using the same HAL.
-		CoreClockTestFlush();
-		selected = SystemCoreClockSelect(initialCoreSource, initialCoreFreq);
-		CoreClockTestResult("Configured core source", selected);
-
-		if (initialCoreSource != OSC_TYPE_RC)
-		{
-			CoreClockTestFlush();
-			selected = SystemCoreClockSelect(OSC_TYPE_RC, 0U);
-
-			if (selected)
-			{
-				CoreClockTestResult("Core RC selection", true);
-			}
-			else
-			{
-				CoreClockTestPrint("Core RC: UNSUPPORTED or rejected\r\n");
-			}
-		}
 
 		core = SystemCoreClockGet();
 		CoreClockTestResult("Core frequency", core != 0U);
@@ -1306,55 +1277,11 @@ int main(void)
 				actual == bus && SystemPeriphClockGet(clockIdx) == bus);
 		}
 
-		// Test the configured LF source and the internal RC where supported.
-		if (initialLfFreq != 0U)
+		// The low frequency RC calibration applies to a board running on it.
+		if (cycle == CLOCK_TEST_CYCLES && GetLowFreqOscFreq() != 0U &&
+			GetLowFreqOscType() == OSC_TYPE_RC)
 		{
-			CoreClockTestFlush();
-			selected = SystemLowFreqClockSelect(initialLfSource, initialLfFreq);
-			CoreClockTestResult("Configured LF source", selected);
-		}
-
-		if (initialLfFreq != 0U)
-		{
-			CoreClockTestFlush();
-			selected = SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U);
-
-			if (selected)
-			{
-				CoreClockTestResult("LF RC selection", true);
-
-				if (cycle == CLOCK_TEST_CYCLES)
-				{
-					CoreClockTestCalibrationTest();
-					if (CORE_CLOCK_TEST_TIMERS)
-					{
-						CoreClockTestPrint("LF RC timer timing test\r\n");
-
-						for (timerDevNo = 0;
-							timerDevNo < TimerGetLowFreqDevCount(); timerDevNo++)
-						{
-							CoreClockTestTimer(timerDevNo);
-						}
-					}
-				}
-			}
-			else
-			{
-				CoreClockTestPrint("LF RC: UNSUPPORTED or rejected\r\n");
-			}
-		}
-
-		// Return the test to the configured board oscillator sources.
-		if (initialLfFreq != 0U)
-		{
-			selected = SystemLowFreqClockSelect(initialLfSource, initialLfFreq);
-			CoreClockTestResult("LF source restoration", selected);
-		}
-
-		if (initialCoreSource != OSC_TYPE_RC)
-		{
-			selected = SystemCoreClockSelect(initialCoreSource, initialCoreFreq);
-			CoreClockTestResult("Core source restoration", selected);
+			CoreClockTestCalibrationTest();
 		}
 	}
 
@@ -1369,7 +1296,7 @@ int main(void)
 	}
 	if (CORE_CLOCK_TEST_TIMERS)
 	{
-		CoreClockTestPrint("Restored LF source timer timing test\r\n");
+		CoreClockTestPrint("Timer timing test\r\n");
 
 		// Timer implementations expose their device counts through the generic API.
 		// Test every advertised device rather than a board-selected instance.

@@ -242,6 +242,11 @@ SYSTEM_POWER_MODE SystemPowerModeGet(void);
  * Selects the MCU core clock source. This does not enable or disable
  * optional shared oscillators or adjust their reference counts.
  *
+ * Startup function of the MCU port, not an application or driver service.
+ * The clock sources are those of g_McuOsc. Ports without a caller in their
+ * own startup do not define it. To be removed from this header once the
+ * remaining ports keep it private.
+ *
  * @param	ClkSrc : Clock source selection
  *						OSC_TYPE_RC - Internal RC
  *						OSC_TYPE_XTAL - External crystal
@@ -255,6 +260,9 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
 
 /**
  * @brief	Select low frequency clock oscillator type
+ *
+ * Startup function of the MCU port, not an application or driver service.
+ * See SystemCoreClockSelect.
  *
  * @param	ClkSrc : Clock source selection
  *						OSC_TYPE_RC - Internal RC
