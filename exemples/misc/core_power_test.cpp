@@ -32,6 +32,9 @@ MIT License. Copyright (c) 2026, I-SYST inc.
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE			1000000
 #endif
+#ifndef CORE_POWER_TEST_TIMER_WAKE_ONLY
+#define CORE_POWER_TEST_TIMER_WAKE_ONLY 0
+#endif
 #ifndef CORE_POWER_TEST_WAKE_MS
 #define CORE_POWER_TEST_WAKE_MS	1000U
 #endif
@@ -519,6 +522,15 @@ int main(void)
 	}
 #endif
 	caps = SystemPowerCapabilitiesGet();
+	if (CORE_POWER_TEST_TIMER_WAKE_ONLY)
+	{
+		CorePowerTestSleep(caps);
+		CorePowerTestSummary();
+		while (1)
+		{
+			__WFI();
+		}
+	}
 	PowerTestValue("Capabilities 0x", caps);
 	reason = SystemResetReason();
 	PowerTestValue("Reset reason 0x", reason);
