@@ -72,8 +72,12 @@ Hardware, SAM D11 Xplained Pro, 2026-11-25: `CorePowerTest` passed 30 checks
 with no failure, three Standby wakes from the RTC and three from SW0 (PA14,
 the NMI path), with the CPU and peripheral clocks, the UART rate and the RAM
 samples checked after every wake. `CoreClockTest` passed with no failure,
-with and without the delay calibration. The EIC edge wake of the D21 has not
-been run on hardware.
+with and without the delay calibration.
+
+SAM D21 Xplained Pro, same day: `CoreClockTest` passed with no failure. With
+the calibration timer at 250 kHz its delay loop cost matches the D11, 13.0 and
+3.0 CPU cycles per pass. `CorePowerTest` and the EIC edge wake of the D21
+have not been run on hardware.
 The sleep instruction remains WFI as specified in the
 [SAMD11 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-42363-SAM-D11_Datasheet.pdf),
 section 15.6.2.8.2.
