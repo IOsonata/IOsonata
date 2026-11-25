@@ -140,7 +140,6 @@ struct SamdI2cDev {
 	sercom_registers_t *pReg;
 	I2CDev_t *pI2cDev;				//!< Generic I2C device data
 	uint32_t CtrlA;					//!< CTRLA without ENABLE
-	uint32_t Baud;					//!< Master BAUD
 	const uint8_t *pTxData;
 	uint8_t *pRxData;
 	int Remain;
@@ -179,6 +178,12 @@ static bool SamdI2cSync(sercom_registers_t *pReg, uint32_t Mask)
 	}
 
 	return false;
+}
+
+static bool SamdI2cmSetIdle(SamdI2cDev_t *pDev)
+{
+	pDev->pReg->I2CM.SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
+	return SamdI2cSync(pDev->pReg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
 }
 
 static inline uint32_t SamdI2cmBusState(sercom_i2cm_registers_t *pReg)
@@ -253,8 +258,7 @@ static void SamdI2cmRecover(SamdI2cDev_t *pDev, bool bRestart)
 	}
 
 	// The bus state is unknown after enable
-	reg->SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
-	(void)SamdI2cSync(pDev->pReg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
+	(void)SamdI2cmSetIdle(pDev);
 }
 
 // Before a START that is not a repeated START, from the caller of the
@@ -301,18 +305,10 @@ static inline void SamdI2cmSendAddress(SamdI2cDev_t *pDev, bool bRead)
 	pDev->bNeedStart = false;
 }
 
-// START, or repeated START on a held bus, and the address. A read has its
-// first byte received when this returns true.
-static bool SamdI2cmAddress(SamdI2cDev_t *pDev, bool bRead)
+static bool SamdI2cmAck(SamdI2cDev_t *pDev, bool bRead)
 {
-	sercom_i2cm_registers_t *reg = &pDev->pReg->I2CM;
-
-	SamdI2cmWaitFree(pDev);
-	SamdI2cmCtrlb(pDev, 0, false);
-	SamdI2cmSendAddress(pDev, bRead);
-
 	uint8_t flags = SamdI2cmWait(pDev);
-	uint16_t status = reg->SERCOM_STATUS;
+	uint16_t status = pDev->pReg->I2CM.SERCOM_STATUS;
 
 	if (flags == 0U || (status & SAMD_I2CM_BUS_ERRORS) != 0U)
 	{
@@ -323,7 +319,7 @@ static bool SamdI2cmAddress(SamdI2cDev_t *pDev, bool bRead)
 
 	pDev->bBusHeld = true;
 
-	// Address refused: MB with RXNACK instead of the first read byte
+	// A read address must also have received its first byte.
 	if ((status & SERCOM_I2CM_STATUS_RXNACK_Msk) != 0U || (bRead && (flags & SERCOM_I2CM_INTFLAG_SB_Msk) == 0U))
 	{
 		SamdI2cmStop(pDev);
@@ -332,6 +328,17 @@ static bool SamdI2cmAddress(SamdI2cDev_t *pDev, bool bRead)
 	}
 
 	return true;
+}
+
+// START, or repeated START on a held bus, and the address. A read has its
+// first byte received when this returns true.
+static bool SamdI2cmAddress(SamdI2cDev_t *pDev, bool bRead)
+{
+	SamdI2cmWaitFree(pDev);
+	SamdI2cmCtrlb(pDev, 0, false);
+	SamdI2cmSendAddress(pDev, bRead);
+
+	return SamdI2cmAck(pDev, bRead);
 }
 
 // Bytes acknowledged by the slave
@@ -350,17 +357,8 @@ static int SamdI2cmTxPolling(SamdI2cDev_t *pDev, const uint8_t *pData, int DataL
 		reg->SERCOM_DATA = pData[count];
 		(void)SamdI2cSync(pDev->pReg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
 
-		uint8_t flags = SamdI2cmWait(pDev);
-		uint16_t status = reg->SERCOM_STATUS;
-
-		if (flags == 0U || (status & SAMD_I2CM_BUS_ERRORS) != 0U)
+		if (!SamdI2cmAck(pDev, false))
 		{
-			SamdI2cmRecover(pDev, flags == 0U);
-			break;
-		}
-		if ((status & SERCOM_I2CM_STATUS_RXNACK_Msk) != 0U)
-		{
-			SamdI2cmStop(pDev);
 			break;
 		}
 		count++;
@@ -1196,7 +1194,7 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 }
 
 // Configuration, from the SERCOM reset. Interrupts disabled.
-static bool SamdI2cHwInit(SamdI2cDev_t *pDev)
+static bool SamdI2cHwInit(SamdI2cDev_t *pDev, bool PollingMaster)
 {
 	sercom_registers_t *reg = pDev->pReg;
 	I2CDev_t *i2c = pDev->pI2cDev;
@@ -1219,14 +1217,13 @@ static bool SamdI2cHwInit(SamdI2cDev_t *pDev)
 		return false;
 	}
 
-	if (i2c->Cfg.Mode == I2CMODE_MASTER)
+	if (PollingMaster || i2c->Cfg.Mode == I2CMODE_MASTER)
 	{
 		pDev->CtrlA = SERCOM_I2CM_CTRLA_MODE_I2C_MASTER | timing;
-		pDev->Baud = baud;
 		i2c->Cfg.Rate = rate;
 
 		reg->I2CM.SERCOM_CTRLA = pDev->CtrlA;
-		reg->I2CM.SERCOM_BAUD = pDev->Baud;
+		reg->I2CM.SERCOM_BAUD = baud;
 		reg->I2CM.SERCOM_CTRLB = SERCOM_I2CM_CTRLB_SMEN_Msk;
 		reg->I2CM.SERCOM_CTRLA = pDev->CtrlA | SERCOM_I2CM_CTRLA_ENABLE_Msk;
 		if (!SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_ENABLE_Msk | SERCOM_I2CM_SYNCBUSY_SYSOP_Msk))
@@ -1235,8 +1232,7 @@ static bool SamdI2cHwInit(SamdI2cDev_t *pDev)
 		}
 
 		// The bus state is unknown after enable
-		reg->I2CM.SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
-		if (!SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk))
+		if (!SamdI2cmSetIdle(pDev))
 		{
 			return false;
 		}
@@ -1259,7 +1255,7 @@ static bool SamdI2cHwInit(SamdI2cDev_t *pDev)
 		}
 	}
 
-	if (i2c->DevIntrf.bIntEn)
+	if (!PollingMaster && i2c->DevIntrf.bIntEn)
 	{
 		NVIC_ClearPendingIRQ(irq);
 		NVIC_SetPriority(irq, SamdIrqPrio(i2c->Cfg.IntPrio));
@@ -1288,7 +1284,7 @@ static uint32_t SamdI2cSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 	if (rate == 0U || dev->Op != SAMD_I2C_OP_NONE)
 	{
-		return 0;
+		return i2c->Cfg.Rate;
 	}
 
 	uint32_t state = DisableInterrupt();
@@ -1303,7 +1299,6 @@ static uint32_t SamdI2cSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 	if (i2c->Cfg.Mode == I2CMODE_MASTER)
 	{
-		dev->Baud = baud;
 		reg->I2CM.SERCOM_BAUD = baud;
 		i2c->Cfg.Rate = rate;
 	}
@@ -1318,8 +1313,7 @@ static uint32_t SamdI2cSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		(void)SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_ENABLE_Msk);
 		if (i2c->Cfg.Mode == I2CMODE_MASTER)
 		{
-			reg->I2CM.SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
-			(void)SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
+			(void)SamdI2cmSetIdle(dev);
 		}
 		dev->bBusHeld = false;
 	}
@@ -1452,8 +1446,7 @@ static void SamdI2cEnable(DevIntrf_t * const pDev)
 
 	if (i2c->Cfg.Mode == I2CMODE_MASTER)
 	{
-		reg->I2CM.SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
-		(void)SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
+		(void)SamdI2cmSetIdle(dev);
 		dev->bBusHeld = false;
 	}
 	else
@@ -1522,7 +1515,7 @@ extern "C" void SamdI2cResumeSleep(void)
 }
 
 // Bus clocked free, then the SERCOM configured again
-static void SamdI2cReset(DevIntrf_t * const pDev)
+static void SamdI2cResetBus(DevIntrf_t * const pDev, bool PollingMaster)
 {
 	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
 
@@ -1530,18 +1523,31 @@ static void SamdI2cReset(DevIntrf_t * const pDev)
 
 	uint32_t state = DisableInterrupt();
 
-	SamdI2cStopDma(dev, false);
-	dev->Op = SAMD_I2C_OP_NONE;
-	dev->bBusHeld = false;
-	dev->bSlaveTx = false;
-	dev->bSlaveRx = false;
-	if (s_pSamdI2cTxOwner == dev)
+	if (!PollingMaster)
 	{
-		s_pSamdI2cTxOwner = NULL;
+		SamdI2cStopDma(dev, false);
+		dev->Op = SAMD_I2C_OP_NONE;
+		dev->bSlaveTx = false;
+		dev->bSlaveRx = false;
+		if (s_pSamdI2cTxOwner == dev)
+		{
+			s_pSamdI2cTxOwner = NULL;
+		}
 	}
-	(void)SamdI2cHwInit(dev);
+	dev->bBusHeld = false;
+	(void)SamdI2cHwInit(dev, PollingMaster);
 
 	EnableInterrupt(state);
+}
+
+static void SamdI2cPollReset(DevIntrf_t * const pDev)
+{
+	SamdI2cResetBus(pDev, true);
+}
+
+static void SamdI2cReset(DevIntrf_t * const pDev)
+{
+	SamdI2cResetBus(pDev, false);
 }
 
 static void SamdI2cPowerOff(DevIntrf_t * const pDev)
@@ -1655,7 +1661,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.TxData = polling ? SamdI2cTxPoll : SamdI2cTxData;
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.StopTx = SamdI2cStopTx;
-	pDev->DevIntrf.Reset = SamdI2cReset;
+	pDev->DevIntrf.Reset = polling ? SamdI2cPollReset : SamdI2cReset;
 	pDev->DevIntrf.PowerOff = SamdI2cPowerOff;
 	pDev->DevIntrf.GetHandle = SamdI2cGetHandle;
 	pDev->DevIntrf.IntPrio = (int)SamdIrqPrio(pCfgData->IntPrio);
@@ -1668,7 +1674,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 	IOPinCfg(pCfgData->pIOPinMap, 2);
 
-	bool res = SamdI2cHwInit(dev);
+	bool res = SamdI2cHwInit(dev, polling);
 
 	if (!res)
 	{
