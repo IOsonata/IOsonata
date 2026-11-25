@@ -16,9 +16,11 @@ the enabled checks. Timer triggers, concurrent timers, timer power-off and
 delay calibration and accuracy are outside this image.
 
 `SystemPeriphClockSet` returns the generator frequency set at startup; it
-does not change a divider. `SystemCoreClockSelect` is refused while a timer
-holds the HF or LF clock or a peripheral bus clock is on in `PM_APBCMASK`;
-`SystemLowFreqClockSelect` is refused while a timer holds the LF clock.
+does not change a divider. `SystemCoreClockSelect` and
+`SystemLowFreqClockSelect` set the clock asked; the caller stops the clock
+consumers first and sets them up again after. The user counts of
+`SystemHighFreqClockEnable` and `SystemLowFreqClockEnable` do not refuse a
+selection.
 
 ### Test a timer
 

@@ -1241,9 +1241,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		__set_PRIMASK(primask);
 		return true;
 	}
-	// A peripheral bus clock on means a clock consumer was not stopped
-	if (s_HfUsers || s_LfUsers || s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER ||
-		PM_REGS->PM_APBCMASK != PM_APBCMASK_RESETVALUE)
+	if (s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER)
 	{
 		__set_PRIMASK(primask);
 
@@ -1279,13 +1277,6 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		__set_PRIMASK(primask);
 		return true;
 	}
-	if (s_LfUsers)
-	{
-		__set_PRIMASK(primask);
-
-		return false;
-	}
-
 	g_McuOsc.LowPwrOsc.Type = ClkSrc;
 	g_McuOsc.LowPwrOsc.Freq = OscFreq;
 	result = SamdLowFreqInit();
