@@ -1,65 +1,62 @@
 # MCU core power, clock and timer lifecycle
 
-Status: architecture decision and active implementation for IOsonata 0.14.
-The generic clock Enable/Disable declarations and Nordic implementation
-are present on `refactor_nrf5340_power_clock_014`. Other MCU ports are
-not yet implemented or validated for these functions. The Nordic changes
-still require focused builds and hardware retesting; this document is not
-hardware PASS evidence.
+## Purpose and ownership
 
-## System core interface responsibility
+IOsonata Power & Clock manages MCU low-power operation and selects clocks for peripherals. It is an internal service used by startup and
+drivers. Its declarations are shared across MCU ports so that an application
+can use the same device code on different hardware.
 
-`coredev/system_core_clock.h` defines MCU-level system services: core power
-management, sleep and wake behavior, reset and retention functions, core
-clock selection, and peripheral clock management where supported by the MCU.
-These facilities are normally initialized by `SystemInit()` and used by
-IOsonata's system and peripheral implementations. Applications normally
-configure and use their peripherals without invoking system clock functions.
-Direct application calls are reserved for special requirements, such as
-explicit core clock selection, system sleep/power management or intentional
-management of an MCU clock source.
+| Owner | Responsibility |
+| --- | --- |
+| Board | Describe the fitted oscillators and their frequencies in `g_McuOsc`. |
+| Application | Request a device operation such as a UART baud rate or timer interval. Configure the intended wake event and request sleep or system power-off when appropriate. |
+| Device driver | Choose a suitable clock for the requested operation. Own the device registers, pins, interrupts, DMA, module gate and device lifecycle. Hold the required shared clock while the hardware depends on it, including pending transfers and armed wake events. |
+| MCU Power & Clock | Establish the board clocks at startup. Select and share the available clock sources and domains. Enter a compatible MCU power state and restore MCU clocks on wake where required. Respect clocks already owned by another core or radio stack. |
 
-`SystemPeriphClockGet()` and `SystemPeriphClockSet()` provide the existing
-generic peripheral-clock frequency interface. The zero-based `Idx` selects
-the MCU-specific peripheral clock domain required by a peripheral, not a
-universal clock number shared across MCU families. For example, STM32L4
-implements index 0 for PCLK1 (APB1) and index 1 for PCLK2 (APB2), and
-supports independent bus prescalers. Nordic exposes index 0 as its fixed
-16 MHz peripheral clock, without an independently configurable APB divider.
-Each peripheral driver selects the applicable index and requested frequency
-based on its hardware requirements. The system clock implementation reports
-the actual achievable frequency; unsupported indices return 0. A fixed clock
-may return its fixed frequency when the requested frequency cannot change it.
-The application does not need to know the MCU's clock register layout or
-prescaler settings. Source selection must not silently change unrelated
-clock domains. This is distinct from a driver's
-own peripheral enable bits and module clock gates: UART, SPI, I2C, timers
-and other drivers still configure and enable their respective hardware.
-Shared HF/LF clock Enable/Disable operations manage shared MCU clock sources;
-they do not replace the peripheral drivers' lifecycle.
+### Peripheral clock selection
 
-## Design principle
+The driver chooses the MCU-specific domain for `SystemPeriphClockGet/Set`.
+The system chooses the best available rate consistent with existing users.
+A rate setter returns the actual frequency in effect, including the current
+frequency when a fixed or shared domain must keep running at that rate.
+The driver uses that value to program its own divider and report the actual
+device rate. Shared HF/LF sources use the existing `Enable/Disable` calls
+with internal reference counts. Releasing one user preserves the source
+while another user or the MCU still needs it.
 
-System clock and power functions are internal utilities of IOsonata even
-though they are available in the generic API. In particular,
-`SystemHighFreqClockEnable/Disable` and `SystemLowFreqClockEnable/Disable`
-are normally called by peripheral drivers, not by applications. Drivers
-must select, start, count and stop their required clocks automatically
-through their existing Init/Enable/Disable lifecycle. A normal application
-must not choose HF versus LF, manage reference counts, know which Nordic
-BLE stack owns CLOCK, or change its startup order to keep a peripheral
-working. An application may call the system APIs directly only when it
-deliberately needs special MCU clock or power control.
+### Low-power operation
 
-An application specifies the peripheral operation it needs. The MCU
-implementation selects and manages the required clocks. Applications should
-not need MCU-specific oscillator startup sequences, clock reference counts,
-or sleep-related peripheral restoration for ordinary operation.
+`SystemSleep()` selects a resumable state compatible with active clock
+requirements and configured wake sources. If a deeper state would break a
+transfer or lose a wake event, use a compatible shallower state or return.
+Peripheral configuration and enable state belong to the driver throughout.
+The system manages the MCU clock tree, sleep controls and wake routing.
+It must not walk device instances, drain FIFOs, stop DMA, disconnect pins
+or disable and restart devices to make a deeper state possible.
 
-The generic HAL is the source of interface definitions. Before adding a
-private API, type, enum, or state mechanism, inspect the existing generic
-interfaces, implementations, and other MCU ports. Do not duplicate generic
-clock-source enums or introduce separate Acquire/Release functions.
+For example, an application arms a timer and sleeps until the next sensor
+sample. The timer driver chooses its source and holds it while armed.
+Power & Clock keeps that source available during sleep. If an enabled UART
+also needs to receive, its clock requirement still applies. The application
+can explicitly disable the UART when reception is no longer needed.
+
+`Disable` permits a subsequent `Enable` with the existing configuration.
+Device `PowerOff` requires `Init` before reuse. System sleep performs neither
+operation on behalf of a device. System power-off is a separate application
+decision with the reset-on-wake semantics of the target.
+
+### Scope of the generic API
+
+Add a generic operation only for an identified low-power or peripheral-clock
+requirement that an existing system or device operation cannot express.
+Document its caller, the resource it owns and its observable result.
+Keep oscillator sequences, PLL calculations, register access and target
+errata inside the MCU port. A register available on one MCU or a setting
+exercised by `CoreClockTest` is insufficient reason to expose another API.
+
+Startup and sleep must link independently of unused peripheral drivers.
+Porting measurements, delay calibration and diagnostic output belong in
+the validation build. Measure flash impact in the linked application.
 
 ## Oscillator configuration and clock execution
 
@@ -234,15 +231,7 @@ kernel clocks are distinct from a synthesized 32 kHz LFCLK. The agreed
 default low-frequency source is the one configured in
 `g_McuOsc.LowPwrOsc`.
 
-## Ownership boundaries
-
-| Layer | Responsibility |
-| --- | --- |
-| Application | Configure and operate devices through generic APIs |
-| System core power/clock | MCU power states, sleep/wake, reset/retention, core and supported peripheral clock frequency selection, and shared clock Enable/Disable |
-| MCU system implementation | Apply `g_McuOsc`, manage shared oscillator reference counts and use the permitted hardware clock operations |
-| Timer/peripheral driver | Select supported timer inputs and configure its own peripheral hardware; use system peripheral-clock and shared-clock APIs as needed during its normal lifecycle |
-| BLE stack or other external owner | Keep its hardware ownership; HAL must not stop an externally owned clock |
+## Nordic implementation notes
 
 The Nordic working branch now uses `SystemHighFreqClockEnable/Disable` for
 shared HF oscillator ownership and `SystemLowFreqClockEnable/Disable` for
