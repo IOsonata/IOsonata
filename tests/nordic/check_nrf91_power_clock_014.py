@@ -145,7 +145,8 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertNotIn("WAKE_BUT_PIN", thingy)
 		self.assertNotIn("POWER_DEMO_UART_DMA", board)
 		example = (ROOT / "exemples/misc/core_power_test.cpp").read_text(encoding="utf-8")
-		self.assertIn("SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE)", example)
+		self.assertIn("WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE, CorePowerTestWakeHandler", example)
+		self.assertNotIn("SystemWakePin", example)
 		self.assertIn("IOPINRES_PULLDOWN : IOPINRES_PULLUP", example)
 		self.assertIn("SystemPowerOff();", example)
 

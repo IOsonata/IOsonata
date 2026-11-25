@@ -492,6 +492,21 @@ static void CorePowerTestSleep(uint32_t Caps, bool Button = (CORE_POWER_TEST_WAK
 #endif
 }
 
+#if defined(WAKE_BUT_PIN)
+#ifndef CORE_POWER_TEST_WAKE_INT_PRIO
+#define CORE_POWER_TEST_WAKE_INT_PRIO	6
+#endif
+
+static int s_WakeIntNo = -1;
+
+// The interrupt only has to wake the MCU.
+static void CorePowerTestWakeHandler(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+}
+#endif
+
 static bool CorePowerTestWakePin(uint32_t Caps)
 {
 #if defined(WAKE_BUT_PIN)
@@ -505,17 +520,24 @@ static bool CorePowerTestWakePin(uint32_t Caps)
 	IOPinConfig(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_PINOP,
 		IOPINDIR_INPUT, WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ?
 		IOPINRES_PULLDOWN : IOPINRES_PULLUP, IOPINTYPE_NORMAL);
-	ok = SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
+	// The wake source is the pin interrupt, enabled with the pin driver.
+	s_WakeIntNo = IOPinAllocateInterrupt(CORE_POWER_TEST_WAKE_INT_PRIO,
+		WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE, CorePowerTestWakeHandler,
+		nullptr);
+	ok = s_WakeIntNo >= 0;
 	CorePowerTestResult("Wake pin configuration", ok);
 	if (!ok)
 	{
 		return false;
 	}
 	CorePowerTestResult("Wake pin invalid index",
-		!SystemWakePin(WAKE_BUT_PORT, -1, WAKE_BUT_SENSE));
-	CorePowerTestResult("Wake pin disable",
-		SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, IOPINSENSE_DISABLE));
-	ok = SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE);
+		IOPinAllocateInterrupt(CORE_POWER_TEST_WAKE_INT_PRIO, WAKE_BUT_PORT,
+		-1, WAKE_BUT_SENSE, CorePowerTestWakeHandler, nullptr) < 0);
+	IOPinDisableInterrupt(s_WakeIntNo);
+	s_WakeIntNo = IOPinAllocateInterrupt(CORE_POWER_TEST_WAKE_INT_PRIO,
+		WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE, CorePowerTestWakeHandler,
+		nullptr);
+	ok = s_WakeIntNo >= 0;
 	CorePowerTestResult("Wake pin rearm", ok);
 	return ok;
 #else

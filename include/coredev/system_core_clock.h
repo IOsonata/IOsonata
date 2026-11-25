@@ -431,9 +431,10 @@ void SystemPowerOff(void);
  * drivers, waits for any transfers that must finish, and configures the
  * intended wake sources. The application decides when it is ready to sleep.
  *
- * The MCU port handles sleep entry, clocks and wake routing. Execution
- * resumes after this call with RAM and stack intact. Configured wake
- * sources and reset reasons are preserved.
+ * The MCU port handles sleep entry and clocks. Execution resumes after this
+ * call with RAM and stack intact. The wake sources are the device interrupts
+ * the application enabled through the device drivers, a pin interrupt of
+ * coredev/iopincfg.h for a wake pin. Reset reasons are preserved.
  *
  * Unlike SystemPowerOff, this operation never requests a reset-on-wake
  * state. It is optional on MCUs without a supported resumable sleep mode.
@@ -441,23 +442,13 @@ void SystemPowerOff(void);
 void SystemSleep(void);
 
 /**
- * @brief	Low-power wakeup pin
+ * @brief	Wakeup pin of ports not yet converted
  *
- * Selects a pin that wakes the MCU from its implemented low-power state
- * (SystemPowerOff or SystemSleep). Configure the pin as an input with
- * IOPinConfig first. Where the MCU wakes up only on dedicated
- * pins or on one level, other pins and levels are refused. Where the pin
- * configuration is lost in power off, its pull resistor is kept if the MCU
- * can.
- *
- * @param	PortNo	: Port number
- * @param	PinNo	: Pin number
- * @param	Sense	: IOPINSENSE of coredev/iopincfg.h
- * 					  IOPINSENSE_LOW_TRANSITION - wake up when the pin goes low
- * 					  IOPINSENSE_HIGH_TRANSITION - wake up when the pin goes high
- * 					  IOPINSENSE_DISABLE - the pin no longer wakes the MCU
- *
- * @return	true - success, false - the pin or the level cannot wake the MCU
+ * Not an application service. The application makes a pin wake the MCU by
+ * enabling its interrupt with the pin driver, IOPinEnableInterrupt or
+ * IOPinAllocateInterrupt of coredev/iopincfg.h. This declaration only keeps
+ * the ports that still define the function building. It is removed with the
+ * last of them.
  */
 bool SystemWakePin(int PortNo, int PinNo, int Sense);
 

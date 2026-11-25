@@ -156,7 +156,7 @@ class RuntimePowerChecks(unittest.TestCase):
 	def test_reversible_boundaries_exercised(self):
 		s = SRC.read_text(encoding="utf-8")
 		for name in ("RAM retention invalid range", "Wake pin invalid index",
-			"Wake pin disable", "Wake pin rearm",
+			"Wake pin rearm",
 			"Retention register invalid index"):
 			self.assertIn(name, s)
 

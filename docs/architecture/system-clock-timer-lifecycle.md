@@ -83,7 +83,15 @@ Before calling `SystemSleep()`, the application decides which operations
 must finish and which devices must remain active. It uses the device APIs
 to prepare them and arms its wake source. The drivers implement those
 operations and own the peripheral registers. `SystemSleep()` handles MCU
-sleep entry, clocks, wake routing and return to the caller.
+sleep entry, clocks and return to the caller.
+
+A wake source is a device interrupt, enabled through the driver of that
+device. For a wake pin the application calls `IOPinEnableInterrupt` or
+`IOPinAllocateInterrupt` of the pin driver; for a timed wake it arms a
+timer trigger. The MCU power code has no function that selects a wake
+device and does not call a device driver. Where a pin needs more than its
+interrupt to wake the MCU from a sleep or power off state, the pin driver
+of the port does it when the interrupt is enabled.
 
 For example, if the last UART transmission must reach the wire, the
 application waits for transmit completion before sleeping. If it needs
@@ -139,7 +147,8 @@ For the author of an MCU port and of its drivers.
 7. `SystemSleep()` enters the MCU sleep state and returns after wake. It does
    not ask a driver whether sleep is allowed and does not pause or resume a
    driver. The application prepares its devices and arms the wake source
-   before the call.
+   before the call, through the driver of the wake device. The MCU power
+   code defines no wake device function such as a wake pin selection.
 8. A function that only `CoreClockTest` or `CorePowerTest` calls is not a
    reason to keep code in the library.
 
