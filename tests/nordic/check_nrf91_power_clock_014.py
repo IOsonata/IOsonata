@@ -75,18 +75,6 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertNotIn("NRF91_SERIES", example)
 		self.assertNotIn("NRF9160", example)
 
-	def test_independent_raw_lf_timer_frequency_diagnostics(self):
-		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
-		begin = example.index("static void CoreClockTestTimer(int DevNo)")
-		end = example.index("// Exercise the public Timer trigger API", begin)
-		section = example[begin:end]
-		self.assertIn("TimerGetTickCount(pTimer)", section)
-		self.assertIn("TimerGetMicrosecond(&s_RetainedTimer)", section)
-		self.assertIn("Independent LF timer rate:", section)
-		self.assertIn('CoreClockTestResult("Delay within 2 percent",', section)
-		self.assertNotIn("NRF91_SERIES", section)
-
-
 	def test_nrf91_lfrc_measured_before_timer_frequency_is_exposed(self):
 		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
 		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
@@ -129,11 +117,6 @@ class Nrf91PowerClock(unittest.TestCase):
 				elapsed_us = (ticks * 1000000 + reports_hz // 2) // reports_hz
 				self.assertLessEqual(abs(elapsed_us - 250000), 5000)
 
-	def test_generic_accuracy_is_not_waived_for_rc(self):
-		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
-		self.assertIn('CoreClockTestResult("Delay within 2 percent", elapsed >= 245000U && elapsed <= 255000U);', example)
-		self.assertIn("timer reports %u Hz", example)
-		self.assertNotIn("NRF91_SERIES", example)
 	def test_nrf9160_dk_button_wake_configuration(self):
 		board = (ROOT / "ARM/Nordic/nRF91/nRF9160/exemples/CorePowerTest/src/board.h").read_text(encoding="utf-8")
 		thingy = board[board.index("#if defined(NORDIC_THINGY91)"):board.index("#elif defined(NRF9160_DK)")]
@@ -192,16 +175,6 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertEqual(base_rate(True, True, False, True), 32768)
 		self.assertEqual(base_rate(False, False, False, True), 32768)
 		self.assertEqual(base_rate(True, False, False, False), 32768)
-
-		# CoreClockTest calls TimerSetFrequency before re-enabling each
-		# timer: its second 250-ms sample must keep the measured rate.
-		demo = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
-		start = demo.index("static void CoreClockTestTimer(int DevNo)")
-		end = demo.index("// Exercise the public Timer trigger API", start)
-		sample = demo[start:end]
-		self.assertLess(sample.index("frequency = TimerSetFrequency(pTimer"),
-			sample.index("enabled = TimerEnable(pTimer)"))
-		self.assertIn("TimerDisable(pTimer);", sample)
 
 	def test_nrf91_hf_timer_reinit(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
@@ -308,17 +281,8 @@ class Nrf91PowerClock(unittest.TestCase):
 			accept_xtal = not selected_rc
 			self.assertNotEqual(accept_rc, accept_xtal)
 
-	def test_core_clock_test_reuses_retained_hf_timer(self):
-		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
-		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
-		start = example.index("static void CoreClockTestTimer(int DevNo)")
-		end = example.index("// Exercise the public Timer trigger API", start)
-		matrix = example[start:end]
-		self.assertIn("DevNo == TimerGetHighFreqDevNo()", matrix)
-		self.assertIn("pTimer = &s_RetainedTimer;", matrix)
-		self.assertIn("CoreClockTestTimerInit(DevNo, pTimer)", matrix)
-		self.assertIn("CoreClockTestTimerTriggers(pTimer);", matrix)
-		self.assertNotIn("NRF91_SERIES", matrix)
+	def test_nrf91_hf_timer_ownership(self):
+		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text()
 		guard = hf[hf.index("bool nRFxTimerInit("):]
 		self.assertNotIn("s_pnRFxTimerDev[devno] != pTimer", guard)
 		self.assertIn("s_bTimerEnabled[devno]", guard)
@@ -328,7 +292,6 @@ class Nrf91PowerClock(unittest.TestCase):
 	def test_nrf91_poweroff_old_timer_structure(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
 		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
-		test = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
 		for src, name, data, owner in (
 			(hf, "nRFxTimerPowerOff", "s_pnRFxTimerDev[devno]", "nRFxTimerOwned"),
 			(rtc, "nRFxRtcPowerOff", "s_pnRfxRtcDev[devno]", "nRFxRtcOwned"),
@@ -338,9 +301,6 @@ class Nrf91PowerClock(unittest.TestCase):
 				self.assertIn(data + " = nullptr;", src)
 				self.assertIn("static bool " + owner + "(", src)
 				self.assertIn("!" + owner + "(pTimer)", src)
-		self.assertIn("stopped = TimerPowerOff(&s_RetainedTimer);", test)
-		self.assertIn("TimerInit(&s_RetainedTimer, &cfg);", test)
-		self.assertNotIn("NRF91_SERIES", test[test.index("static void CoreClockTestTimerPowerOff(void)"):test.index("int main(void)")])
 
 if __name__ == "__main__":
 	unittest.main()

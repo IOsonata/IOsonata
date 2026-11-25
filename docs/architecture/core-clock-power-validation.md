@@ -27,37 +27,17 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
 
 ## CoreClockTest coverage
 
-- Startup CPU/peripheral frequencies, configured/RC source selection and
-  restoration, peripheral-clock bounds and requests.
-- Shared HF/LF clock Enable/Disable ownership and CPU reduced-speed mode
-  where supported.
-- DWT only as an optional **calibration measurement**; independent HF timer
-  measurement validates real `msDelay` and `nsDelay` call sites, with
-  interrupt masking during that timing. No DWT in runtime delays.
-- Calibration factors at highest/lowest observed CPU speed, with an
-  interpolated value when two distinct speeds are supported.
-- `sDelay(1)` cold and warm, with end-to-end HF timer reference. A further
-  `sDelay(1)` call after releasing the LF clock verifies temporary
-  timer reuse; this is a separate timing sample.
-- **All enumerated LF/HF timers:** initialize, set frequency, Enable/Disable,
-  verify elapsed time, counter and periodic IRQs across LF clock selection
-  and restoration. Independently compare LF timing against the HF reference.
-- **Timer implementation:** verify an available trigger, single-shot callback,
-  continuous callback, counter progression, stopping callbacks, and trigger
-  slot reuse using the generic Timer API. These are automated assertions;
-  TimerDemo is not a validation dependency.
-- Independent timer clock ownership.
-- **After** the timer matrix, only if every advertised LF timer was
-  initialized successfully: verify `sDelay(0)` succeeds and that
-  `sDelay(1)` refuses to take an initialized-but-disabled timer. Both
-  disabled ownership and all-LF-timers-occupied results must be PASS.
-  If this exact ownership condition cannot be established, print
-  UNSUPPORTED rather than falsely passing it. The test is deliberately
-  last: `TimerDisable` is not a generic deinitialization API.
+- Startup CPU frequency, CPU reduced-speed mode and performance restoration.
+- Shared HF and LF clock enable and disable. On a port with an LF timer,
+  its counter must advance after the test releases its clock requests.
+- Numbered peripheral clock requests, actual rate, readback, restoration
+  and invalid indices.
+- One calibration request for each configured RC oscillator where supported.
+- During porting, delay divisors at the startup and reduced CPU speeds.
+  Use DWT where available or measure the public delay calls with an HF timer.
 
-The ownership test uses only the public `TimerInit`, `TimerDisable`,
-`TimerGetLowFreqDevCount`, and `sDelay` interface. No Nordic RTC
-registers or Claim/Release APIs appear in CoreClockTest.
+Timer trigger modes, callbacks, rollover and device power-off belong in the
+timer tests. On SAM D, run `python3 tests/samd/run_timer.py` for those drivers.
 
 ## TimerDemo
 

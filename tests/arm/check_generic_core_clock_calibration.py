@@ -44,8 +44,8 @@ class GenericDelayCalibration(unittest.TestCase):
 		self.assertNotIn("DelayCalibrationInterpolate(", source)
 		self.assertNotIn("ArmDelayClockInterpolate(", source)
 		self.assertIn("ArmDelayClockInterpolate(", cal)
-		self.assertIn("CoreClockTestDelayCalibrationReport();", source)
-		self.assertIn("Delay two-point calibration: two CPU speeds measured", source)
+		self.assertIn("CoreClockTestDelayDivisors(pSample);", source)
+		self.assertEqual(source.count("CoreClockTestDelayCalibrationRecord();"), 2)
 		self.assertNotIn("DelayCalibrationInterpolate(", arm)
 		self.assertNotIn("DelayCalibrationInterpolate(", riscv)
 

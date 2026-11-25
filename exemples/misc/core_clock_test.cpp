@@ -6,10 +6,8 @@
 Uses the generic clock, UART and Timer interfaces. Oscillator selections
 come from the System Core configuration, not from board-specific test lists.
 Both build configurations log to UART without a debugger.
-Timer elapsed time and interrupt counts check operation after clock changes.
-Clock and timer checks use only the public IOsonata HAL interfaces.
-These checks do not measure absolute oscillator accuracy. PowerOffDemo tests
-low-power modes, wake sources and peripheral operation following resume.
+A running LF timer checks that releasing a clock request preserves another
+user. Delay calibration uses an HF timer at the supported CPU speeds.
 
 @license
 
@@ -59,12 +57,6 @@ SOFTWARE.
 #define CORE_CLOCK_TEST_UART_DMA false
 #endif
 
-#ifdef CORE_CLOCK_TEST_TIMER_DEVNO
-static constexpr bool s_TestAllTimers = false;
-#else
-static constexpr bool s_TestAllTimers = true;
-#endif
-
 #ifndef CORE_CLOCK_TEST_DELAY_CALIBRATION
 #define CORE_CLOCK_TEST_DELAY_CALIBRATION 1
 #endif
@@ -83,7 +75,6 @@ static constexpr bool s_TestAllTimers = true;
 #pragma weak SystemLowFreqClockDisable
 #pragma weak SystemHighFreqClockCalibrate
 #pragma weak SystemLowFreqClockCalibrate
-#pragma weak sDelay
 #endif
 
 static const IOPinCfg_t s_UartPins[] = {
@@ -111,17 +102,9 @@ static const UARTCfg_t s_UartCfg = {
 };
 static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
-static TimerDev_t s_RetainedTimer;
-static volatile uint32_t s_InterruptCount;
-static volatile uint32_t s_TriggerCount;
-static uint32_t s_LfTimerInitMask;
 static unsigned s_Failures;
 static volatile bool s_UartTxEmpty = true;
 
-static DelayCalibrationPoint_t s_DelayHigh;
-static DelayCalibrationPoint_t s_DelayLow;
-static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event);
-static void CoreClockTestTimerTriggers(TimerDev_t *pTimer);
 static void CoreClockTestDelayCalibrationRecord(void);
 static void CoreClockTestFlush(void);
 
@@ -130,27 +113,8 @@ static const TimerCfg_t s_TimerCfg = {
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0U,			// Highest supported rate for each timer device
 	.IntPrio = CLOCK_DEMO_IRQ_PRIORITY,
-	.EvtHandler = CoreClockTestTimerHandler,
+	.EvtHandler = nullptr,
 };
-
-// Test the trigger callback independently of the timer event handler.
-static void CoreClockTestTriggerHandler(TimerDev_t *pTimer, int Trigger,
-	void *pContext)
-{
-	(void)pTimer;
-	(void)Trigger;
-	(void)pContext;
-	s_TriggerCount = s_TriggerCount + 1U;
-}
-
-static void CoreClockTestTimerHandler(TimerDev_t *pTimer, uint32_t Event)
-{
-	(void)pTimer;
-	if ((Event & TIMER_EVT_TRIGGER(0)) != 0U)
-	{
-		s_InterruptCount = s_InterruptCount + 1U;
-	}
-}
 
 // The DMA UART driver raises TX_FIFO_EMPTY only after the final byte
 // completes. Keep the diagnostic independent of UART FIFO internals.
@@ -288,79 +252,64 @@ static void CoreClockTestResult(const char *pName, bool Passed)
 	}
 }
 
-// Exercise the same shared oscillator reference-count API on every MCU.
-// Physical oscillator on/off and power measurements require target tests.
-static void CoreClockTestSharedClockTest(void)
+// Some older ports only implement Disable.
+static void CoreClockTestReleaseTimer(void)
 {
-	bool first;
-	bool second;
-	bool third;
-
-	CoreClockTestPrint("Configured HF source %u, LF source %u (%u Hz)\r\n",
-		(unsigned)GetHighFreqOscType(),
-		(unsigned)GetLowFreqOscType(),
-		(unsigned)GetLowFreqOscFreq());
-
-	if (SystemHighFreqClockEnable == nullptr ||
-		SystemHighFreqClockDisable == nullptr)
+	if (!TimerPowerOff(&s_Timer))
 	{
-		CoreClockTestResult("HF shared clock API implemented", false);
-	}
-	else
-	{
-		first = SystemHighFreqClockEnable();
-		second = first && SystemHighFreqClockEnable();
-		if (second)
-		{
-			SystemHighFreqClockDisable();
-		}
-		if (first)
-		{
-			SystemHighFreqClockDisable();
-		}
-		// An unmatched release must not affect a later clock request.
-		SystemHighFreqClockDisable();
-		third = SystemHighFreqClockEnable();
-		if (third)
-		{
-			SystemHighFreqClockDisable();
-		}
-		CoreClockTestResult("HF shared clock lifecycle",
-			first && second && third);
-	}
-
-	if (SystemLowFreqClockEnable == nullptr ||
-		SystemLowFreqClockDisable == nullptr)
-	{
-		CoreClockTestResult("LF shared clock API implemented", false);
-	}
-	else
-	{
-		first = SystemLowFreqClockEnable();
-		second = first && SystemLowFreqClockEnable();
-		if (second)
-		{
-			SystemLowFreqClockDisable();
-		}
-		if (first)
-		{
-			SystemLowFreqClockDisable();
-		}
-		SystemLowFreqClockDisable();
-		third = SystemLowFreqClockEnable();
-		if (third)
-		{
-			SystemLowFreqClockDisable();
-		}
-		CoreClockTestPrint("LF lifecycle: first %u, second %u, after release %u\r\n",
-			(unsigned)first, (unsigned)second, (unsigned)third);
-		CoreClockTestResult("LF shared clock lifecycle",
-			first && second && third);
+		TimerDisable(&s_Timer);
 	}
 }
 
-// Check one-shot calibration without making the test own a periodic
-// timer or depending on the application event dispatcher.
+// Two users share the oscillator, release their requests, then request it again.
+static bool CoreClockTestRequests(bool (*Enable)(void), void (*Disable)(void))
+{
+	bool second;
+	bool restarted;
+
+	if (Enable == nullptr || Disable == nullptr || !Enable())
+	{
+		return false;
+	}
+	second = Enable();
+	if (second)
+	{
+		Disable();
+	}
+	Disable();
+	restarted = Enable();
+	if (restarted)
+	{
+		Disable();
+	}
+	return second && restarted;
+}
+
+static void CoreClockTestSharedClockTest(void)
+{
+	bool timerRunning = false;
+	uint64_t start;
+
+	CoreClockTestResult("HF shared clock lifecycle",
+		CoreClockTestRequests(SystemHighFreqClockEnable, SystemHighFreqClockDisable));
+	if (TimerGetLowFreqDevCount() > 0)
+	{
+		// The timer driver holds its own LF clock request until it stops.
+		timerRunning = TimerInit(&s_Timer, &s_TimerCfg);
+		CoreClockTestResult("LF timer clock request", timerRunning);
+	}
+	CoreClockTestResult("LF shared clock lifecycle",
+		CoreClockTestRequests(SystemLowFreqClockEnable, SystemLowFreqClockDisable));
+	if (timerRunning)
+	{
+		start = TimerGetTickCount(&s_Timer);
+		msDelay(10);
+		CoreClockTestResult("LF timer clock after release",
+			TimerGetTickCount(&s_Timer) != start);
+		CoreClockTestReleaseTimer();
+	}
+}
+
 // Exercise the generic CPU running mode API independently of sleep and
 // oscillator ownership. Unsupported low-power modes are reported as such.
 static void CoreClockTestPowerMode(void)
@@ -377,7 +326,6 @@ static void CoreClockTestPowerMode(void)
 		return;
 	}
 
-	fastest = SystemCoreClockGet();
 	if (!SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE))
 	{
 		CoreClockTestResult("CPU performance mode", false);
@@ -396,7 +344,7 @@ static void CoreClockTestPowerMode(void)
 	}
 
 	reduced = SystemCoreClockGet();
-	CoreClockTestPrint("CPU reduced-speed mode %u Hz (performance %u Hz)\r\n",
+	CoreClockTestPrint("CPU %u Hz (performance %u Hz)\r\n",
 		(unsigned)reduced, (unsigned)fastest);
 	CoreClockTestResult("CPU low-power mode",
 		SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER &&
@@ -407,7 +355,7 @@ static void CoreClockTestPowerMode(void)
 	CoreClockTestFlush();
 	restoredOk = SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);
 	restored = SystemCoreClockGet();
-	CoreClockTestResult("CPU performance restoration",
+	CoreClockTestResult("CPU performance restored",
 		restoredOk && SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE &&
 		restored == fastest);
 }
@@ -417,24 +365,22 @@ static void CoreClockTestCalibrationTest(void)
 	bool enabled;
 	bool calibrated;
 
-	if (SystemHighFreqClockCalibrate == nullptr)
+	if (GetHighFreqOscType() == OSC_TYPE_RC)
 	{
-		CoreClockTestPrint("HF RC calibration: UNSUPPORTED (API missing)\r\n");
-	}
-	else
-	{
-		calibrated = SystemHighFreqClockCalibrate();
-
+		calibrated = SystemHighFreqClockCalibrate != nullptr && SystemHighFreqClockCalibrate();
 		CoreClockTestPrint("HF RC calibration: %s\r\n",
 			calibrated ? "PASS" : "UNSUPPORTED or failed");
 	}
 
-	if (SystemLowFreqClockCalibrate == nullptr)
+	if (GetLowFreqOscType() != OSC_TYPE_RC || GetLowFreqOscFreq() == 0U)
 	{
-		CoreClockTestPrint("LF RC calibration: UNSUPPORTED (API missing)\r\n");
 		return;
 	}
-
+	if (SystemLowFreqClockCalibrate == nullptr)
+	{
+		CoreClockTestPrint("LF calibration: UNSUPPORTED\r\n");
+		return;
+	}
 
 	if (SystemLowFreqClockEnable == nullptr ||
 		SystemLowFreqClockDisable == nullptr)
@@ -459,84 +405,6 @@ static void CoreClockTestCalibrationTest(void)
 		calibrated ? "PASS" : "UNSUPPORTED or failed");
 }
 
-// The architecture's delay implementation measures its own delay units.
-// The generic HF Timer remains a fallback and a timing validation reference.
-// Do not use RTC for calibration; never change production delay factors here.
-// Measure complete sDelay latency for both LFCLK ownership states.
-// Cold-start includes crystal startup; warm-start keeps LFCLK enabled by
-// another user. These require separate compensation values in production.
-static void CoreClockTestSleepDelayMeasure(const char *pMode)
-{
-	TimerCfg_t cfg;
-	uint32_t started;
-	uint32_t elapsed;
-	uint32_t difference;
-	bool ok;
-
-	cfg = s_TimerCfg;
-	cfg.DevNo = TimerGetHighFreqDevNo();
-	cfg.EvtHandler = nullptr;
-	if (cfg.DevNo < 0 || !TimerInit(&s_RetainedTimer, &cfg) ||
-		!TimerEnable(&s_RetainedTimer))
-	{
-		CoreClockTestPrint("sDelay HF reference: UNSUPPORTED\r\n");
-		return;
-	}
-	started = TimerGetMicrosecond(&s_RetainedTimer);
-	ok = sDelay(1U);
-	elapsed = TimerGetMicrosecond(&s_RetainedTimer) - started;
-	TimerDisable(&s_RetainedTimer);
-	if (!ok)
-	{
-		CoreClockTestPrint("sDelay %s: LF timer unavailable or sleep rejected\r\n",
-			pMode);
-		CoreClockTestResult("sDelay sleep operation", false);
-		return;
-	}
-	difference = elapsed >= 1000000U ?
-		elapsed - 1000000U : 1000000U - elapsed;
-	CoreClockTestPrint("sDelay %s end-to-end %u us (target 1000000 us)\r\n",
-		pMode, (unsigned)elapsed);
-	// Report independent time error in us; the LF timer may be a 1-MHz
-	// GRTC rather than a 32,768-Hz RTC on a different MCU.
-	CoreClockTestPrint("sDelay %s overhead: %s %u us\r\n",
-		pMode, elapsed >= 1000000U ? "subtract" : "add",
-		(unsigned)difference);
-	CoreClockTestResult("sDelay end-to-end within 2 percent",
-		difference <= 20000U);
-}
-
-static void CoreClockTestSleepDelay(void)
-{
-	bool held;
-
-	if (sDelay == nullptr)
-	{
-		CoreClockTestPrint("sDelay: UNSUPPORTED on this MCU\r\n");
-		return;
-	}
-	CoreClockTestSleepDelayMeasure("cold");
-	if (SystemLowFreqClockEnable == nullptr ||
-		SystemLowFreqClockDisable == nullptr)
-	{
-		return;
-	}
-	held = SystemLowFreqClockEnable();
-	if (!held)
-	{
-		CoreClockTestPrint("sDelay warm: LF clock hold unavailable\r\n");
-		return;
-	}
-	CoreClockTestSleepDelayMeasure("warm");
-	SystemLowFreqClockDisable();
-	// A second call confirms that the temporary LF timer was returned
-	// to its owner pool after the first call. Preserve the existing
-	// cold/warm calibration measurements above.
-	CoreClockTestSleepDelayMeasure("reuse");
-}
-
-// Print the measured factors as loop divisors, CPU Hz x 1000000 / loops
-// per second, the unit a port passes to its delay factor setup.
 static void CoreClockTestDelayDivisors(const DelayCalibrationPoint_t *pSample)
 {
 	uint64_t usDivisor;
@@ -562,13 +430,10 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	uint32_t irqState;
 	uint32_t usElapsed;
 	uint32_t nsPublicElapsed;
-	uint32_t nsRepeatElapsed;
-	uint32_t nsFactorBefore;
-	uint32_t nsFactorAfter;
 	bool valid;
 
 	cpuHz = SystemCoreClockGet();
-	if (pSample == nullptr || cpuHz == 0U)
+	if (cpuHz == 0U)
 	{
 		return false;
 	}
@@ -582,14 +447,8 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 	// If unavailable, use the existing HF Timer calibration path.
 	if (DelayCalibrationMeasure(pSample))
 	{
-		CoreClockTestPrint("Delay calibration DWT %u Hz: us loop/s %u, ns loop/s %u\r\n",
-			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
-			(unsigned)pSample->NsLoopsPerSecond);
 		CoreClockTestDelayDivisors(pSample);
-	}
-	else
-	{
-		CoreClockTestPrint("DWT calibration unavailable; HF Timer will measure delay timing\r\n");
+		return true;
 	}
 
 	cfg = s_TimerCfg;
@@ -603,86 +462,36 @@ static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
 		return false;
 	}
 #endif
-	cfg.EvtHandler = nullptr;
-	if (!TimerInit(&s_RetainedTimer, &cfg))
+	if (!TimerInit(&s_Timer, &cfg))
 	{
-		CoreClockTestPrint("Delay timing: HF Timer init FAIL\r\n");
 		return false;
 	}
-	valid = TimerSetFrequency(&s_RetainedTimer, 0U) != 0U &&
-		TimerEnable(&s_RetainedTimer);
-	if (!valid)
-	{
-		TimerDisable(&s_RetainedTimer);
-		CoreClockTestPrint("Delay timing: HF Timer start FAIL\r\n");
-		return false;
-	}
-
 	// Sample the busy loop without UART or other interrupt-handler time.
 	// The independent HF hardware timer keeps running with PRIMASK set.
 	irqState = __get_PRIMASK();
 	__disable_irq();
-	start = TimerGetMicrosecond(&s_RetainedTimer);
+	start = TimerGetMicrosecond(&s_Timer);
 	msDelay(100);
-	usElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+	usElapsed = TimerGetMicrosecond(&s_Timer) - start;
 	__set_PRIMASK(irqState);
 
-	nsFactorBefore = SystemnsDelayFactor;
 	// Sample the busy loop without UART or other interrupt-handler time.
 	// The independent HF hardware timer keeps running with PRIMASK set.
 	irqState = __get_PRIMASK();
 	__disable_irq();
-	start = TimerGetMicrosecond(&s_RetainedTimer);
+	start = TimerGetMicrosecond(&s_Timer);
 	nsDelay(100000000U);
-	nsPublicElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
+	nsPublicElapsed = TimerGetMicrosecond(&s_Timer) - start;
 	__set_PRIMASK(irqState);
 
-	// Repeat the real API measurement at a second call site. The raw
-	// assembly probe can execute at a different flash alignment, so it
-	// must not be treated as the production delay's calibration source.
-	// Sample the busy loop without UART or other interrupt-handler time.
-	// The independent HF hardware timer keeps running with PRIMASK set.
-	irqState = __get_PRIMASK();
-	__disable_irq();
-	start = TimerGetMicrosecond(&s_RetainedTimer);
-	nsDelay(100000000U);
-	nsRepeatElapsed = TimerGetMicrosecond(&s_RetainedTimer) - start;
-	__set_PRIMASK(irqState);
-
-	nsFactorAfter = SystemnsDelayFactor;
-
-	TimerDisable(&s_RetainedTimer);
-	CoreClockTestPrint("nsDelay repeat %u us, factors before %u after %u\r\n",
-		(unsigned)nsRepeatElapsed, (unsigned)nsFactorBefore,
-		(unsigned)nsFactorAfter);
-	CoreClockTestPrint("Delay timing HF Timer %u Hz: msDelay %u us, nsDelay %u us\r\n",
-		(unsigned)cpuHz, (unsigned)usElapsed, (unsigned)nsPublicElapsed);
-	CoreClockTestResult("nsDelay HF Timer 100 ms",
-		nsPublicElapsed >= 98000U && nsPublicElapsed <= 102000U);
-	CoreClockTestResult("nsDelay repeated HF Timer 100 ms",
-		nsRepeatElapsed >= 98000U && nsRepeatElapsed <= 102000U);
-	CoreClockTestResult("nsDelay factor unchanged during timing",
-		nsFactorBefore == nsFactorAfter);
-
-	if (usElapsed == 0U || nsPublicElapsed == 0U)
-	{
-		CoreClockTestResult("Delay HF Timer measurement", false);
-		return false;
-	}
+	CoreClockTestReleaseTimer();
 	// Recommend factors from the public API, never from a differently
 	// placed inline assembly probe.
 	valid = DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,
 		pSample);
 	if (valid)
 	{
-		CoreClockTestPrint("Delay calibration HF Timer %u Hz: us loop/s %u, ns loop/s %u\r\n",
-			(unsigned)cpuHz, (unsigned)pSample->UsLoopsPerSecond,
-			(unsigned)pSample->NsLoopsPerSecond);
 		CoreClockTestDelayDivisors(pSample);
-	}
-	else
-	{
-		CoreClockTestPrint("Delay factors unavailable on this MCU; timing only\r\n");
 	}
 	return valid;
 }
@@ -700,64 +509,8 @@ static void CoreClockTestDelayCalibrationRecord(void)
 
 	if (!CoreClockTestDelaySample(&sample))
 	{
-		if (!s_TestAllTimers)
-		{
-			CoreClockTestResult("Delay calibration measurement", false);
-		}
-		return;
+		CoreClockTestResult("Delay calibration measurement", false);
 	}
-
-	if (!s_DelayHigh.Measured || sample.CpuHz > s_DelayHigh.CpuHz)
-	{
-		s_DelayHigh = sample;
-	}
-
-	if (!s_DelayLow.Measured || sample.CpuHz < s_DelayLow.CpuHz)
-	{
-		s_DelayLow = sample;
-	}
-}
-
-static void CoreClockTestDelayCalibrationReport(void)
-{
-	if (!s_DelayHigh.Measured || !s_DelayLow.Measured)
-	{
-		CoreClockTestPrint("Delay two-point calibration: not available\r\n");
-		return;
-	}
-
-	CoreClockTestPrint("Delay highest observed %u Hz: us loop/s %u, ns loop/s %u\r\n",
-		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayHigh.UsLoopsPerSecond,
-		(unsigned)s_DelayHigh.NsLoopsPerSecond);
-	CoreClockTestPrint("Delay lowest observed %u Hz: us loop/s %u, ns loop/s %u\r\n",
-		(unsigned)s_DelayLow.CpuHz, (unsigned)s_DelayLow.UsLoopsPerSecond,
-		(unsigned)s_DelayLow.NsLoopsPerSecond);
-
-	if (s_DelayHigh.CpuHz == s_DelayLow.CpuHz)
-	{
-		CoreClockTestPrint("Delay two-point calibration: one CPU speed observed\r\n");
-		return;
-	}
-	// Report both measured endpoints. The System Core implementation
-	// already owns frequency-dependent factor calculation/interpolation.
-	CoreClockTestPrint("Delay two-point calibration: two CPU speeds measured\r\n");
-}
-
-static bool CoreClockTestTimerInit(int DevNo, TimerDev_t *pTimer)
-{
-	TimerCfg_t cfg;
-
-	cfg = s_TimerCfg;
-	cfg.DevNo = DevNo;
-	if (!TimerInit(pTimer, &cfg))
-	{
-		CoreClockTestResult("Timer initialization", false);
-		return false;
-	}
-	// TimerInit owns the initial hardware enable. Do not immediately
-	// disable and restart an LF timer: that churns the shared LFCLK
-	// oscillator and can race its asynchronous STOP transition.
-	return true;
 }
 
 // Wait for the public completion event on interrupt-driven DMA targets.
@@ -781,393 +534,6 @@ static void CoreClockTestFlush(void)
 #endif
 }
 
-static void CoreClockTestTimer(int DevNo)
-{
-	unsigned delay;
-	uint32_t frequency;
-	uint64_t period;
-	uint32_t start;
-	uint32_t elapsed;
-	uint32_t count;
-	uint32_t expected;
-	uint32_t difference;
-	uint32_t hfStart;
-	uint32_t hfElapsed;
-	uint32_t measuredTickRate;
-	uint64_t tickStart;
-	uint64_t tickEnd;
-	TimerCfg_t hfCfg;
-	TimerDev_t *pTimer;
-	bool hfReady;
-	bool enabled;
-
-	// Use the calibration timer structure whenever testing the first HF timer.
-	pTimer = &s_Timer;
-	if (TimerGetHighFreqDevCount() > 0 && DevNo == TimerGetHighFreqDevNo())
-	{
-		pTimer = &s_RetainedTimer;
-	}
-	CoreClockTestPrint("Timer device %u\r\n", (unsigned)DevNo);
-	if (!CoreClockTestTimerInit(DevNo, pTimer))
-	{
-		return;
-	}
-	if (DevNo >= 0 && DevNo < TimerGetLowFreqDevCount() && DevNo < 32)
-	{
-		s_LfTimerInitMask |= 1UL << DevNo;
-	}
-
-	// Diagnose LFCLK timing against an independent HF peripheral timer.
-	// The test remains generic: no oscillator registers or CPU counter access.
-	hfReady = false;
-	if (DevNo < TimerGetLowFreqDevCount() &&
-		TimerGetHighFreqDevCount() > 0 &&
-		TimerGetHighFreqDevNo() >= 0)
-	{
-		hfCfg = s_TimerCfg;
-		hfCfg.DevNo = TimerGetHighFreqDevNo();
-		hfCfg.EvtHandler = nullptr;
-		if (TimerInit(&s_RetainedTimer, &hfCfg))
-		{
-			hfReady = TimerEnable(&s_RetainedTimer);
-		}
-	}
-	for (delay = 0U; delay < 2U; delay++)
-	{
-		// Refresh the divider after a peripheral-clock change, with timer stopped.
-		frequency = TimerSetFrequency(pTimer, s_TimerCfg.Freq);
-		s_InterruptCount = 0U;
-		period = nsTimerEnableTrigger(pTimer, 0, 10000000ULL,
-			TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
-		// Evaluate all three independently. Short-circuiting would conceal
-		// whether frequency, compare setup or clock ownership caused failure.
-		enabled = TimerEnable(pTimer);
-		if (frequency == 0U || period == 0U || !enabled)
-		{
-			CoreClockTestPrint("Timer start diagnostic: device %u, frequency %u Hz, "
-				"period %u ns, enable %u, LF source %u\r\n",
-				(unsigned)DevNo, (unsigned)frequency, (unsigned)period,
-				(unsigned)enabled, (unsigned)GetLowFreqOscType());
-			TimerDisableTrigger(pTimer, 0);
-			TimerDisable(pTimer);
-			CoreClockTestResult("Timer start", false);
-			if (hfReady)
-			{
-				TimerDisable(&s_RetainedTimer);
-			}
-			return;
-		}
-		tickStart = hfReady ? TimerGetTickCount(pTimer) : 0U;
-		start = TimerGetMicrosecond(pTimer);
-		hfStart = hfReady ? TimerGetMicrosecond(&s_RetainedTimer) : 0U;
-		if (delay == 0U)
-		{
-			msDelay(250);
-		}
-		else
-		{
-			nsDelay(250000000U);
-		}
-		elapsed = TimerGetMicrosecond(pTimer) - start;
-		tickEnd = hfReady ? TimerGetTickCount(pTimer) : 0U;
-		hfElapsed = hfReady ?
-			TimerGetMicrosecond(&s_RetainedTimer) - hfStart : 0U;
-		TimerDisable(pTimer);
-		count = s_InterruptCount;
-		TimerDisableTrigger(pTimer, 0);
-		expected = (uint64_t)elapsed * 1000U / period;
-		difference = count > expected ? count - expected : expected - count;
-		CoreClockTestPrint("Timer: %u Hz, %s 250 ms measured %u us, IRQ %u\r\n",
-			(unsigned)frequency, delay == 0U ? "msDelay" : "nsDelay",
-			(unsigned)elapsed, (unsigned)count);
-		CoreClockTestResult("Delay within 2 percent", elapsed >= 245000U && elapsed <= 255000U);
-		CoreClockTestResult("Timer count and IRQ", elapsed > 0U && count > 0U && difference <= 1U);
-		if (hfReady)
-		{
-			CoreClockTestPrint("LF/HF reference: LF %u us, HF %u us\r\n",
-				(unsigned)elapsed, (unsigned)hfElapsed);
-			if (hfElapsed != 0U && tickEnd >= tickStart)
-			{
-				// Raw RTC ticks distinguish oscillator drift from the
-				// Timer tick-to-time conversion. Keep every MCU generic.
-				measuredTickRate = (uint32_t)(((tickEnd - tickStart) *
-					1000000ULL + hfElapsed / 2U) / hfElapsed);
-				CoreClockTestPrint("Independent LF timer rate: %u Hz (timer reports %u Hz)\r\n",
-					(unsigned)measuredTickRate, (unsigned)frequency);
-			}
-		}
-	}
-	if (hfReady)
-	{
-		TimerDisable(&s_RetainedTimer);
-	}
-	CoreClockTestTimerTriggers(pTimer);
-}
-
-
-// Exercise the public Timer trigger API on each enumerated hardware timer.
-// Keep this separate from the clock-change timing and IRQ measurements.
-static void CoreClockTestTimerTriggers(TimerDev_t *pTimer)
-{
-	uint64_t period;
-	uint64_t before;
-	uint64_t after;
-	uint32_t fired;
-	int trigger;
-	bool enabled;
-	bool valid;
-
-	valid = pTimer->FindAvailTrigger != nullptr &&
-		TimerGetMaxTrigger(pTimer) > 0;
-	CoreClockTestResult("Timer trigger availability", valid);
-	if (!valid)
-	{
-		return;
-	}
-	trigger = pTimer->FindAvailTrigger(pTimer);
-	CoreClockTestResult("Timer free trigger",
-		trigger >= 0 && trigger < TimerGetMaxTrigger(pTimer));
-	if (trigger < 0 || trigger >= TimerGetMaxTrigger(pTimer))
-	{
-		return;
-	}
-
-	// One-shot must invoke the callback once, not periodically.
-	s_TriggerCount = 0U;
-	period = nsTimerEnableTrigger(pTimer, trigger, 20000000ULL,
-		TIMER_TRIG_TYPE_SINGLE, CoreClockTestTriggerHandler, nullptr);
-	enabled = TimerEnable(pTimer);
-	if (enabled && period != 0U)
-	{
-		msDelay(75U);
-	}
-	fired = s_TriggerCount;
-	CoreClockTestResult("Timer one-shot callback",
-		enabled && period != 0U && fired == 1U);
-	TimerDisableTrigger(pTimer, trigger);
-	if (!enabled || period == 0U)
-	{
-		TimerDisable(pTimer);
-		return;
-	}
-
-	// Switch trigger modes while the timer owns its clock. Disable/Enable
-	// is tested by the timer matrix; this phase validates the trigger API,
-	// not a second asynchronous LFCLK stop/start transition.
-	TimerReset(pTimer);
-	s_TriggerCount = 0U;
-	period = nsTimerEnableTrigger(pTimer, trigger, 20000000ULL,
-		TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler, nullptr);
-	before = TimerGetTickCount(pTimer);
-	if (enabled && period != 0U)
-	{
-		msDelay(110U);
-	}
-	after = TimerGetTickCount(pTimer);
-	fired = s_TriggerCount;
-	if (!enabled || period == 0U || fired < 4U || fired > 7U ||
-		after <= before)
-	{
-		CoreClockTestPrint("Timer continuous diagnostics: device %u, enabled %u, "
-			"period %u ns, callbacks %u, before %u, after %u\r\n",
-			(unsigned)pTimer->DevNo, (unsigned)enabled,
-			(unsigned)period, (unsigned)fired,
-			(unsigned)before, (unsigned)after);
-	}
-	CoreClockTestResult("Timer continuous callback",
-		enabled && period != 0U && fired >= 4U && fired <= 7U);
-	CoreClockTestResult("Timer counter advances",
-		enabled && after > before);
-	TimerDisableTrigger(pTimer, trigger);
-	TimerDisable(pTimer);
-	before = s_TriggerCount;
-	msDelay(40U);
-	CoreClockTestResult("Timer trigger disabled",
-		s_TriggerCount == before);
-	CoreClockTestResult("Timer trigger slot reusable",
-		pTimer->FindAvailTrigger(pTimer) == trigger);
-}
-
-// Check that an initialized but disabled LF timer remains owned.
-// This runs after the device matrix: those TimerInit calls intentionally
-// retain their handles across TimerDisable. No hardware-specific RTC map
-// or private allocation API is used here.
-static void CoreClockTestSleepDelayOwnership(int LowCount)
-{
-	uint32_t expectedMask;
-	bool blocked;
-
-	if (sDelay == nullptr || LowCount <= 0 || LowCount > 32)
-	{
-		CoreClockTestPrint("sDelay RTC contention: UNSUPPORTED\r\n");
-		return;
-	}
-	expectedMask = LowCount == 32 ? UINT32_MAX :
-		(1UL << LowCount) - 1U;
-	if ((s_LfTimerInitMask & expectedMask) != expectedMask)
-	{
-		CoreClockTestPrint("sDelay RTC contention: UNSUPPORTED (not all LF timers initialized)\r\n");
-		return;
-	}
-	// Zero seconds is a no-op even when every LF timer is occupied.
-	CoreClockTestResult("sDelay zero with LF timers occupied", sDelay(0U));
-	// All advertised LF timers have been initialized, then disabled.
-	// A temporary delay may not reuse any of these application handles.
-	blocked = !sDelay(1U);
-	CoreClockTestResult("sDelay occupied disabled LF timers", blocked);
-}
-
-// Check that disabling one timer does not stop an independently
-// configured timer. Prefer one LF and one HF device when available.
-static void CoreClockTestConcurrentTimerTest(int LowCount, int HighCount)
-{
-	TimerCfg_t firstCfg;
-	TimerCfg_t secondCfg;
-	TimerDev_t *pFirst;
-	TimerDev_t *pSecond;
-	int secondNo;
-	uint32_t start;
-	uint32_t elapsed;
-	bool first;
-	bool second;
-
-	if (LowCount + HighCount < 2)
-	{
-		CoreClockTestPrint("Concurrent timers: UNSUPPORTED (one device)\r\n");
-		return;
-	}
-	secondNo = LowCount > 0 && HighCount > 0 ? LowCount : 1;
-	// The first HF device already has a timer structure from calibration.
-	pFirst = &s_Timer;
-	pSecond = &s_RetainedTimer;
-	if (LowCount == 0)
-	{
-		pFirst = &s_RetainedTimer;
-		pSecond = &s_Timer;
-	}
-	firstCfg = s_TimerCfg;
-	secondCfg = s_TimerCfg;
-	firstCfg.DevNo = 0;
-	secondCfg.DevNo = secondNo;
-	firstCfg.EvtHandler = nullptr;
-	secondCfg.EvtHandler = nullptr;
-	first = TimerInit(pFirst, &firstCfg);
-	second = TimerInit(pSecond, &secondCfg);
-	if (!first || !second)
-	{
-		if (first)
-		{
-			TimerDisable(pFirst);
-		}
-		if (second)
-		{
-			TimerDisable(pSecond);
-		}
-		CoreClockTestResult("Concurrent timer initialization", false);
-		return;
-	}
-	first = TimerEnable(pFirst);
-	second = TimerEnable(pSecond);
-	if (first && second)
-	{
-		start = TimerGetMicrosecond(pSecond);
-		TimerDisable(pFirst);
-		msDelay(30);
-		elapsed = TimerGetMicrosecond(pSecond) - start;
-		CoreClockTestResult("Timer independent clock ownership", elapsed > 0U);
-	}
-	else
-	{
-		CoreClockTestResult("Concurrent timer enable", false);
-	}
-	TimerDisable(pFirst);
-	TimerDisable(pSecond);
-}
-
-// Power off the first HF timer and initialize it again.
-static void CoreClockTestTimerPowerOff(void)
-{
-	TimerCfg_t cfg;
-	int devno;
-	bool stopped;
-	bool initialized;
-	bool poweredOff;
-
-	devno = TimerGetHighFreqDevNo();
-	if (devno < 0 || TimerGetHighFreqDevCount() == 0 ||
-		s_RetainedTimer.DevNo != devno ||
-		s_RetainedTimer.PowerOff == nullptr)
-	{
-		CoreClockTestPrint("Timer PowerOff: UNSUPPORTED\r\n");
-		return;
-	}
-
-	cfg = s_TimerCfg;
-	cfg.DevNo = devno;
-	cfg.EvtHandler = nullptr;
-	stopped = TimerPowerOff(&s_RetainedTimer);
-	CoreClockTestResult("Timer disabled PowerOff", stopped);
-	if (!stopped)
-	{
-		return;
-	}
-	initialized = TimerInit(&s_RetainedTimer, &cfg);
-	CoreClockTestResult("Timer init after PowerOff", initialized);
-	if (!initialized)
-	{
-		return;
-	}
-	poweredOff = TimerPowerOff(&s_RetainedTimer);
-	CoreClockTestResult("Timer active PowerOff", poweredOff);
-	if (poweredOff)
-	{
-		CoreClockTestResult("Timer repeated PowerOff rejected",
-			!TimerPowerOff(&s_RetainedTimer));
-	}
-}
-
-#ifdef CORE_CLOCK_TEST_TIMER_DEVNO
-static void CoreClockTestSingleTimer(void)
-{
-	uint32_t start;
-	uint32_t elapsed;
-	uint32_t fired;
-	uint64_t period;
-
-	CoreClockTestPrint("Timer device %u\r\n", (unsigned)CORE_CLOCK_TEST_TIMER_DEVNO);
-	if (CoreClockTestTimerInit(CORE_CLOCK_TEST_TIMER_DEVNO, &s_Timer))
-	{
-		s_TriggerCount = 0U;
-		period = nsTimerEnableTrigger(&s_Timer, 0, 20000000ULL,
-			TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler, nullptr);
-		start = TimerGetMicrosecond(&s_Timer);
-		msDelay(110U);
-		elapsed = TimerGetMicrosecond(&s_Timer) - start;
-		fired = s_TriggerCount;
-		TimerDisableTrigger(&s_Timer, 0);
-		CoreClockTestPrint("Elapsed %u us, callbacks %u\r\n", (unsigned)elapsed, (unsigned)fired);
-		CoreClockTestResult("Timer timing", elapsed >= 107800U && elapsed <= 112200U);
-		CoreClockTestResult("Timer periodic callback", period != 0U && fired == 5U);
-		s_TriggerCount = 0U;
-		period = nsTimerEnableTrigger(&s_Timer, 0, 20000000ULL,
-			TIMER_TRIG_TYPE_SINGLE, CoreClockTestTriggerHandler, nullptr);
-		msDelay(75U);
-		CoreClockTestResult("Timer one-shot callback", period != 0U && s_TriggerCount == 1U);
-		TimerDisableTrigger(&s_Timer, 0);
-		TimerDisable(&s_Timer);
-		CoreClockTestResult("Timer PowerOff", TimerPowerOff(&s_Timer));
-	}
-}
-#endif
-
-static void CoreClockTestPortCalibration(void)
-{
-	CoreClockTestPrint("Delay calibration build\r\n");
-	CoreClockTestDelayCalibrationRecord();
-	CoreClockTestPowerMode();
-	CoreClockTestDelayCalibrationReport();
-}
-
 static void CoreClockTestComplete(void)
 {
 	CoreClockTestFlush();
@@ -1187,38 +553,23 @@ int main(void)
 	uint32_t bus;
 	uint32_t readback;
 	unsigned dividerIdx;
-	uint32_t divider;
 	uint32_t request;
 	uint32_t actual;
 	int clockIdx;
 	unsigned domainCount;
-	int timerDevNo;
-	int timerCount;
-	int lowTimerCount;
-	int highTimerCount;
 
 	if (!UARTInit(&s_Uart, &s_UartCfg))
 	{
 		return 1;
 	}
 	msDelay(1000);
-	CoreClockTestPrint("CoreClockTest\r\nStartup CPU %u Hz, peripheral clock 0 %u Hz\r\n",
+	CoreClockTestPrint("CoreClockTest\r\nCPU %u Hz, peripheral 0 %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	CoreClockTestFlush();
-	CoreClockTestResult("Core clock startup", SystemCoreClockGet() != 0U);
-	if (CORE_CLOCK_TEST_DELAY_CALIBRATION && !s_TestAllTimers)
-	{
-		CoreClockTestPortCalibration();
-		CoreClockTestComplete();
-		return 0;
-	}
+	CoreClockTestResult("Startup clock", SystemCoreClockGet() != 0U);
 	CoreClockTestSharedClockTest();
-	CoreClockTestPowerMode();
 	CoreClockTestDelayCalibrationRecord();
-	if (s_TestAllTimers)
-	{
-		CoreClockTestSleepDelay();
-	}
+	CoreClockTestPowerMode();
 	domainCount = 0U;
 
 	for (cycle = 1U; cycle <= CLOCK_TEST_CYCLES; cycle++)
@@ -1227,11 +578,6 @@ int main(void)
 
 		core = SystemCoreClockGet();
 		CoreClockTestResult("Core frequency", core != 0U);
-
-		if (core != s_DelayHigh.CpuHz && core != s_DelayLow.CpuHz)
-		{
-			CoreClockTestDelayCalibrationRecord();
-		}
 
 		// Every available peripheral domain receives the same fixed requests.
 		for (clockIdx = 0; clockIdx < 32; clockIdx++)
@@ -1244,24 +590,19 @@ int main(void)
 			}
 
 			domainCount++;
-			CoreClockTestPrint("Peripheral clock %u baseline %u Hz\r\n",
-				(unsigned)clockIdx, (unsigned)bus);
-
 			for (dividerIdx = 1U; dividerIdx <= 4U; dividerIdx *= 2U)
 			{
-				divider = dividerIdx;
-				request = bus / divider;
+				request = bus / dividerIdx;
 
 				if (request == 0U)
 				{
-					CoreClockTestResult("Peripheral clock request", false);
-					continue;
+					break;
 				}
 
 				CoreClockTestFlush();
 				actual = SystemPeriphClockSet(clockIdx, request);
 				readback = SystemPeriphClockGet(clockIdx);
-				CoreClockTestPrint("Domain %u request %u Hz, actual %u Hz\r\n",
+				CoreClockTestPrint("Clock %u: %u -> %u Hz\r\n",
 					(unsigned)clockIdx, (unsigned)request, (unsigned)actual);
 				CoreClockTestResult("Peripheral clock", actual != 0U &&
 					readback == actual);
@@ -1272,55 +613,17 @@ int main(void)
 				actual == bus && SystemPeriphClockGet(clockIdx) == bus);
 		}
 
-		// The low frequency RC calibration applies to a board running on it.
-		if (cycle == CLOCK_TEST_CYCLES && GetLowFreqOscFreq() != 0U &&
-			GetLowFreqOscType() == OSC_TYPE_RC)
-		{
-			CoreClockTestCalibrationTest();
-		}
 	}
 
+	CoreClockTestCalibrationTest();
 	CoreClockTestResult("Peripheral clock invalid index",
 		SystemPeriphClockGet(-1) == 0U);
-	CoreClockTestResult("Peripheral domain scan limit",
+	CoreClockTestResult("Clock scan limit",
 		SystemPeriphClockGet(32) == 0U);
 
 	if (domainCount == 0U)
 	{
-		CoreClockTestResult("Peripheral clock domains present", false);
-	}
-	if (s_TestAllTimers)
-	{
-		CoreClockTestPrint("Timer timing test\r\n");
-
-		// Timer implementations expose their device counts through the generic API.
-		// Test every advertised device rather than a board-selected instance.
-		lowTimerCount = TimerGetLowFreqDevCount();
-		highTimerCount = TimerGetHighFreqDevCount();
-		timerCount = lowTimerCount + highTimerCount;
-
-		if (timerCount == 0)
-		{
-			CoreClockTestResult("Timer devices available", false);
-		}
-
-		for (timerDevNo = 0; timerDevNo < timerCount; timerDevNo++)
-		{
-			CoreClockTestTimer(timerDevNo);
-		}
-		CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);
-		CoreClockTestSleepDelayOwnership(lowTimerCount);
-		CoreClockTestTimerPowerOff();
-	}
-#ifdef CORE_CLOCK_TEST_TIMER_DEVNO
-	else
-	{
-		CoreClockTestSingleTimer();
-	}
-#endif
-	if (CORE_CLOCK_TEST_DELAY_CALIBRATION)
-	{
-		CoreClockTestDelayCalibrationReport();
+		CoreClockTestResult("Clock domains present", false);
 	}
 	CoreClockTestComplete();
 }

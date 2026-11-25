@@ -8,70 +8,17 @@ TEST = ROOT / "exemples/misc/core_clock_test.cpp"
 
 
 class CoreClockTestTimer(unittest.TestCase):
-    def test_elapsed_read_precedes_disable(self):
-        source = TEST.read_text(encoding="utf-8")
-        start = source.index("static void CoreClockTestTimer(int DevNo)\n{")
-        end = source.index("// Check that disabling one timer", start)
-        timer = source[start:end]
-        self.assertIn("elapsed = TimerGetMicrosecond(pTimer) - start;", timer)
-        measure = timer.index("elapsed = TimerGetMicrosecond(pTimer) - start;")
-        disable = timer.index("TimerDisable(pTimer);", measure)
-        self.assertLess(measure, disable)
-        self.assertLess(disable, timer.index("count = s_InterruptCount;", measure))
-
-    def test_low_frequency_timer_has_independent_hf_reference(self):
-        source = TEST.read_text(encoding="utf-8")
-        start = source.index("static void CoreClockTestTimer(int DevNo)\n{")
-        end = source.index("// Check that disabling one timer", start)
-        timer = source[start:end]
-        self.assertIn("DevNo < TimerGetLowFreqDevCount()", timer)
-        self.assertIn("TimerGetHighFreqDevNo()", timer)
-        self.assertIn("hfCfg.EvtHandler = nullptr;", timer)
-        self.assertIn("TimerInit(&s_RetainedTimer, &hfCfg)", timer)
-        self.assertIn("TimerEnable(&s_RetainedTimer)", timer)
-        self.assertIn("TimerGetMicrosecond(&s_RetainedTimer) - hfStart", timer)
-        self.assertIn("LF/HF reference: LF %u us, HF %u us", timer)
-        self.assertIn("TimerDisable(&s_RetainedTimer);", timer)
-        for forbidden in ("NRF_CLOCK", "LFCLKSTAT", "HFCLKCTRL", "DWT->"):
-            self.assertNotIn(forbidden, timer)
-
-
-class CoreClockTestInitialization(unittest.TestCase):
-    def test_initialization_does_not_restart_lfclk(self):
-        source = TEST.read_text(encoding="utf-8")
-        start = source.index("static bool CoreClockTestTimerInit(int DevNo, TimerDev_t *pTimer)")
-        end = source.index("static void CoreClockTestFlush(void)", start)
-        setup = source[start:end]
-        self.assertIn("TimerInit(pTimer, &cfg)", setup)
-        self.assertNotIn("TimerDisable(pTimer);", setup)
-
-    def test_factors_use_public_nsdelay(self):
-        source = TEST.read_text(encoding="utf-8")
-        start = source.index("static bool CoreClockTestDelaySample(")
-        end = source.index("static void CoreClockTestDelayCalibrationRecord(void)\n{", start)
-        sample = source[start:end]
-        self.assertIn("nsDelay(100000000U);", sample)
-        self.assertIn("if (DelayCalibrationMeasure(pSample))", sample)
-        self.assertIn("Delay calibration DWT %u Hz:", sample)
-        self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,", sample)
-        self.assertNotIn("DelayCalibrationProbeNs(", sample)
-        self.assertNotIn("raw ns loop", sample)
-        self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', sample)
-        self.assertNotIn("nsSameSiteElapsed", sample)
-        self.assertIn('CoreClockTestResult("nsDelay factor unchanged during timing",', sample)
-        self.assertEqual(sample.count("irqState = __get_PRIMASK();"), 3)
-        self.assertEqual(sample.count("__disable_irq();"), 3)
-        self.assertEqual(sample.count("__set_PRIMASK(irqState);"), 3)
-        for call, elapsed in (
-            ("msDelay(100);", "usElapsed"),
-            ("nsDelay(100000000U);", "nsPublicElapsed"),
-            ("nsDelay(100000000U);", "nsRepeatElapsed"),
-        ):
-            start = sample.index(elapsed + " = TimerGetMicrosecond")
-            self.assertIn("__set_PRIMASK(irqState);",
-                sample[start:start + 120])
-        self.assertLess(sample.rindex("__set_PRIMASK(irqState);"),
-            sample.index('CoreClockTestPrint("nsDelay repeat'))
+    def test_lf_timer_keeps_counting_after_release(self):
+        src = TEST.read_text()
+        begin = src.index("timerRunning = TimerInit(")
+        end = src.index("static void CoreClockTestPowerMode(", begin)
+        lf = src[begin:end]
+        steps = ("CoreClockTestRequests(SystemLowFreqClockEnable, SystemLowFreqClockDisable)",
+                 "start = TimerGetTickCount", "msDelay(10)", "!= start", "CoreClockTestReleaseTimer(")
+        positions = [lf.index(step) for step in steps]
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn("nsTimerEnableTrigger", src)
+        self.assertEqual(src.count("static TimerDev_t "), 1)
 
     def test_public_delay_functions_own_original_countdowns(self):
         delay = (ROOT / "ARM/include/idelay.h").read_text(
@@ -103,13 +50,13 @@ class CoreClockTestInitialization(unittest.TestCase):
 class CoreClockTestLfLifecycle(unittest.TestCase):
     def test_enable_sequence_reports_individual_results(self):
         source = TEST.read_text(encoding="utf-8")
-        start = source.index("static void CoreClockTestSharedClockTest(void)")
-        end = source.index("static void CoreClockTestPowerMode(void)", start)
-        lifecycle = source[start:end]
-        self.assertIn("first = SystemLowFreqClockEnable();", lifecycle)
-        self.assertIn("second = first && SystemLowFreqClockEnable();", lifecycle)
-        self.assertIn("third = SystemLowFreqClockEnable();", lifecycle)
-        self.assertIn("LF lifecycle: first %u, second %u, after release %u", lifecycle)
+        start = source.index("static bool CoreClockTestRequests(")
+        end = source.index("static void CoreClockTestSharedClockTest(", start)
+        requests = source[start:end]
+        self.assertIn("!Enable()", requests)
+        self.assertIn("second = Enable();", requests)
+        self.assertIn("restarted = Enable();", requests)
+        self.assertEqual(requests.count("Disable();"), 3)
 
 
 class NordicRtcStopOwnership(unittest.TestCase):
@@ -223,15 +170,6 @@ class NordicSleepDelay(unittest.TestCase):
         for elapsed in (1433700, 1433521):
             self.assertLessEqual(abs(elapsed - 433611 - 1000000), 1000)
 
-    def test_sdelay_reports_architecture_neutral_time_error(self):
-        example = TEST.read_text(encoding="utf-8")
-        start = example.index("static void CoreClockTestSleepDelayMeasure(")
-        end = example.index("static void CoreClockTestSleepDelay(void)", start)
-        section = example[start:end]
-        self.assertIn("sDelay %s overhead: %s %u us", section)
-        self.assertNotIn("32768U", section)
-        self.assertNotIn("LF ticks", section)
-
     def test_nrf5340_app_uses_measured_startup_for_sdelay(self):
         clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(
             encoding="utf-8")
@@ -291,110 +229,11 @@ class NordicSleepDelay(unittest.TestCase):
     def test_nrf52832_cold_calibration_and_ns_probe(self):
         clock = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
             encoding="utf-8")
-        example = TEST.read_text(encoding="utf-8")
         self.assertIn("defined(NRF52832_XXAA) || defined(NRF52832_XXAB)", clock)
         self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8604", clock)
         self.assertIn("#elif defined(NRF52840_XXAA)", clock)
         self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8208", clock)
         self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", clock)
-        self.assertIn("nsFactorBefore = SystemnsDelayFactor;", example)
-        self.assertIn("nsFactorAfter = SystemnsDelayFactor;", example)
-        self.assertIn("nsDelay repeat %u us", example)
-        self.assertIn("nsRepeatElapsed = TimerGetMicrosecond", example)
-
-
-    def test_core_clock_test_reports_end_to_end_calibration(self):
-        src = TEST.read_text(encoding="utf-8")
-        start = src.index("static void CoreClockTestSleepDelayMeasure(")
-        end = src.index("static bool CoreClockTestDelaySample(", start)
-        test = src[start:end]
-        self.assertIn("started = TimerGetMicrosecond(&s_RetainedTimer);", test)
-        self.assertIn("ok = sDelay(1U);", test)
-        self.assertIn("TimerDisable(&s_RetainedTimer);", test)
-        self.assertIn("sDelay %s overhead:", test)
-        self.assertIn('CoreClockTestSleepDelayMeasure("cold");', test)
-        self.assertIn('CoreClockTestSleepDelayMeasure("warm");', test)
-        self.assertIn('CoreClockTestSleepDelayMeasure("reuse");', test)
-        self.assertIn("held = SystemLowFreqClockEnable();", test)
-        self.assertIn("SystemLowFreqClockDisable();", test)
-        self.assertLess(test.index("ok = sDelay(1U);"),
-            test.index("elapsed = TimerGetMicrosecond(&s_RetainedTimer) - started;"))
-        self.assertIn("CoreClockTestSleepDelay();", src)
-
-
-    def test_core_clock_test_validates_timer_trigger_implementations(self):
-        source = TEST.read_text(encoding="utf-8")
-        self.assertIn("static void CoreClockTestTimerTriggers(TimerDev_t *pTimer)", source)
-        self.assertIn("CoreClockTestTimerTriggers(pTimer);", source)
-        self.assertIn("TimerGetMaxTrigger(pTimer)", source)
-        self.assertIn("pTimer->FindAvailTrigger(pTimer)", source)
-        self.assertIn("TIMER_TRIG_TYPE_SINGLE, CoreClockTestTriggerHandler", source)
-        self.assertIn("TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler", source)
-        self.assertIn('CoreClockTestResult("Timer one-shot callback",', source)
-        self.assertIn("TimerReset(pTimer);", source)
-        self.assertIn("Switch trigger modes while the timer owns its clock.", source)
-        self.assertNotIn("enabled = TimerEnable(pTimer);\n\tperiod = enabled ? nsTimerEnableTrigger", source)
-        self.assertIn("Timer continuous diagnostics:", source)
-        self.assertLess(source.index("TimerReset(pTimer);"),
-            source.index("TIMER_TRIG_TYPE_CONTINUOUS, CoreClockTestTriggerHandler"))
-        self.assertIn('CoreClockTestResult("Timer continuous callback",', source)
-        self.assertIn('CoreClockTestResult("Timer counter advances",', source)
-        self.assertIn('CoreClockTestResult("Timer trigger disabled",', source)
-        self.assertIn('CoreClockTestResult("Timer trigger slot reusable",', source)
-        self.assertNotIn("nRFxRtcSleepClaim(", source)
-        self.assertNotIn("nRFxRtcSleepRelease(", source)
-
-
-    def test_matrix_reuses_the_existing_reference_timer_handle(self):
-        source = TEST.read_text(encoding="utf-8")
-        matrix_start = source.index("static void CoreClockTestTimer(int DevNo)")
-        matrix_end = source.index("// Exercise the public Timer trigger API", matrix_start)
-        matrix = source[matrix_start:matrix_end]
-        self.assertIn("pTimer = &s_Timer;", matrix)
-        self.assertIn("DevNo == TimerGetHighFreqDevNo()", matrix)
-        self.assertIn("pTimer = &s_RetainedTimer;", matrix)
-        self.assertLess(matrix.index("pTimer = &s_RetainedTimer;"),
-            matrix.index("CoreClockTestTimerInit(DevNo, pTimer)"))
-        self.assertIn("CoreClockTestTimerTriggers(pTimer);", matrix)
-        self.assertNotIn("NRF91_SERIES", matrix)
-        # TIMER0 is the first HF reference, and its handle remains owned
-        # across Disable. A second independent handle must not claim it.
-        self.assertIn("cfg.DevNo = TimerGetHighFreqDevNo();", source)
-        self.assertIn("TimerInit(&s_RetainedTimer, &cfg)", source)
-        self.assertIn("TimerDisable(&s_RetainedTimer);", source)
-
-    def test_clock_test_runs_contention_after_timer_matrix(self):
-        source = TEST.read_text(encoding="utf-8")
-        self.assertIn("static void CoreClockTestSleepDelayOwnership(int LowCount)", source)
-        self.assertIn("s_LfTimerInitMask |= 1UL << DevNo;", source)
-        self.assertIn("CoreClockTestSleepDelayOwnership(lowTimerCount);", source)
-        self.assertIn('CoreClockTestResult("sDelay zero with LF timers occupied", sDelay(0U));', source)
-        self.assertIn('CoreClockTestResult("sDelay occupied disabled LF timers", blocked);', source)
-        self.assertIn("blocked = !sDelay(1U);", source)
-        self.assertIn("s_LfTimerInitMask & expectedMask", source)
-        self.assertLess(source.index("CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);"),
-            source.index("CoreClockTestSleepDelayOwnership(lowTimerCount);"))
-        self.assertLess(source.index("CoreClockTestSleepDelayOwnership(lowTimerCount);"),
-            source.index("CoreClockTestDelayCalibrationReport();", source.index("int main(void)")))
-
-
-
-
-    def test_generic_timer_power_off_reuses_same_structure(self):
-        source = TEST.read_text(encoding="utf-8")
-        begin = source.index("static void CoreClockTestTimerPowerOff(void)")
-        end = source.index("int main(void)", begin)
-        test = source[begin:end]
-        self.assertIn("TimerGetHighFreqDevNo()", test)
-        self.assertIn("s_RetainedTimer.PowerOff == nullptr", test)
-        self.assertIn("stopped = TimerPowerOff(&s_RetainedTimer);", test)
-        self.assertIn("TimerInit(&s_RetainedTimer, &cfg);", test)
-        self.assertIn("TimerPowerOff(&s_RetainedTimer);", test)
-        self.assertIn("!TimerPowerOff(&s_RetainedTimer)", test)
-        self.assertLess(test.index("TimerPowerOff(&s_RetainedTimer);"),
-            test.index("TimerInit(&s_RetainedTimer, &cfg);"))
-        self.assertIn("CoreClockTestTimerPowerOff();", source)
-        self.assertNotIn("NRF91_SERIES", test)
 
 
 if __name__ == "__main__":

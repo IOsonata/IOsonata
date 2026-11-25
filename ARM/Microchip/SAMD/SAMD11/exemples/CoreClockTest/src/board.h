@@ -62,10 +62,6 @@ SOFTWARE.
 #include "timer_samd.h"
 #define CORE_CLOCK_TEST_DELAY_TIMER_DEVNO SAMD_SYSTICK_TIMER_DEVNO
 #endif
-// Link one timer implementation in the 16 KiB image.
-#ifndef CORE_CLOCK_TEST_TIMER_DEVNO
-#define CORE_CLOCK_TEST_TIMER_DEVNO 0
-#endif
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
 #endif // __BOARD_H__
