@@ -9,7 +9,7 @@
 
 ## Historical demo notes (pre-migration)
 
-# RA4M1 PowerOffDemo
+# RA4M1 CorePowerTest
 
 This Eclipse managed project uses the generic demo's resume path. Build the
 matching IOsonata_RA4M1 library configuration first. Both configurations print

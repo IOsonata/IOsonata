@@ -23,8 +23,8 @@ AST is acquired and stopped before the clock sweeps. The demo also checks
 UART reception at the normal console rate. These checks do not independently
 measure absolute oscillator accuracy.
 
-PowerOffDemo now tests low-power operation, reset reasons, EIC or AST wake
-and retention. PICOUART wake is an optional PowerOffDemo profile requiring
+CorePowerTest now tests low-power operation, reset reasons, EIC or AST wake
+and retention. PICOUART wake is an optional CorePowerTest profile requiring
 an external 3.3 V adapter instead of EDBG.
 
 ## Earlier hardware evidence
@@ -35,7 +35,7 @@ timer IRQs, UART RX and clock restoration with zero failures. Reported
 250 ms delays were approximately 251194..251600 us. An earlier run
 separately confirmed three GPIO-only SLEEP0 wakes. An AST run reported
 automatic 1000000 us wakes with zero failures. These were observations
-from the former combined demo, not verification of the new PowerOffDemo
+from the former combined demo, not verification of the new CorePowerTest
 standby profiles.
 
 Current consumption and external oscillator accuracy remain unmeasured.

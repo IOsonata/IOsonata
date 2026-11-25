@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	board.h
 
-@brief	Board definitions for nRF54L15 DK and IBK-NRF54L15 PowerOffDemo
+@brief	Board definitions for nRF54L15 DK and IBK-NRF54L15 CorePowerTest
 
 The DK uses UARTE30 on VCOM1, P0.01 RX and P0.00 TX, with Button 1
 on P1.09. The IBK-NRF54L15 (schematic 03-231201-01 revision 0) has
@@ -89,7 +89,7 @@ SOFTWARE.
 #define WAKE_BUT_PINOP		0
 
 #else
-#error "Unsupported nRF54L15 PowerOffDemo board"
+#error "Unsupported nRF54L15 CorePowerTest board"
 #endif
 
 #endif

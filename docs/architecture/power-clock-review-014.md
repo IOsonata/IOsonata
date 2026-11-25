@@ -13,7 +13,7 @@ differs from it on these points, and the lifecycle document applies:
 - Here active users can refuse a clock change, and explicit run time clock
   selection is part of the interface. In the design there is no run time
   source selection and the user counts refuse nothing.
-- `CoreClockTest` and `PowerOffDemo` are now `CoreClockTest` and
+- `CoreClockTest` and `CorePowerTest` are now `CoreClockTest` and
   `CorePowerTest`.
 
 Working branch at the time: review_system_power_014
@@ -51,7 +51,7 @@ selection, bus divider, LF clock, delay, timer IRQ and optional UART RX
 checks. CoreClockTest may power off and reinitialize a UART during an
 intentional explicit clock-rate change; this is not a sleep operation.
 
-PowerOffDemo owns the existing GPIO, Backup and retention checks and
+CorePowerTest owns the existing GPIO, Backup and retention checks and
 now has selectable SAM4L UART and resumable AST wake exercises.
 It checks the UART configured rate and CPU/APB readback after every
 resumable wake, and its UART output exercises TX. These checks do not
@@ -75,14 +75,14 @@ from current, untested changes.
 | Target | Existing reviewed mechanism | Important remaining work |
 | --- | --- | --- |
 | SAM4L | PM/SCIF/BSCIF clock setters, AST/EIC, Backup/RETENTION/WAIT, driver-owned USART pause/PICOUART and TWIS PM.AWEN | Evaluate other active peripheral clocks and shared asynchronous wake sources; PICOUART wake 10/10 hardware PASS; TWIS/ADC SleepWalking, mixed peripherals and sleep current unverified |
-| SAMD11 | Shared GCLK and delay update, EIC/NMI Standby, system-owned UART suspend/resume | Flash-limited PowerOffDemo needs clean link and hardware recheck; other peripherals still need review |
-| SAMD21 | Shared GCLK and SERCOM ownership, EIC Standby, system-owned UART suspend/resume | Other peripherals still need sleep review; validate rebuilt PowerOffDemo |
+| SAMD11 | Shared GCLK and delay update, EIC/NMI Standby, system-owned UART suspend/resume | Flash-limited CorePowerTest needs clean link and hardware recheck; other peripherals still need review |
+| SAMD21 | Shared GCLK and SERCOM ownership, EIC Standby, system-owned UART suspend/resume | Other peripherals still need sleep review; validate rebuilt CorePowerTest |
 | ESP32-C3 | SYSTEM clock tree, calibrated RC_FAST, RTC Light/Deep sleep, system-owned UART clock gates | WFI fallback cannot prove PMU entry; other peripheral lifecycles and startup dots remain unverified |
 | ESP32-C6 | PCR clock tree, calibrated RC_FAST/LF, PMU PLL retention, system-owned UART gates and RTC wake | Review PMU rejection and other peripheral lifecycles; measure sleep current |
 
 The system and UART implementations now coordinate the known UART sleep
 path, without exposing a new public object or changing DeviceIntrf enable
-references. PowerOffDemo has no explicit UART Disable/Enable in its
+references. CorePowerTest has no explicit UART Disable/Enable in its
 resumable sleep path.
 
 On SAM4L, SystemSleep selects WAIT/RETENTION/SLEEP0 according to active
@@ -117,7 +117,7 @@ transfers, but not for hardware-specific clock or UART restoration.
   passed. Earlier combined CoreClockTest runs checked post-wake clocks,
   delays, timer IRQs and UART RX.
 - ESP32-C3: the recorded final CoreClockTest run passed nine Light-sleep
-  wakes and ten polling UART RX prompts. PowerOffDemo recorded six
+  wakes and ten polling UART RX prompts. CorePowerTest recorded six
   Light-sleep wakes and four GPIO3 Deep-sleep restarts.
 - ESP32-C6: recorded combined CoreClockTest runs passed nine Light-sleep
   wakes, clock restoration, timer IRQs and calibrated delays. GPIO3
@@ -359,7 +359,7 @@ requests it (SAM D21 GCLK GENCTRL documentation). The selected
 oscillator's RUNSTDBY bit, not a GCLK output setting, is required
 for RTC/EIC activity in Standby.
 
-No clock change is requested by PowerOffDemo. The source tests now
+No clock change is requested by CorePowerTest. The source tests now
 check the two wake drivers and both possible oscillators; the target
 source compilation script includes system_samd.c and
 timer_samd_rtc.cpp. No physical current or RTC wake continuity
@@ -424,7 +424,7 @@ alongside the system power source. This expands the compiler check
 without changing the driver or public API.
 
 A clean Eclipse managed-project build of the SAM4LC and SAM4LS
-libraries and CoreClockTest/PowerOffDemo in Debug and Release remains
+libraries and CoreClockTest/CorePowerTest in Debug and Release remains
 necessary before the review branch is ready to merge. These commands
 and project builds have not yet been executed for this validation
 update. External current measurement remains unverified.

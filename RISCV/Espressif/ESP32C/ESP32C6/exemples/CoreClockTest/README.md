@@ -18,7 +18,7 @@ restoration; checks APB dividers, low-frequency RC sources,
 timer IRQs, both delays and normal UART RX on TX16/RX17
 at 1 Mbaud. CoreClockTest no longer enters Light-sleep. There
 is a single startup UART RX prompt, not ten wake-related
-prompts. PowerOffDemo owns GPIO9 Light-sleep and GPIO3
+prompts. CorePowerTest owns GPIO9 Light-sleep and GPIO3
 reset-on-wake Deep-sleep.
 
 Previous hardware reports include successful repeated
@@ -156,7 +156,7 @@ resolved in this run. No sleep-current measurement was made.
 
 The UART now also implements PowerOff: it clears hardware/software FIFOs,
 releases interrupt routing and pins, and prevents Enable from restarting the
-instance. Init is required to use it again. The Deep-sleep path in PowerOffDemo
+instance. Init is required to use it again. The Deep-sleep path in CorePowerTest
 uses that operation; CoreClockTest uses resumable Disable/Enable.
 
 UART validation after these changes: production-driver host checks passed for
@@ -164,7 +164,7 @@ C2/C3/C5/C6/C61 at O0/O2, including polling and interrupt configurations,
 reference-counted suspend, repeated resume, queue preservation, PowerOff after
 Disable, rejection of Enable after PowerOff, and successful reinitialization.
 Both UART source files cross-compiled for all five chips at O0/Os. C6 CoreClockTest
-and PowerOffDemo rebuilt with all 206 library sources in Debug and Release.
+and CorePowerTest rebuilt with all 206 library sources in Debug and Release.
 
 Hardware run at `17d081bd1`: three cycles, nine BOOT wakes and zero failures
 with UART Disable/Enable gating clocks. Every post-wake timer sample had 25
@@ -173,7 +173,7 @@ LF descriptor checks passed. One initial UART line was truncated before the
 first sleep; its cause has not been established by this log. That run did not check UART
 RX or current consumption.
 
-PowerOffDemo at the same revision also passed three consecutive GPIO3
+CorePowerTest at the same revision also passed three consecutive GPIO3
 Deep-sleep wake/restart cycles after UART PowerOff. Every restart reported
 pin-wake reason 0x100. Start count 1 is expected with zero retention registers.
 
@@ -199,7 +199,7 @@ Counts of 24 occur on samples ending just before 250 ms. These measurements
 check delay scaling against the on-chip timer, not absolute time accuracy or
 short nanosecond delays. The build configuration was not identified.
 
-Before this run, CoreClockTest and PowerOffDemo produced no UART output and
+Before this run, CoreClockTest and CorePowerTest produced no UART output and
 LedDemo did not run. RESET did not recover execution; a power cycle did,
 after which LedDemo and CoreClockTest ran. The maintainer clarified that only one
 power cycle was needed; RESET worked normally afterward. The flashing log

@@ -16,7 +16,7 @@
 CoreClockTest runs the configured OSC8M source and APB requests, timer
 interrupts, calibrated delays and normal UART RX on SERCOM3/EDBG
 at 115200 baud. It no longer enters Standby. The optional OLED1
-wake input and SW0 Standby test belong to PowerOffDemo, whose
+wake input and SW0 Standby test belong to CorePowerTest, whose
 WAKE_BUT_* board definitions select the requested wake pin.
 The new demo split is not yet compiled or hardware revalidated.
 
@@ -29,7 +29,7 @@ prompts and CLOCK_DEMO_OLED1_WAKE guidance for the current code.
 Import `ioc` as an existing Eclipse managed project and build the matching
 IOsonata library in the same Debug or Release configuration. Console pins and
 oscillator selections are in `src/board.h`, copied from this target's
-PowerOffDemo project. Default console speed is 1,000,000 baud unless board.h
+CorePowerTest project. Default console speed is 1,000,000 baud unless board.h
 specifies another rate. No debugger is required for UART logging.
 
 LF selection omitted because a running DFLL/DPLL may own its reference.

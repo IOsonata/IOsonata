@@ -153,8 +153,8 @@ The library also builds the shared STM32 power functions of
 power off in Shutdown, or Standby with SRAM2 kept (not the CCM SRAM), wake up
 on WKUP1 to WKUP5 (PA0, PC13, PE6, PA2, PC5) on either level with the pin pull
 resistor kept, the 32 TAMP backup registers as retention registers. See
-[STM32 power functions](../POWER.md). The example PowerOffDemo
-(`exemples/misc/power_off_demo.cpp`) logs the reset reason and a start count
+[STM32 power functions](../POWER.md). The example CorePowerTest
+(`exemples/misc/core_power_test.cpp`) logs the reset reason and a start count
 in retention register 0 on the ST-LINK virtual COM port (LPUART1, 1000000
 baud 8N1), then powers off; the user button B1 (PC13) wakes it. Not run on
 hardware yet.

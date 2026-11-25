@@ -9,7 +9,7 @@ nine more Light-sleep wakes; UART PowerOff passed three Deep-sleep restarts. Ear
 below describe the initial review, not the current C6 wake status.
 
 Current hardware result, November 15, 2026: SAMD11 Xplained Pro SW0/PA14
-woke PowerOffDemo five consecutive times, counts 0x00000001 through
+woke CorePowerTest five consecutive times, counts 0x00000001 through
 0x00000005, followed by another Standby entry. Repeated resume and counter
 continuity passed. SAMD21 wake, full SRAM testing and sleep-current
 measurements remain pending. The sections below retain the earlier review
@@ -24,7 +24,7 @@ audit, **not** a new power API design or an assertion that untested code works.
 `include/coredev/system_core_clock.h` currently specifies that
 `SystemPowerOff()` enters a mode exited **only by reset** and never
 returns. `docs/architecture/core-power-clock-ports.md` repeats that
-restriction. The shared `exemples/misc/power_off_demo.cpp` assumes a new
+restriction. The shared `exemples/misc/core_power_test.cpp` assumes a new
 startup after wake, uses `SystemResetReason()` to detect wake, and tests
 RAM retention only after a reset.
 
@@ -116,11 +116,11 @@ The review branch now has a concrete interrupt-resumable implementation:
 - Existing GPIO interrupts using edge detection/filter/GCLK0 are unchanged
   and cannot be silently taken over by a Standby wake pin. An EIC event
   source already owned by another driver is refused.
-- The shared `exemples/misc/power_off_demo.cpp` now has a
+- The shared `exemples/misc/core_power_test.cpp` now has a
   `POWER_DEMO_RESUME_WAKE=1` path: stop the UART before Standby, return
   after an EIC wake, restart UART and log a wake counter. Existing
   reset-on-wake demo logic is unchanged.
-- Eclipse-managed PowerOffDemo projects are provided for SAM D11 and D21.
+- Eclipse-managed CorePowerTest projects are provided for SAM D11 and D21.
   SAMD21 uses SW0/PA15 (EXTINT15). SAMD11 SW0/PA14 is routed to the dedicated NMI wake path, so no
   external switch is needed.
 - Build checks are in `tests/samd/standby_compile.sh` (invoke using `sh`
@@ -142,7 +142,7 @@ Both libraries retain the Standby source and the reset-reason source.
 
 The separate `ResetReasonDemo` projects and
 `exemples/misc/reset_reason_demo.cpp` were deliberately not copied.
-The single shared `PowerOffDemo` serves as the low-power validation
+The single shared `CorePowerTest` serves as the low-power validation
 application. This branch has not been hardware-validated or merged.
 
 ## Pre-hardware review after consolidation
@@ -166,7 +166,7 @@ after the changes; physical wake and measured sleep current remain pending.
 
 1. Define and approve the generic API's sleep/deep-sleep/off semantics and
    wake-return behavior. Preserve existing applications where possible.
-2. Change the shared PowerOffDemo to exercise reset-on-wake and
+2. Change the shared CorePowerTest to exercise reset-on-wake and
    resume-on-interrupt without two unrelated applications.
 3. On `port_samd_power_014`, remove the duplicate ResetReasonDemo
    application projects, implement SAM D11/D21 low-power Standby including
@@ -177,7 +177,7 @@ after the changes; physical wake and measured sleep current remain pending.
    driver/clock ownership, before merging any cross-family API change.
 
 References: `include/coredev/system_core_clock.h`,
-`exemples/misc/power_off_demo.cpp`,
+`exemples/misc/core_power_test.cpp`,
 `ARM/Nordic/nRF52/src/system_power_nrf52.cpp`,
 `ARM/Nordic/src/system_power_nrfx.cpp`,
 `ARM/ST/src/system_power_stm32.cpp`,
@@ -195,7 +195,7 @@ interrupt wake. SAM D11 datasheet 42363 describes equivalent wake behavior.
 SAMD11's onboard SW0 is PA14, the dedicated EIC NMI input. The Standby
 wake port now handles this pin separately from EXTINT; it configures the
 NMICTRL falling-edge detector, clears NMIFLAG in the NMI handler, and
-selects the low-frequency EIC generic clock. The generic PowerOffDemo
+selects the low-frequency EIC generic clock. The generic CorePowerTest
 uses PA14 without external jumpers. SAMD21 retains PA15/EXTINT15 wake.
 
 The NMI vector is shared with other application-level critical NMI uses;

@@ -1,14 +1,14 @@
 # Power and clock demo projects
 
 The projects use the shared `exemples/misc/core_clock_test.cpp` and
-`exemples/misc/power_off_demo.cpp`. Import each `ioc` directory in Eclipse and
+`exemples/misc/core_power_test.cpp`. Import each `ioc` directory in Eclipse and
 build the matching library configuration first. Board pin maps come from the
 existing example named in each README. These additions provide 29 CoreClockTest
-projects and 10 missing PowerOffDemo projects outside ESP32.
+projects and 10 missing CorePowerTest projects outside ESP32.
 
 ## SAM4LC latest hardware result
 
-On November 18, 2026, PowerOffDemo completed **10 consecutive PICOUART
+On November 18, 2026, CorePowerTest completed **10 consecutive PICOUART
 wake cycles** with the external 3.3 V USB-UART adapter: the 9600-baud
 `U` wake byte, restored 1 Mbaud USART0, restored CPU/APB clocks,
 sequential resume counts 1 through 10 and 128 static + 128 stack bytes
@@ -21,7 +21,7 @@ both delays and timer IRQs at every rate, six OLED1 BUTTON1 RETENTION wakes,
 clock restoration and UART RX. CoreClockTest now also checks a one-second automatic
 AST wake after each button wake; the subsequent run ended with zero failures.
 
-PowerOffDemo retains button wake by default. Set POWER_DEMO_TIMER_WAKE_MS=3000
+CorePowerTest retains button wake by default. Set POWER_DEMO_TIMER_WAKE_MS=3000
 in its board.h or application compiler settings for automatic AST Backup wake.
 The maintainer confirmed four consecutive timer wakes with reset reason 0x1000
 and retained counts 1 through 5. Both profiles
@@ -31,14 +31,14 @@ build for SAM4LC and SAM4LS in Debug and Release.
 
 The November 17 completion review rebuilt all library sources for SAMD11 (239),
 SAMD21 (318), SAM4LC (124), SAM4LS (128), ESP32-C3 (204) and ESP32-C6 (206), in
-Debug and Release. CoreClockTest and PowerOffDemo linked for all six configurations;
+Debug and Release. CoreClockTest and CorePowerTest linked for all six configurations;
 ClockDisplayDemo and LCDConsoleDisplayDemo also linked for both SAMD targets:
 32 successful links in total. This does not supersede hardware results below.
 
 D11/D21 and SAM4LC CoreClockTest now check 1/2/4/1 peripheral-clock divisors, delays
 and timer interrupts at each rate, then three sleep cycles at divisor four.
 SAM4LC uses the EIC route for OLED1 BUTTON1 to enter RETENTION. The previous
-GPIO-only SLEEP0 run remains recorded separately. C3/C6 PowerOffDemo now checks
+GPIO-only SLEEP0 run remains recorded separately. C3/C6 CorePowerTest now checks
 RTC/LP SRAM retention after pin wake. Clean rebuild both library and demo.
 
 The expanded D11 CoreClockTest fits in 13,364 bytes of flash using direct UART
@@ -50,7 +50,7 @@ The C3/C6 CoreClockTest also supports the existing 160 MHz library build option.
 Define ESP32C3_CPU_160MHZ or ESP32C6_CPU_160MHZ in both library and application
 settings and clean rebuild. The XTAL entries then expect a 160 MHz PLL CPU;
 RC_FAST remains measured. C3 APB remains fixed at 80 MHz in that profile.
-Eight additional Debug/Release CoreClockTest/PowerOffDemo links pass with the
+Eight additional Debug/Release CoreClockTest/CorePowerTest links pass with the
 160 MHz option. New PLL behavior has not yet been run on a board.
 
 ## Compile and link results
@@ -64,7 +64,7 @@ failed or were unavailable. A linked demo does not establish that the complete
 library project builds. Debug/Release results are listed separately where the
 source counts differ. RE01 uses DebugCFB/ReleaseCFB.
 
-| Target | CoreClockTest | PowerOffDemo | Compiled library sources (Debug; Release) |
+| Target | CoreClockTest | CorePowerTest | Compiled library sources (Debug; Release) |
 | --- | --- | --- | --- |
 | SAM4E16E | PASS / PASS | PASS / PASS | 105/105; 105/105 |
 | SAM4LCxC | PASS / PASS | PASS / PASS | 120/120; 120/120 |
@@ -96,7 +96,7 @@ source counts differ. RE01 uses DebugCFB/ReleaseCFB.
 | STM32WBA65 | PASS / PASS | PASS / PASS | 285/297; 285/297 |
 | R9A02G021 | PASS / PASS | PASS / PASS | 196/196; 196/196 |
 
-C3/C6 regression builds also pass: CoreClockTest Debug/Release and PowerOffDemo
+C3/C6 regression builds also pass: CoreClockTest Debug/Release and CorePowerTest
 Light-sleep/Deep-sleep in both configurations (12 links). All 204 C3 and 206 C6
 library sources compile. No new board execution was performed for this batch.
 The shared demo now uses the UART C functions, as it already does for Timer.
@@ -125,16 +125,16 @@ validate timer operation at every intermediate clock. Unsupported selectors
 print SKIP rather than being counted as a successful switch. Clock readback
 and delay checks do not independently establish oscillator accuracy.
 
-The new PowerOffDemo configurations have no assumed wake pin. They report
+The new CorePowerTest configurations have no assumed wake pin. They report
 reset/retention information, power off UART and request MCU power off. RESET
 or a power cycle restarts the application. Configure a supported board wake
-pin before using them to test GPIO wake. Existing board-specific PowerOffDemo
+pin before using them to test GPIO wake. Existing board-specific CorePowerTest
 configurations keep their wiring and modes. No demo enables a watchdog.
 
 ## Hardware and remaining coverage
 
 C3 CoreClockTest after 04d1522a8 passed three cycles and nine BOOT wakes with zero
-failures. C3 PowerOffDemo passed six Light-sleep SRAM checks and four manual
+failures. C3 CorePowerTest passed six Light-sleep SRAM checks and four manual
 GPIO3 Deep-sleep wake/restart cycles. C6 also passed repeated wake and combined
 clock/sleep runs. SAMD11 passed Standby wake and SRAM checks. CoreClockTest completed three
 core/APB selections at 2de35f281 and measured 250094 us for msDelay and
@@ -147,7 +147,7 @@ external oscillator accuracy have not been measured here.
 
 LPC54605 has no existing board example to supply console wiring. nRF52805 and
 nRF52810 lack a suitable UART board configuration; no pin maps were guessed.
-nRF5340 network-core CoreClockTest has no companion PowerOffDemo because the
+nRF5340 network-core CoreClockTest has no companion CorePowerTest because the
 application core controls system power. RP2040, nRF54H20 and ESP32C2/C5/C61
 remain outside this batch because their relevant ports are incomplete.
 
@@ -195,7 +195,7 @@ This checks scaling over a measurable interval. It does not establish the
 accuracy of an individual delay of a few nanoseconds; setup overhead dominates
 such short calls. Both tests run after resume where CoreClockTest supports sleep.
 
-Software validation for the shared delay change: CoreClockTest and PowerOffDemo
+Software validation for the shared delay change: CoreClockTest and CorePowerTest
 linked in 114 configurations across 29 targets; C3/C6 CoreClockTest added four
 links, and SAMD11 display-console and timer demos added four. Some Nordic
 libraries still have unrelated missing SDK sources; these counts describe
@@ -216,7 +216,7 @@ The non-CSR path remains an approximate two-instruction loop.
 
 The RISC-V counter model passed 108 cases covering zero, fractional MHz,
 counter wrap and long durations. The header compiled for RV32, RV32E and
-RV64, with and without CSR use. C3/C6 CoreClockTest and R9A02 CoreClockTest/PowerOffDemo
+RV64, with and without CSR use. C3/C6 CoreClockTest and R9A02 CoreClockTest/CorePowerTest
 relinked in Debug and Release. C2/C5/C61 startup and GPIO/UART host checks
 passed, along with 24 C/C++ UART demo links. These do not establish hardware
 support or measured timing on those additional chips.
@@ -233,7 +233,7 @@ CPU/APB clocks and LF descriptors, with zero failures. Post-wake msDelay was
 
 Both SAMD11 modes linked in Debug and Release. The Standby mode uses 15,788
 flash bytes and 2,132 static RAM bytes, excluding the stack. SAMD21 and
-STM32F401 CoreClockTest/PowerOffDemo and C3/C6 CoreClockTest also relinked in both
+STM32F401 CoreClockTest/CorePowerTest and C3/C6 CoreClockTest also relinked in both
 configurations after the generic demo change. The D11 Standby mode passed
 hardware validation as recorded above.
 
@@ -250,7 +250,7 @@ in every sample.
 
 The UART receive version linked in both D11 modes, Debug and Release. Standby
 mode uses 15,788 flash bytes and 2,132 static RAM bytes before the stack.
-SAMD21 CoreClockTest/PowerOffDemo and C3/C6 CoreClockTest compatibility links passed.
+SAMD21 CoreClockTest/CorePowerTest and C3/C6 CoreClockTest compatibility links passed.
 The receive helper's response, timeout, unrelated-input, stale-input and timer
 failure paths passed host checks. Polling receive operation passed the board
 run recorded above.
@@ -292,11 +292,11 @@ bodies accelerated; this checks counts and termination, not physical timing.
 C and C++ probes compiled for Cortex-M0/M0+/M3/M4/M7/M33 at O0 and Os.
 Hardware timing after this change remains unmeasured.
 
-CoreClockTest and PowerOffDemo linked in Debug and Release on SAMD21, SAM4E16E,
+CoreClockTest and CorePowerTest linked in Debug and Release on SAMD21, SAM4E16E,
 LPC11U35, RA4M1, STM32F401, STM32H753 and nRF52832 (28 links). The nRF52832
 library still has unrelated missing SDK sources; its demo links do not establish
 a complete library build. D11 also linked both CoreClockTest selections,
-PowerOffDemo, TimerDemo, ClockDisplayDemo and the default LCDConsoleDisplayDemo.
+CorePowerTest, TimerDemo, ClockDisplayDemo and the default LCDConsoleDisplayDemo.
 
 The subsequent SAMD clock-arithmetic optimization resolves that display-console
 size regression. The complete 239-source D11 library links all four modes in
@@ -311,7 +311,7 @@ migration to measured loop iterations per second. Temporary native checks compar
 references, and one million full-width arithmetic samples. All passed. The
 shared ARM delay header and assembly loops are unchanged by this optimization.
 
-D11 and D21 complete libraries, CoreClockTest and PowerOffDemo build in Debug and
+D11 and D21 complete libraries, CoreClockTest and CorePowerTest build in Debug and
 Release. D11 also passes both CoreClockTest selections, TimerDemo, ClockDisplayDemo,
 and all eight display-console mode/configuration links. SPI mode exclusion
 checks and the existing SPI and SSD1315 host checks pass. The SSD1315 checks used
@@ -345,7 +345,7 @@ APB division and both internal LF sources are exercised. The log does not
 identify Debug or Release; the missing beginning is not counted as observed
 individual checks. Short nanosecond timing and sleep current remain unmeasured.
 
-CoreClockTest, PowerOffDemo and LedDemo initially failed to run after flashing;
+CoreClockTest, CorePowerTest and LedDemo initially failed to run after flashing;
 RESET did not recover them, but one power cycle restored execution and RESET
 worked normally afterward. The flasher reported a Release image written via
 native USB Serial/JTAG. The transient stuck state remains separate from the
@@ -354,14 +354,14 @@ or reset-path fix has been verified.
 
 ## C6 Deep-sleep retest and USB reset reporting
 
-The November 17 PowerOffDemo log records five consecutive pin-wake restarts,
+The November 17 CorePowerTest log records five consecutive pin-wake restarts,
 each with reset reason 0x100, start count one and zero retention registers.
 The initial reset reason was zero. C3/C6 raw USB-serial reset code 0x15 was
 missing from SystemResetReason; it now uses SYSTEM_RESET_DEBUG (0x20), as do
 resets through USB-JTAG. The initial raw hardware code was not captured, so
 this mapping omission is not a confirmed diagnosis of that first message.
 
-C3/C6 complete libraries rebuilt in Debug/Release, and both PowerOffDemo sleep
+C3/C6 complete libraries rebuilt in Debug/Release, and both CorePowerTest sleep
 modes linked in each configuration (eight links, GNU C++11 demos). Temporary
 reset/wake decoding comparisons at O0/Os passed. The five hardware wakes
 precede the reporting-only change; its USB reset label awaits board validation.
@@ -379,13 +379,13 @@ production clock and delay code is unchanged. Both suites then passed their
 existing optimization variants. SAM4L power checks also passed all 18 device
 header configurations. These checks do not replace missing board validation.
 
-Whitespace cleanup in LPC1769 PowerOffDemo leaves the parsed Eclipse project
+Whitespace cleanup in LPC1769 CorePowerTest leaves the parsed Eclipse project
 unchanged. Existing CRLF source files retain their line endings. No new MCU
 hardware support or power-consumption result is claimed by this review.
 
 ## SAMD21 OLED1 and Standby hardware results (November 17)
 
-The maintainer confirmed five PowerOffDemo Standby wakes with 128-byte static
+The maintainer confirmed five CorePowerTest Standby wakes with 128-byte static
 and 128-byte stack samples preserved. CoreClockTest passed three combined sleep
 cycles with SW0/PA15 and three with OLED1 BUTTON1/PB04 on EXT1. CPU/APB and LF
 descriptor checks, msDelay, nsDelay, timer IRQs and UART RX all passed. The
@@ -399,7 +399,7 @@ The SAMD21 library (318 source files) and all three demos linked in Debug and
 Release. Both display demos also linked with all four SPI mode combinations;
 CoreClockTest linked with OLED1 wake selected. No driver changes were needed for
 the OLED1 project additions. Full SRAM coverage and sleep current remain
-unmeasured. A subsequent clean SAM4LC PowerOffDemo rebuild passed eight
+unmeasured. A subsequent clean SAM4LC CorePowerTest rebuild passed eight
 consecutive Backup wakes: reset reason 0x100 each time, retained start count
 1 through 9. The earlier intermittent failure did not recur in that run.
 

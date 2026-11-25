@@ -9,9 +9,9 @@
 
 ## Historical demo notes (pre-migration)
 
-# SAM4L8 Xplained Pro PowerOffDemo
+# SAM4L8 Xplained Pro CorePowerTest
 
-Build the SAM4LCxC library and PowerOffDemo in matching configurations.
+Build the SAM4LCxC library and CorePowerTest in matching configurations.
 Flash with EDBG and run without an active debugger session. The current
 review-branch default tests USART0/PICOUART wake using an external USB-UART
 adapter on PB00/PB01 at 1000000 baud during normal operation.
@@ -45,7 +45,7 @@ PC26/PC27 and will not work for this test.
 Do not connect a 5 V UART signal or power the board from the adapter.
 This is not the EDBG virtual COM port.
 
-Build the SAM4LCxC library and PowerOffDemo in matching Release
+Build the SAM4LCxC library and CorePowerTest in matching Release
 configurations. Flash the application with EDBG and stop the debugger.
 Open the adapter on macOS with:
 
@@ -66,11 +66,11 @@ and switching back to 1000000 baud. Each wake must report `UART wake byte: PASS`
 pass. This PICOUART profile completed ten consecutive physical-board wake cycles
 on November 18, 2026; see the latest results below. Sleep current is not yet measured.
 
-If the host script prints `Timeout: waiting for PowerOffDemo output`:
+If the host script prints `Timeout: waiting for CorePowerTest output`:
 check that the adapter is wired to EXT1 or EXT4, not EXT2; verify
 adapter RX is connected to pin 14 (MCU TX), adapter TX to pin 13
 (MCU RX), and both share ground. Ensure the latest UART-wake
-PowerOffDemo is flashed and no other program owns the adapter port.
+CorePowerTest is flashed and no other program owns the adapter port.
 Use a scope or logic analyzer on PB01 to distinguish missing UART
 transmission from a host baud/wiring issue before modifying the driver.
 
@@ -150,7 +150,7 @@ and SystemSleep. UART wake has not been hardware tested.
 
 ## System-owned sleep coordination (review 0.14)
 
-For resumable sleep, PowerOffDemo now leaves its UART enabled and calls
+For resumable sleep, CorePowerTest now leaves its UART enabled and calls
 `SystemSleep()` directly after draining pending output. The target system
 coordinates temporary UART suspension and restoration with the driver's
 clock and interrupt state, without changing its enable reference count.
@@ -180,7 +180,7 @@ only its selected EIC wake pins immediately before the next WFI, when
 the wake input can be inactive. PM WAKE is then cleared before entry.
 Other EIC interrupt lines are not acknowledged by this operation.
 
-Rebuild the library and PowerOffDemo after this change. The hardware
+Rebuild the library and CorePowerTest after this change. The hardware
 validation is ten distinct BUTTON1 press/release cycles, with the CPU
 remaining asleep between presses. Repeated log output without a new
 button press is a failure even when UART, CPU/APB clock and SRAM checks
@@ -254,7 +254,7 @@ recorded below.
 ## November 18, 2026: automatic AST RETENTION wake
 
 After enabling the AST prescaler clock before waiting for AST_SR.BUSY,
-the maintainer reported a repeating PowerOffDemo log with
+the maintainer reported a repeating CorePowerTest log with
 `POWER_DEMO_RESUME_WAKE=1` and `POWER_DEMO_TIMER_WAKE_MS=1000`.
 The program intentionally re-arms its one-shot AST alarm and goes back
 to Standby after each wake. Unlike the earlier button-wake regression,
@@ -279,7 +279,7 @@ have not been measured. PICOUART wake remains unverified on hardware.
 ## November 18, 2026: stale AST wake after switching demos
 
 After 12 successful automatic AST Standby cycles, the maintainer
-rebuilt PowerOffDemo with `POWER_DEMO_TIMER_WAKE_MS=0` for EIC-only
+rebuilt CorePowerTest with `POWER_DEMO_TIMER_WAKE_MS=0` for EIC-only
 button wake. It again resumed continuously without new button presses.
 The timer profile is no longer active in the new firmware, but SAM4L
 AST hardware survives non-power-on resets. Its previously configured
@@ -322,7 +322,7 @@ MCU reply before sending `U`. If an early reply arrives, it reports
 that sleep was refused or another event caused an early wake.
 The SAM4L UART driver also records one internal 32-bit diagnostic
 during wake preparation and restoration. On a failed UART wake,
-PowerOffDemo prints `SAM4L UART sleep diagnostic 0x........`.
+CorePowerTest prints `SAM4L UART sleep diagnostic 0x........`.
 
 Diagnostic bits:
 
@@ -383,7 +383,7 @@ work, but does not establish the opposite direction (adapter TX
 to PB00). It is not yet possible to attribute the unwanted frame to
 the USART handover rather than an unconnected or unstable RX input.
 
-PowerOffDemo now checks normal USART0 reception before testing
+CorePowerTest now checks normal USART0 reception before testing
 PICOUART. The host helper responds to `UART RX: send U at 1000000 baud`
 with one U at the normal console rate and verifies the
 `UART RX normal: PASS` result. A failure is reported before
@@ -557,7 +557,7 @@ permits moving the received byte to the normal UART FIFO.
 Unsolicited 0xFF recorded before arming is not automatically
 delivered to the UART application.
 
-PowerOffDemo now stops its UART-wake profile on the first failed
+CorePowerTest now stops its UART-wake profile on the first failed
 reception instead of incrementing the resumed-standby counter and
 continuously retrying. The host helper already terminates on an
 unsolicited early response. This does not change the generic
@@ -577,7 +577,7 @@ baud rate. The helper waited 350 ms for an early MCU response while
 USART0 had already been handed over to PICOUART. This was the wrong
 ordering for isolating the host adapter's baud-rate transition.
 
-PowerOffDemo now requests a normal-speed `R` handshake before each
+CorePowerTest now requests a normal-speed `R` handshake before each
 attempt and emits a final 1 Mbaud setup prompt. It drains UART TX
 and delays 750 ms with USART0 still enabled; only then does it call
 `SystemSleep()` and allow PICOUART activation. The host switches
@@ -636,7 +636,7 @@ The final host message was
 No UART wake, clock-restore or sampled-RAM failure occurred in the log.
 
 This verifies repeated wake-byte delivery and resumption under the
-PowerOffDemo test handshake. It does **not** independently measure
+CorePowerTest test handshake. It does **not** independently measure
 low-power current or prove all SRAM bytes were retained. Other wake
 sources, simultaneous peripheral activity and long-duration sleep
 reliability remain outside this test.

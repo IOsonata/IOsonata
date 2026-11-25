@@ -68,7 +68,7 @@ the normal clock, divider, timer and delay APIs. It no longer contains
 the Standby/resume profile or calls SystemSleep. UART uses SERCOM2 on
 the EDBG virtual COM port. Polling UART RX is disabled by default on
 this 16 KB flash target until the full library/demo link is verified.
-PowerOffDemo owns SW0/NMI Standby wake and SRAM-retention checks.
+CorePowerTest owns SW0/NMI Standby wake and SRAM-retention checks.
 
 The code changes in review 0.14 have not been compiled or retested
 on hardware. The original clock-selection build fitted in 15,350
@@ -82,7 +82,7 @@ earlier combined clock/sleep demo, not the current board configuration.
 Import `ioc` as an existing Eclipse managed project and build the matching
 IOsonata library in the same Debug or Release configuration. Console pins and
 oscillator selections are in `src/board.h`, copied from this target's
-PowerOffDemo project. Default console speed is 1,000,000 baud unless board.h
+CorePowerTest project. Default console speed is 1,000,000 baud unless board.h
 specifies another rate. No debugger is required for UART logging.
 
 Select the run in `src/board.h` with `CLOCK_DEMO_RESUME_TEST`:
@@ -119,7 +119,7 @@ newlib formatting after LTO. Both configurations linked with these sizes:
 | Clock selection | 15,350 bytes | 2,152 bytes |
 | Standby/resume | 15,788 bytes | 2,132 bytes |
 
-RAM totals exclude stack use. PowerOffDemo remains available for the
+RAM totals exclude stack use. CorePowerTest remains available for the
 static/stack SRAM continuity check. Reset restores startup clocks.
 
 An omitted selector prints SKIP. A configured selector that fails prints FAIL;
@@ -156,7 +156,7 @@ with 25 interrupts. CoreClockTest completed with zero failures at 48 MHz.
 The maintainer's Standby run at e017243bc passed all three SW0 wakes, CPU/APB
 clock and LF descriptor checks, and timer interrupts. Post-wake msDelay
 measured 250097-250103 us; nsDelay measured 250108-250112 us, with 25 interrupts
-in every sample and zero failures. PowerOffDemo separately passed five
+in every sample and zero failures. CorePowerTest separately passed five
 consecutive wakes with both 128-byte SRAM samples preserved.
 
 The maintainer's run at d11b58001 passed polling UART RX before sleep and
@@ -183,5 +183,5 @@ board timings predate this loop update.
 The current system Standby implementation also prepares the existing
 UART, I2C and SPI SERCOM drivers, rather than requiring the application
 to stop those clocks. This new driver coordination has not been
-clean-built or hardware-tested on SAMD11. PowerOffDemo remains the
+clean-built or hardware-tested on SAMD11. CorePowerTest remains the
 integration test for resumable wake and SRAM retention.

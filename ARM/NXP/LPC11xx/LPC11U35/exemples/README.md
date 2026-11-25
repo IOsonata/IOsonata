@@ -7,7 +7,7 @@ directory; host commands run from the repository root.
 
 ## Contents
 
-- [PowerOffDemo](#poweroffdemo)
+- [CorePowerTest](#poweroffdemo)
 - [I2CScan](#i2cscan)
 - [SpiLoopback](#spiloopback)
 - [TimerDemo](#timerdemo)
@@ -432,9 +432,9 @@ The stack allowance is not a measured runtime high-water mark. Host-model
 CDC/HID tests cover descriptor routing, reports and reconnect; hardware
 report traffic and throughput remain untested.
 
-## PowerOffDemo
+## CorePowerTest
 
-Links `exemples/misc/power_off_demo.cpp`. Both configurations use UART0 TX
+Links `exemples/misc/core_power_test.cpp`. Both configurations use UART0 TX
 PIO0_19, RX PIO0_18 at 1000000 baud. Connect an external button from PIO0_16
 to ground and an external pull-up from PIO0_16 to VDD. The internal pull-up
 and RESET pin cannot wake the part from Deep power-down.

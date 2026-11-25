@@ -9,7 +9,7 @@
 
 ## Historical demo notes (pre-migration)
 
-# LPC54628 PowerOffDemo
+# LPC54628 CorePowerTest
 
 Build the IOsonata library and this Eclipse managed project in the same
 configuration. Both configurations print through Flexcomm 0 at 1000000 baud:

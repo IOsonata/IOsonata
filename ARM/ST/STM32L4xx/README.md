@@ -388,8 +388,8 @@ The four L4 libraries build the shared STM32 power functions of
 power off in Shutdown, or Standby with SRAM2 kept, wake up on WKUP1 to WKUP5
 (PA0, PC13, PE6, PA2, PC5) on either level with the pin pull resistor kept,
 the 32 backup registers as retention registers. See
-[STM32 power functions](../POWER.md). The STM32L476 example PowerOffDemo
-(`exemples/misc/power_off_demo.cpp`, B-L475E-IOT01A) logs the reset reason
+[STM32 power functions](../POWER.md). The STM32L476 example CorePowerTest
+(`exemples/misc/core_power_test.cpp`, B-L475E-IOT01A) logs the reset reason
 and a start count in retention register 0 on the ST-LINK virtual COM port
 (USART1, 1000000 baud 8N1), then powers off; the user button B1 (PC13) wakes
 it. Not run on hardware yet.

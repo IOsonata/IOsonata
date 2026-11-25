@@ -18,7 +18,7 @@ restoration, changes the supported CPU/APB divider, selects RC_SLOW,
 and checks timer IRQs, both delays and normal UART RX through
 GPIO20/GPIO21 at 1 Mbaud. It does not enter Light-sleep and has
 one startup UART RX prompt, not ten wake-related prompts.
-PowerOffDemo exercises BOOT/GPIO9 Light-sleep and optional
+CorePowerTest exercises BOOT/GPIO9 Light-sleep and optional
 GPIO3 Deep-sleep; those tests remain separate.
 
 The demo split has not been compiled or retested on this board.

@@ -60,7 +60,7 @@ SOFTWARE.
 #define UART_DMA_MODE		false
 #define UART_INT_PRIO		2
 
-// CoreClockTest has no wake-pin profile; PowerOffDemo tests SW0/standby.
+// CoreClockTest has no wake-pin profile; CorePowerTest tests SW0/standby.
 
 // LF selection omitted because a running DFLL/DPLL may own its reference.
 #define CLOCK_DEMO_IRQ_PRIORITY 1

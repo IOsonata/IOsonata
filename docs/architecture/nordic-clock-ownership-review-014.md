@@ -29,7 +29,7 @@ executed. Keep this work separate from unmerged PR #144.
 | `ARM/Nordic/src/timer_hf_nrfx.cpp` | No timer-side PLL start; retains HFXO request if release is refused |
 | `ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp` | Retains HFXO request state when the clock manager refuses release |
 | `exemples/misc/core_clock_test.cpp` | No UART FIFO reads or RX-for-TX servicing |
-| `exemples/misc/power_off_demo.cpp` | No UART FIFO reads, RX-for-TX servicing or SAM4L register diagnostics |
+| `exemples/misc/core_power_test.cpp` | No UART FIFO reads, RX-for-TX servicing or SAM4L register diagnostics |
 | `exemples/i2c/i2c_slave_demo.cpp` | Application no longer disables UART around SystemSleep or reads its private TX status |
 | `exemples/i2c/sleepwalking.md` | Documents system-managed UART preparation |
 | `AGENTS.md` | Corrects function-entry declaration and statement-format guidance |
@@ -92,7 +92,7 @@ Required target validation:
 4. Rebuild nRF52840 and the other affected Nordic MCU configurations,
    including SoftDevice and MPSL variants. Validate their ownership
    handover rather than inferring it from the nRF52832 bare-metal test.
-5. Rebuild the generic PowerOffDemo and SAM4L I2C sleep-test profile
+5. Rebuild the generic CorePowerTest and SAM4L I2C sleep-test profile
    because their output and sleep preparation paths changed.
 
 No merge is authorized by these checks alone.

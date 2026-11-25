@@ -44,8 +44,8 @@ The sleep implementation enters Standby through SLEEPDEEP/WFI and resumes
 after an interrupt. `SystemWakePin()` configures a selected asynchronous
 EIC level wake source; EIC line ownership and the ordinary GPIO interrupt
 configuration must be preserved. The existing generic
-`exemples/misc/power_off_demo.cpp` has a board-selected resumable mode,
-with Eclipse managed PowerOffDemo projects for D11 and D21. No separate
+`exemples/misc/core_power_test.cpp` has a board-selected resumable mode,
+with Eclipse managed CorePowerTest projects for D11 and D21. No separate
 reset-only application is required.
 
 SAMD11 Xplained Pro uses its onboard SW0/PA14, the dedicated EIC NMI input.
@@ -68,7 +68,7 @@ The sleep instruction remains WFI as specified in the
 [SAMD11 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-42363-SAM-D11_Datasheet.pdf),
 section 15.6.2.8.2.
 
-Both PowerOffDemo boards enable `POWER_DEMO_STANDBY_RAM_TEST`. Before each
+Both CorePowerTest boards enable `POWER_DEMO_STANDBY_RAM_TEST`. Before each
 Standby entry, the demo fills 128 bytes of static storage and 128 bytes on
 the stack with complementary patterns that change each cycle. It checks
 them immediately after `SystemSleep()` returns, before enabling the UART.
@@ -88,7 +88,7 @@ tests/samd/run_power.py` (128/128 combinations per MCU) and
 `sh tests/samd/clang_compile.sh` (both targets' source compilation).
 `sh tests/samd/standby_compile.sh` also passed on both targets.
 Hardware result reported November 15, 2026: SAMD11 Xplained Pro SW0/PA14
-woke PowerOffDemo from Standby five consecutive times. The resume counter
+woke CorePowerTest from Standby five consecutive times. The resume counter
 advanced from 0x00000001 through 0x00000005, followed by another Standby
 entry. This validates repeated resume and counter continuity for that
 firmware. SAMD21 hardware wake, full SRAM testing and sleep-current

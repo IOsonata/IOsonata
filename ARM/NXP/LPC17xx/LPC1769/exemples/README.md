@@ -1,8 +1,8 @@
 # LPC1769 examples
 
-## PowerOffDemo
+## CorePowerTest
 
-Import `PowerOffDemo/ioc` and build the LPC1769 library first with the same
+Import `CorePowerTest/ioc` and build the LPC1769 library first with the same
 configuration. The project links the generic power demo. UART0 uses P0.2 TX
 and P0.3 RX at 1000000 baud, with UART DMA disabled for this driver.
 

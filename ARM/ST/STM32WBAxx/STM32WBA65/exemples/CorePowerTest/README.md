@@ -9,10 +9,10 @@
 
 ## Historical demo notes (pre-migration)
 
-# STM32WBA65I-DK1 PowerOffDemo
+# STM32WBA65I-DK1 CorePowerTest
 
 This Eclipse managed project tests the bare-metal power API on STM32WBA65I
-(TZEN=0). It uses the shared `exemples/misc/power_off_demo.cpp` source.
+(TZEN=0). It uses the shared `exemples/misc/core_power_test.cpp` source.
 
 ## Wiring and console
 
@@ -40,7 +40,7 @@ and RAM2 retention is enabled before Standby. Test memory must never overlap
 
 ## Hardware validation (November 14, 2026)
 
-STM32WBA65I-DK1 (MB2143), bare-metal Release PowerOffDemo, without
+STM32WBA65I-DK1 (MB2143), bare-metal Release CorePowerTest, without
 active debugging: **two consecutive Standby and PC13/WKUP2 wakeup cycles
 passed**. GPIO wake reason was 0x100 on both boots. The backup-register
 startup counter advanced to 2 and then 3. After each wake, SRAM2 retained
@@ -60,7 +60,7 @@ Standby preparation function were removed following validation.
 
 ## Procedure
 
-1. Build `IOsonata_STM32WBA65` and `PowerOffDemo` in Release.
+1. Build `IOsonata_STM32WBA65` and `CorePowerTest` in Release.
 2. Program and run standalone, monitoring USART1 VCOM at 1 Mbaud.
 3. Wait for `Power off, press the button to wake up` and for UART
    shutdown.

@@ -9,9 +9,9 @@
 
 ## Historical demo notes (pre-migration)
 
-# R9A02G021 PowerOffDemo
+# R9A02G021 CorePowerTest
 
-Eclipse managed project using `exemples/misc/power_off_demo.cpp`. Build the
+Eclipse managed project using `exemples/misc/core_power_test.cpp`. Build the
 matching IOsonata_R9A02G021 library configuration first. On FPB-R9A02G021,
 UART0 uses P303 RX and P302 TX at 1000000 baud through J-Link OB, with the
 standard board links fitted. SW1 on P108/IRQ4 wakes on a falling edge.

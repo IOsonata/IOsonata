@@ -23,7 +23,7 @@ the same Debug or Release configuration. Use Release for throughput tests.
 | LedDemo | Onboard addressable RGB LED through SPI | C3/C6 |
 | PulseTrain | GPIO output timing on GPIO4/5/6/7 | C3/C6 |
 | CryptoTest | Implemented cryptographic operations | C3/C6 |
-| PowerOffDemo | RTC/PMU sleep and wake, static/stack SRAM continuity | C3/C6 |
+| CorePowerTest | RTC/PMU sleep and wake, static/stack SRAM continuity | C3/C6 |
 
 UART tests use 1,000,000 baud, 8N1, no flow control. The new I2C/SPI master
 examples use polling without DMA. Hardware validation is pending for the new
@@ -72,7 +72,7 @@ The C2/C5/C61 slave-test projects use their devkit USB-to-UART console pins:
 C2 TX20/RX19, C5 TX11/RX12, and C61 TX11/RX10. These differ from the
 GPIO4/5 external-adapter wiring in their earlier bring-up examples.
 
-## PowerOffDemo (ESP32-C3/C6)
+## CorePowerTest (ESP32-C3/C6)
 
 ### C6 BOOT input trace
 
@@ -118,7 +118,7 @@ and 0x1E indicate PMU configuration or wake-pin preparation
 failure. The raw PMU status distinguishes wake (bit 31)
 from rejection (bit 30).
 
-The shared `exemples/misc/power_off_demo.cpp` provides both wake-resume and
+The shared `exemples/misc/core_power_test.cpp` provides both wake-resume and
 reset-on-wake demonstration paths. The default C3/C6 board configurations
 use UART0 at 1 Mbaud, GPIO9 BOOT and `POWER_DEMO_RESUME_WAKE=1`.
 They drain/disable the UART before `SystemSleep()` and check 128 bytes
