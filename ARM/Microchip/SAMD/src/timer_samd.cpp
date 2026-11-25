@@ -204,25 +204,6 @@ static SamdTimerData_t *SamdTimerStorage(int DevNo)
 	return data;
 }
 
-// RTC uses the low-frequency clock and remains available as a wake timer.
-// The TC/TCC and SysTick counters cannot retain their running clock in
-// Standby, so report them before the system suspends other peripherals.
-extern "C" bool SamdTimerAllowStandby(void)
-{
-	if (s_SamdSysTickOwner != NULL && SysTickTimerEnabled())
-	{
-		return false;
-	}
-	for (int i = SAMD_RTC_TIMER_MAXCNT; i < SAMD_TIMER_MAXCNT; i++)
-	{
-		if (s_SamdTimerData[i] != NULL && s_SamdTimerData[i]->bRunning)
-		{
-			return false;
-		}
-	}
-	return true;
-}
-
 static inline bool SamdTimerIsRtc(const SamdTimerData_t *pData)
 {
 	return pData->pOps->pRtc != NULL;
