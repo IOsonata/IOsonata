@@ -141,7 +141,10 @@ void ResetEntry (void)
 	 * Now memory has been initialized
 	 * Update core clock data
 	 */
+	// SAM D11/D21 SystemInit already reads the selected clock and calibrates delays.
+#if !defined(__SAMD11D14AM__) && !defined(__SAMD21J18A__)
 	SystemCoreClockUpdate();
+#endif
 
 	/*
 	 * We are ready to enter main application

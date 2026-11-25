@@ -1137,6 +1137,7 @@ static bool SamdClockInit(void)
 		return SamdStartupFailed(SAMD_STARTUP_CLOCK_SWITCH, __LINE__);
 	}
 
+	s_CoreSource = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_MAIN) & GCLK_GENCTRL_SRC_Msk;
 	return true;
 }
 
@@ -1161,19 +1162,16 @@ static bool SamdSystemClockInit(void)
 #endif
 
 	result = SamdClockInit();
-	s_CoreSource = result ?
-		SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_MAIN) & GCLK_GENCTRL_SRC_Msk :
-		UINT32_MAX;
 	if (!result)
 	{
+		s_CoreSource = UINT32_MAX;
 		(void)SamdMainOsc8m();
+		SystemCoreClockUpdate();
 	}
 
 #if SAMD_CLOCK_DIAGNOSTICS
 	SamdStartupRegs();
 #endif
-
-	SystemCoreClockUpdate();
 
 	__set_PRIMASK(primask);
 
