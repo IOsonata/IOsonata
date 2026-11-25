@@ -59,13 +59,14 @@ SOFTWARE.
 #define CORE_CLOCK_TEST_UART_DMA false
 #endif
 
-// Boards with limited flash can run the clock checks without timer measurements.
-#ifndef CORE_CLOCK_TEST_TIMERS
-#define CORE_CLOCK_TEST_TIMERS 1
+#ifdef CORE_CLOCK_TEST_TIMER_DEVNO
+static constexpr bool s_TestAllTimers = false;
+#else
+static constexpr bool s_TestAllTimers = true;
 #endif
 
 #ifndef CORE_CLOCK_TEST_DELAY_CALIBRATION
-#define CORE_CLOCK_TEST_DELAY_CALIBRATION CORE_CLOCK_TEST_TIMERS
+#define CORE_CLOCK_TEST_DELAY_CALIBRATION 1
 #endif
 
 #define CLOCK_TEST_CYCLES	3U
@@ -699,7 +700,7 @@ static void CoreClockTestDelayCalibrationRecord(void)
 
 	if (!CoreClockTestDelaySample(&sample))
 	{
-		if (!CORE_CLOCK_TEST_TIMERS)
+		if (!s_TestAllTimers)
 		{
 			CoreClockTestResult("Delay calibration measurement", false);
 		}
@@ -1125,7 +1126,7 @@ static void CoreClockTestTimerPowerOff(void)
 	}
 }
 
-#if CORE_CLOCK_TEST_TIMERS && defined(CORE_CLOCK_TEST_TIMER_DEVNO)
+#ifdef CORE_CLOCK_TEST_TIMER_DEVNO
 static void CoreClockTestSingleTimer(void)
 {
 	uint32_t start;
@@ -1200,18 +1201,12 @@ int main(void)
 	{
 		return 1;
 	}
-#if CORE_CLOCK_TEST_TIMERS && defined(CORE_CLOCK_TEST_TIMER_DEVNO)
-	msDelay(1000);
-	CoreClockTestSingleTimer();
-	CoreClockTestComplete();
-	return 0;
-#endif
 	msDelay(1000);
 	CoreClockTestPrint("CoreClockTest\r\nStartup CPU %u Hz, peripheral clock 0 %u Hz\r\n",
 		(unsigned)SystemCoreClockGet(), (unsigned)SystemPeriphClockGet(0));
 	CoreClockTestFlush();
 	CoreClockTestResult("Core clock startup", SystemCoreClockGet() != 0U);
-	if (CORE_CLOCK_TEST_DELAY_CALIBRATION && !CORE_CLOCK_TEST_TIMERS)
+	if (CORE_CLOCK_TEST_DELAY_CALIBRATION && !s_TestAllTimers)
 	{
 		CoreClockTestPortCalibration();
 		CoreClockTestComplete();
@@ -1220,7 +1215,7 @@ int main(void)
 	CoreClockTestSharedClockTest();
 	CoreClockTestPowerMode();
 	CoreClockTestDelayCalibrationRecord();
-	if (CORE_CLOCK_TEST_TIMERS)
+	if (s_TestAllTimers)
 	{
 		CoreClockTestSleepDelay();
 	}
@@ -1294,7 +1289,7 @@ int main(void)
 	{
 		CoreClockTestResult("Peripheral clock domains present", false);
 	}
-	if (CORE_CLOCK_TEST_TIMERS)
+	if (s_TestAllTimers)
 	{
 		CoreClockTestPrint("Timer timing test\r\n");
 
@@ -1317,10 +1312,12 @@ int main(void)
 		CoreClockTestSleepDelayOwnership(lowTimerCount);
 		CoreClockTestTimerPowerOff();
 	}
+#ifdef CORE_CLOCK_TEST_TIMER_DEVNO
 	else
 	{
-		CoreClockTestPrint("Timer and delay measurements omitted from this build\r\n");
+		CoreClockTestSingleTimer();
 	}
+#endif
 	if (CORE_CLOCK_TEST_DELAY_CALIBRATION)
 	{
 		CoreClockTestDelayCalibrationReport();

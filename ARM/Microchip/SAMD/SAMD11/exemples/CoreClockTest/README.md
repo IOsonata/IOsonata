@@ -1,37 +1,34 @@
-# CoreClockTest — generic MCU test
+# SAMD11D14AM CoreClockTest
 
-> **Release 0.14 migration:** This Eclipse managed project now compiles the shared
-> `exemples/misc/core_clock_test.cpp` test. The legacy demo instructions below
-> are historical reference only; they do **not** describe the current test flow.
-> Check `src/board.h` for this board's UART, oscillator, timer and wake-pin setup.
-> Use the generic test output and capability reporting to determine supported
-> functionality; build and hardware validation remain target-specific.
+Build the SAMD11 library and CoreClockTest with matching Eclipse configurations.
+The default image runs the shared HF/LF clock checks, CPU power modes,
+peripheral clock rate requests and readback, then tests RTC timing, periodic
+and one-shot callbacks, and TimerPowerOff. Output uses the EDBG UART.
 
-## SAMD11D14AM Release
+To test another timer, set `CORE_CLOCK_TEST_TIMER_DEVNO` in the application's
+C++ preprocessor symbols and rebuild. Each image runs the same clock checks.
 
-The 16 KiB build exercises shared HF/LF clocks, oscillator selection and
-restoration, peripheral clock requests, and CPU running modes over the EDBG
-UART. The board sets `CORE_CLOCK_TEST_TIMERS=0`. The completion count covers
-the enabled checks. Timer triggers, concurrent timers, timer power-off and
-delay calibration and accuracy are outside this image.
+| DevNo | Timer | Flash image (bytes) |
+| ---: | --- | ---: |
+| 0 (default) | RTC | 15,064 |
+| 1 | TC1 | 15,940 |
+| 2 | TC2 | 15,988 |
+| 3 | TCC0 | 16,200 |
+| 4 | SysTick | 11,944 |
 
-`SystemPeriphClockSet` returns the generator frequency set at startup; it
-does not change a divider. The clock sources are those of `g_McuOsc`, set
-once by `SystemInit`; there is no run time source selection.
+Sizes include flash alignment with xPack Arm GCC 15.2.1 and the 16 KiB SAMD11
+linker script. The full generic test, including concurrent timers, the
+independent HF timing reference and sleep-delay checks, exceeds flash by
+6,772 bytes with delay calibration disabled and 8,520 bytes with it enabled.
 
-### Test a timer
+## Delay calibration during porting
 
-Set `CORE_CLOCK_TEST_TIMERS=1` in the CoreClockTest Release C++ preprocessor
-symbols. The SAMD11 builds one timer per image so the linker can discard
-the other timer implementations. The default device is 0 (RTC). Set
-`CORE_CLOCK_TEST_TIMER_DEVNO` to 1 (TC1), 2 (TC2), 3 (TCC0) or 4 (SysTick)
-and rebuild the application to test that device.
+Set `CORE_CLOCK_TEST_DELAY_CALIBRATION=1` and rebuild the application.
+This 12,104-byte image uses SysTick to measure the delay loops at 48 and
+24 MHz and then restores performance mode. The two `Delay divisors` lines
+give the microsecond and nanosecond divisors scaled by 1,000,000.
 
-The test measures 110 ms, counts periodic and one-shot callbacks, then
-disables and powers off the selected timer. Multi-timer checks require
-the full test image on a larger target.
-
-Hardware results for the single-timer Release build:
+## Earlier single-timer hardware measurements
 
 | DevNo | Peripheral | Elapsed for 110 ms | Periodic callbacks | One-shot and PowerOff |
 | --- | --- | ---: | ---: | --- |
@@ -40,148 +37,4 @@ Hardware results for the single-timer Release build:
 | 3 | TCC0 | 110,272 us | 5 | PASS |
 | 4 | SysTick | 110,048 us | 5 | PASS |
 
-All four timer implementations passed on hardware. TC1 and TC2 share the TC driver.
-
-### Measure delay factors during porting
-
-In the **CoreClockTest** Release configuration, add
-`CORE_CLOCK_TEST_DELAY_CALIBRATION=1` under **GNU ARM Cross C++ Compiler >
-Preprocessor > Defined symbols**. Leave `CORE_CLOCK_TEST_TIMERS=0` and rebuild
-the application. This selects a calibration-only image for the 16 KiB part.
-
-The test uses the core-clocked SysTick timer to measure the public delay
-functions at the startup frequency (48 MHz) and in reduced-speed mode
-(24 MHz), then restores performance mode. Capture the two UART lines
-beginning with `Delay divisors`. Each gives the CPU frequency and the
-microsecond and nanosecond loop divisors scaled by 1,000,000.
-These are measurements for choosing the port defaults. Remove the symbol
-and rebuild to resume the normal clock test.
-
-## Historical demo notes (pre-migration)
-
-# SAMD11 CoreClockTest
-
-## Current clock-only configuration
-
-The CoreClockTest board now selects the OSC8M reference and exercises
-the normal clock, divider, timer and delay APIs. It no longer contains
-the Standby/resume profile or calls SystemSleep. UART uses SERCOM2 on
-the EDBG virtual COM port. Polling UART RX is disabled by default on
-this 16 KB flash target until the full library/demo link is verified.
-CorePowerTest owns SW0/NMI Standby wake and SRAM-retention checks.
-
-The code changes in review 0.14 have not been compiled or retested
-on hardware. The original clock-selection build fitted in 15,350
-bytes of flash before this refactor.
-
-## Historical combined CoreClockTest documentation
-
-The following instructions and hardware observations describe the
-earlier combined clock/sleep demo, not the current board configuration.
-
-Import `ioc` as an existing Eclipse managed project and build the matching
-IOsonata library in the same Debug or Release configuration. Console pins and
-oscillator selections are in `src/board.h`, copied from this target's
-CorePowerTest project. Default console speed is 1,000,000 baud unless board.h
-specifies another rate. No debugger is required for UART logging.
-
-Select the run in `src/board.h` with `CLOCK_DEMO_RESUME_TEST`:
-
-- `1` (default): check the startup clock, measure both delays, then perform
-  three Standby wake cycles. Press and release SW0 after each
-  `Entering sleep; press SW0 to resume` message. At each UART RX prompt,
-  send uppercase `U` from the terminal within 30 seconds (press Enter if the
-  terminal buffers a line). This runs once before sleep and after every wake.
-  Each wake checks CPU/APB
-  clocks, oscillator descriptors, UART output, timer interrupts and both delays.
-- `0`: run the three OSC8M clock-selection cycles, then measure both delays.
-  UART is drained and powered off before each change, then initialized again.
-
-The two modes share the generic CoreClockTest source. Combining clock selection
-and wake support in one D11 build exceeded flash by 600 bytes, so the board
-selects the required checks at compile time. The Standby run keeps the startup
-clock; it does not perform runtime source selection. The APB clock stays at
-48 MHz because the SAMD setter does not support a different rate.
-
-LF selection is omitted because a running DFLL/DPLL may own its reference.
-Timer initialization is deferred until clock checks complete because some ports
-retain timer module ownership after TimerDisable. SysTick (timer 4) requests
-1 MHz and a 10 ms trigger. Both msDelay(250) and nsDelay(250000000) are measured
-against that timer. The returned timer rate may differ from 1 MHz; checks use
-the actual rate/period. They do not independently measure oscillator accuracy.
-The timer is disabled and UART drained before each sleep. No watchdog is enabled.
-
-Debug and Release use size optimization and LTO. The linker retains _sbrk for
-newlib formatting after LTO. Both configurations linked with these sizes:
-
-| Mode | Flash (text + data) | Static RAM (data + bss) |
-| --- | ---: | ---: |
-| Clock selection | 15,350 bytes | 2,152 bytes |
-| Standby/resume | 15,788 bytes | 2,132 bytes |
-
-RAM totals exclude stack use. CorePowerTest remains available for the
-static/stack SRAM continuity check. Reset restores startup clocks.
-
-An omitted selector prints SKIP. A configured selector that fails prints FAIL;
-unsupported selections are not silently counted as successful tests. Runtime
-clock ownership, board wiring and hardware operation still require board
-validation. See the cross-target power/clock demo matrix for build results.
-
-The first board run stopped in GCLK synchronization during core selection.
-The main-clock transition now preserves the existing divider while selecting
-OSC8M, synchronizes that source change, and only then clears the divider.
-Previously the divider was cleared while FDPLL96M still supplied 96 MHz,
-exceeding the 48 MHz CPU limit. The revised write sequence passes a register
-model check and both SAMD11/SAMD21 demo build configurations. The later
-board run completed all three selections.
-
-CoreClockTest drains both the syslog record store and polling UART FIFO after
-startup and result output, before changing clocks, and before its final idle
-loop. A partial UART write leaves the remainder in syslog; draining only the
-UART FIFO can leave the last visible output in the middle of a line.
-
-The following board run completed all three core/APB selections. Its timer
-reported 203202 us and 20 interrupts for a requested 250 ms delay. The old
-usDelay scaling selected three 13-cycle iterations per microsecond at 48 MHz,
-which predicts 203125 us. The corrected board run measured 250106 us and
-25 interrupts, completing with zero failures.
-
-The shared ARM delay now uses SystemMicroSecLoopCnt with 16 fractional bits.
-SystemCoreClockUpdate refreshes it from the CPU frequency and the port's loop
-calibration. The SAMD port uses 13 cycles per microsecond-delay loop and three
-cycles per nanosecond-delay loop. idelay.h has no SAMD-specific calculation.
-The maintainer's run of 2de35f281 passed all three clock selections and both
-delay checks: msDelay measured 250094 us, nsDelay measured 250107 us, both
-with 25 interrupts. CoreClockTest completed with zero failures at 48 MHz.
-The maintainer's Standby run at e017243bc passed all three SW0 wakes, CPU/APB
-clock and LF descriptor checks, and timer interrupts. Post-wake msDelay
-measured 250097-250103 us; nsDelay measured 250108-250112 us, with 25 interrupts
-in every sample and zero failures. CorePowerTest separately passed five
-consecutive wakes with both 128-byte SRAM samples preserved.
-
-The maintainer's run at d11b58001 passed polling UART RX before sleep and
-following each of three SW0 wakes, completing with zero failures. Baseline
-msDelay measured 250093 us and nsDelay 250107 us. Post-wake msDelay measured
-250103-250104 us and nsDelay 250114-250115 us; every sample had 25 interrupts.
-CPU/APB clocks, LF descriptors and APB restoration passed after every wake.
-
-Missing the UART response deadline increments the failure count; the demo
-continues. Input cleanup is bounded, and unrelated characters do not count as
-a successful response. UART interrupt/DMA receive modes are outside this check.
-
-OSC8M identifies the PLL reference selected by SystemCoreClockSelect; the
-clock tree is rebuilt to 48 MHz. It does not request an 8 MHz CPU clock.
-
-The shared ARM delay loops now preserve calculated counts above 32 bits, and
-msDelay splits long requests before converting to microseconds. Millisecond
-delay code is no longer forced inline at every call site; the compiler can
-share it when optimizing for size. The current Standby build saves 332 flash
-bytes compared with the receive-enabled hardware run above. Both selectable
-runs still fit in Debug and Release. These are build results; the recorded
-board timings predate this loop update.
-
-The current system Standby implementation also prepares the existing
-UART, I2C and SPI SERCOM drivers, rather than requiring the application
-to stop those clocks. This new driver coordination has not been
-clean-built or hardware-tested on SAMD11. CorePowerTest remains the
-integration test for resumable wake and SRAM retention.
+TC1 and TC2 share the TC driver.

@@ -4,7 +4,8 @@
 
 SystemPowerCapabilitiesGet() determines which power modes the test exercises.
 For Standby, CORE_POWER_TEST_WAKE_MS selects timed wake (milliseconds) or
-button wake (zero). The board supplies the UART pins and wake pin.
+button wake (zero). Boards with a wake pin and no System OFF also test
+button wake after timed Standby.
 
 System OFF is last: the next boot validates reset-on-wake and retention.
 The normal CPU-resumable sleep tests run on every boot before System OFF.
@@ -31,9 +32,6 @@ MIT License. Copyright (c) 2026, I-SYST inc.
 
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE			1000000
-#endif
-#ifndef CORE_POWER_TEST_TIMER_WAKE_ONLY
-#define CORE_POWER_TEST_TIMER_WAKE_ONLY 0
 #endif
 #ifndef CORE_POWER_TEST_WAKE_MS
 #define CORE_POWER_TEST_WAKE_MS	1000U
@@ -342,7 +340,72 @@ static void CorePowerTestRunningMode(uint32_t Caps)
 		SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
 }
 
-static void CorePowerTestSleep(uint32_t Caps)
+#if CORE_POWER_TEST_WAKE_MS > 0
+static bool CorePowerTestTimedWake(void)
+{
+	uint32_t state;
+	uint32_t start;
+	uint32_t elapsed;
+	uint64_t period;
+	uint64_t expected;
+	bool ok;
+
+	if (TimerSetFrequency(&s_WakeTimer, 1024U) == 0U || !TimerEnable(&s_WakeTimer))
+	{
+		CorePowerTestResult("Wake timer enable", false);
+		return false;
+	}
+	PowerTestText("Entering Standby; automatic timer wake\r\n");
+	// Allow queued UART DMA transfers to finish before entering sleep.
+	msDelay(100);
+	state = DisableInterrupt();
+	s_TimerWoke = false;
+	start = TimerGetMicrosecond(&s_WakeTimer);
+	period = nsTimerEnableTrigger(&s_WakeTimer, 0,
+		(uint64_t)CORE_POWER_TEST_WAKE_MS * 1000000ULL,
+		TIMER_TRIG_TYPE_SINGLE, CorePowerTestTimerWake, nullptr);
+	if (period != 0U && !s_TimerWoke)
+	{
+		SystemSleep();
+	}
+	EnableInterrupt(state);
+	elapsed = TimerGetMicrosecond(&s_WakeTimer) - start;
+	TimerDisableTrigger(&s_WakeTimer, 0);
+	TimerDisable(&s_WakeTimer);
+	expected = (uint64_t)CORE_POWER_TEST_WAKE_MS * 1000ULL;
+	ok = period != 0U && s_TimerWoke &&
+		(uint64_t)elapsed >= expected * 98ULL / 100ULL &&
+		(uint64_t)elapsed <= expected * 102ULL / 100ULL;
+	CorePowerTestResult("Standby timer wake", ok);
+	if (!ok)
+	{
+		PowerTestStatus("Trigger armed", period != 0U ? ": yes\r\n" : ": no\r\n");
+		PowerTestStatus("RTC callback", s_TimerWoke ? ": yes\r\n" : ": no\r\n");
+		PowerTestValue("Elapsed us 0x", elapsed);
+	}
+	return true;
+}
+#endif
+
+#if defined(WAKE_BUT_PIN)
+static bool CorePowerTestButtonWake(void)
+{
+	while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
+		(WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 1 : 0))
+	{
+		msDelay(1);
+	}
+	PowerTestText("Entering Standby; press and hold wake button\r\n");
+	msDelay(100);
+	SystemSleep();
+	CorePowerTestResult("Standby button wake",
+		IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
+		(WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 1 : 0));
+	return true;
+}
+#endif
+
+static void CorePowerTestSleepCycles(bool (*Wake)(void))
 {
 	uint32_t cycle;
 	uint32_t coreBefore;
@@ -350,45 +413,9 @@ static void CorePowerTestSleep(uint32_t Caps)
 	uint32_t uartBefore;
 	uint32_t i;
 	uint32_t pattern;
-#if CORE_POWER_TEST_WAKE_MS > 0
-	TimerDev_t *pTimer;
-	uint32_t state;
-	uint32_t start;
-	uint32_t elapsed;
-	uint64_t period;
-	uint64_t expected;
-#endif
 	bool ok;
 	volatile uint32_t stackRam[CORE_POWER_TEST_RAM_WORDS];
 
-#if defined(CORE_POWER_TEST_LEGACY_OPTIONAL_APIS) && defined(__GNUC__)
-	if (SystemSleep == nullptr)
-	{
-		CorePowerTestUnsupported("Resumable SystemSleep");
-		return;
-	}
-#endif
-	if ((Caps & SYSTEM_POWER_CAP_SLEEP) == 0U)
-	{
-		CorePowerTestUnsupported("Resumable SystemSleep");
-		return;
-	}
-#if CORE_POWER_TEST_WAKE_MS > 0
-	if ((Caps & SYSTEM_POWER_CAP_TIMER_WAKE) == 0U)
-	{
-		CorePowerTestUnsupported("Resumable timer wake");
-		return;
-	}
-
-	pTimer = &s_WakeTimer;
-	ok = TimerInit(pTimer, &s_TimerCfg);
-	CorePowerTestResult("Wake timer initialization", ok);
-	if (!ok)
-	{
-		return;
-	}
-	TimerDisable(pTimer);
-#endif
 	for (cycle = 0U; cycle < CORE_POWER_TEST_SLEEP_CYCLES; cycle++)
 	{
 		coreBefore = SystemCoreClockGet();
@@ -400,53 +427,10 @@ static void CorePowerTestSleep(uint32_t Caps)
 			s_StaticRam[i] = pattern;
 			stackRam[i] = ~pattern;
 		}
-#if CORE_POWER_TEST_WAKE_MS > 0
-		if (TimerSetFrequency(pTimer, 1024U) == 0U || !TimerEnable(pTimer))
+		if (!Wake())
 		{
-			CorePowerTestResult("Wake timer enable", false);
 			return;
 		}
-		PowerTestText("Entering Standby; automatic timer wake\r\n");
-		// Allow queued UART DMA transfers to finish before entering sleep.
-		msDelay(100);
-		state = DisableInterrupt();
-		s_TimerWoke = false;
-		start = TimerGetMicrosecond(pTimer);
-		period = nsTimerEnableTrigger(pTimer, 0,
-			(uint64_t)CORE_POWER_TEST_WAKE_MS * 1000000ULL,
-			TIMER_TRIG_TYPE_SINGLE, CorePowerTestTimerWake, nullptr);
-		if (period != 0U && !s_TimerWoke)
-		{
-			SystemSleep();
-		}
-		EnableInterrupt(state);
-		elapsed = TimerGetMicrosecond(pTimer) - start;
-		TimerDisableTrigger(pTimer, 0);
-		TimerDisable(pTimer);
-		expected = (uint64_t)CORE_POWER_TEST_WAKE_MS * 1000ULL;
-		ok = period != 0U && s_TimerWoke &&
-			(uint64_t)elapsed >= expected * 98ULL / 100ULL &&
-			(uint64_t)elapsed <= expected * 102ULL / 100ULL;
-		CorePowerTestResult("Standby timer wake", ok);
-		if (CORE_POWER_TEST_TIMER_WAKE_ONLY && !ok)
-		{
-			PowerTestStatus("Trigger armed", period != 0U ? ": yes\r\n" : ": no\r\n");
-			PowerTestStatus("RTC callback", s_TimerWoke ? ": yes\r\n" : ": no\r\n");
-			PowerTestValue("Elapsed us 0x", elapsed);
-		}
-#else
-		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
-			(WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 1 : 0))
-		{
-			msDelay(1);
-		}
-		PowerTestText("Entering Standby; press and hold wake button\r\n");
-		msDelay(100);
-		SystemSleep();
-		CorePowerTestResult("Standby button wake",
-			IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
-			(WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 1 : 0));
-#endif
 		CorePowerTestResult("CPU/peripheral clock after resume",
 			SystemCoreClockGet() == coreBefore &&
 			SystemPeriphClockGet(0) == periphBefore);
@@ -463,6 +447,49 @@ static void CorePowerTestSleep(uint32_t Caps)
 		CorePowerTestResult("Static/stack RAM after resume", ok);
 		PowerTestValue("Standby cycle 0x", cycle + 1U);
 	}
+}
+
+static void CorePowerTestSleep(uint32_t Caps, bool Button = (CORE_POWER_TEST_WAKE_MS == 0))
+{
+#if CORE_POWER_TEST_WAKE_MS > 0
+	bool ok;
+#endif
+
+#if defined(CORE_POWER_TEST_LEGACY_OPTIONAL_APIS) && defined(__GNUC__)
+	if (SystemSleep == nullptr)
+	{
+		CorePowerTestUnsupported("Resumable SystemSleep");
+		return;
+	}
+#endif
+	if ((Caps & SYSTEM_POWER_CAP_SLEEP) == 0U)
+	{
+		CorePowerTestUnsupported("Resumable SystemSleep");
+		return;
+	}
+#if defined(WAKE_BUT_PIN)
+	if (Button)
+	{
+		CorePowerTestSleepCycles(CorePowerTestButtonWake);
+		return;
+	}
+#endif
+#if CORE_POWER_TEST_WAKE_MS > 0
+	if ((Caps & SYSTEM_POWER_CAP_TIMER_WAKE) == 0U)
+	{
+		CorePowerTestUnsupported("Resumable timer wake");
+		return;
+	}
+
+	ok = TimerInit(&s_WakeTimer, &s_TimerCfg);
+	CorePowerTestResult("Wake timer initialization", ok);
+	if (!ok)
+	{
+		return;
+	}
+	TimerDisable(&s_WakeTimer);
+	CorePowerTestSleepCycles(CorePowerTestTimedWake);
+#endif
 }
 
 static bool CorePowerTestWakePin(uint32_t Caps)
@@ -529,15 +556,6 @@ int main(void)
 	}
 #endif
 	caps = SystemPowerCapabilitiesGet();
-	if (CORE_POWER_TEST_TIMER_WAKE_ONLY)
-	{
-		CorePowerTestSleep(caps);
-		CorePowerTestSummary();
-		while (1)
-		{
-			__WFI();
-		}
-	}
 	PowerTestValue("Capabilities 0x", caps);
 	reason = SystemResetReason();
 	PowerTestValue("Reset reason 0x", reason);
@@ -588,6 +606,12 @@ int main(void)
 #else
 	CorePowerTestSleep(caps);
 	pinWake = CorePowerTestWakePin(caps);
+#if defined(WAKE_BUT_PIN)
+	if (pinWake && (caps & SYSTEM_POWER_CAP_SYSTEM_OFF) == 0U)
+	{
+		CorePowerTestSleep(caps, true);
+	}
+#endif
 #endif
 	CorePowerTestSummary();
 

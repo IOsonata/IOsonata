@@ -58,12 +58,6 @@ SOFTWARE.
 // SW0 is PA14, the SAMD11 EIC dedicated NMI input (active low).
 // No external switch or wire is required for Standby wake.
 #define CORE_POWER_TEST_POLLING_CONSOLE 1
-// Set this C++ build symbol to exercise RTC wake separately in 16 KB.
-#if defined(CORE_POWER_TEST_TIMER_WAKE_ONLY) && CORE_POWER_TEST_TIMER_WAKE_ONLY
-#define CORE_POWER_TEST_WAKE_MS 1000U
-#else
-#define CORE_POWER_TEST_WAKE_MS 0
-#endif
 #define WAKE_BUT_PORT IOPORTA
 #define WAKE_BUT_PIN 14
 #define WAKE_BUT_PINOP IOPINOP_GPIO

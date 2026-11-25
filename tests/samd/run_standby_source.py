@@ -83,7 +83,7 @@ class StandbySourceTest(unittest.TestCase):
 	def test_samd11_board_selects_sw0(self):
 		board = (ROOT / "ARM/Microchip/SAMD/SAMD11/exemples/CorePowerTest/src/board.h").read_text(encoding="utf-8")
 		self.assertIn("#define WAKE_BUT_PIN 14", board)
-		self.assertIn("#define CORE_POWER_TEST_WAKE_MS 0", board)
+		self.assertNotIn("#define CORE_POWER_TEST_WAKE_MS", board)
 
 	def test_maskable_wake_is_pending_through_wfi(self):
 		s = body(SLEEP, "void SystemSleep(")
