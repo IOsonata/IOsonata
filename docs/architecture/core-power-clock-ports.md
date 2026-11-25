@@ -1,5 +1,33 @@
 # MCU core power and clock ports
 
+## Port rules status
+
+State of each port against "Rules for an MCU port" in
+[MCU core power, clock and timer lifecycle](system-clock-timer-lifecycle.md),
+November 25, 2026.
+
+| Port | No run time source selection | Clock code reads no device | `SystemSleep` leaves the drivers alone |
+| --- | --- | --- | --- |
+| SAM D11, SAM D21 | Yes | Yes | Yes |
+| SAM4L | No | No | No |
+| SAM4E | No | No | Not reviewed |
+| Nordic | No | No | Not reviewed |
+| ST | No | Not reviewed | Not reviewed |
+| NXP | No | Not reviewed | Not reviewed |
+| Renesas | No | Not reviewed | Not reviewed |
+| Espressif | No | Not reviewed | No |
+
+Nordic: the clock code refuses a source selection while a request count is
+not zero.
+
+SAM D was brought to the rules first. `system_samd.c` went from 4,466 to
+2,366 bytes at `-Os`, and the SAM D11 `CoreClockTest` Release image from
+14,960 to 11,684 bytes of flash on a 16 KB part. The removed code was the
+search for clock users, the run time divider setter, the frequency rebuilt
+from the registers, the run time source selection and the driver calls of
+`SystemSleep`. As of November 25, 2026 these SAM D results are from host
+tests and a register model; the hardware run is not done.
+
 ## Microchip 0.14 port status, November 24
 
 The SAM D11/D21, SAM4L and SAM4E ports report power capabilities and

@@ -2,32 +2,57 @@
 
 ## Purpose and ownership
 
-IOsonata Power & Clock manages MCU low-power operation and selects clocks for peripherals. It is an internal service used by startup and
-drivers. Its declarations are shared across MCU ports so that an application
-can use the same device code on different hardware.
+IOsonata Power & Clock manages MCU low-power operation and provides the
+clocks the peripherals run from. It is an internal service used by startup
+and drivers. Its declarations are shared across MCU ports so that an
+application can use the same device code on different hardware.
+
+This document is the design and the rules for writing an MCU port. It is not
+specific to one MCU. Results and notes of each port are in
+[MCU power/clock port evidence](core-power-clock-ports.md).
+
+Terms used below: HF and LF are the high and low frequency oscillators the
+board describes in `g_McuOsc`. A peripheral clock is one clock the MCU clock
+tree derives from them for the devices. A user is a driver that needs a
+clock to stay on.
 
 | Owner | Responsibility |
 | --- | --- |
 | Board | Describe the fitted oscillators and their frequencies in `g_McuOsc`. |
 | Application | Request a device operation such as a UART baud rate or timer interval. Decide when the application can sleep, prepare its devices through their drivers, and configure the intended wake event before calling `SystemSleep()`. |
-| Device driver | Choose a suitable clock for the requested operation. Own the device registers, pins, interrupts, DMA, module gate and device lifecycle. Hold the required shared clock while the hardware depends on it, including pending transfers and armed wake events. |
-| MCU Power & Clock | Establish the board clocks at startup. Select and share the available clock sources and domains. Enter the MCU sleep state and restore MCU clocks on wake where required. Respect clocks already owned by another core or radio stack. |
+| Device driver | Request the peripheral clock its device runs from and program its own divider for the requested operation. Own the device registers, pins, interrupts, DMA, the clock enable bit of the device and the device lifecycle. Hold the required shared clock while the hardware depends on it, including pending transfers and armed wake events. |
+| MCU Power & Clock | Set up the board clocks and the peripheral clocks once at startup and share them. Enter the MCU sleep state and restore MCU clocks on wake where required. Respect clocks already owned by another core or radio stack. |
 
-### Peripheral clock selection
+### Peripheral clocks
 
-The driver chooses the MCU-specific domain for `SystemPeriphClockGet/Set`.
-A rate setter returns the actual frequency in effect. For a fixed domain, or
-one shared by several devices, that is the current frequency: the port does
-not change a shared divider under the other devices and does not look for
-them. The driver uses the returned value to program its own divider and
-report the actual device rate.
+The peripheral clocks are assigned by the clock tree configuration of the
+MCU port. `SystemInit()` sets them up, and the port numbers them: peripheral
+clock 0, 1, 2 and so on. What each number is depends on the MCU. On one MCU
+peripheral clock 0 can be the clock of the UARTs and 1 the clock of the SPI;
+on another, 0 is the main clock and 1 the 32 kHz clock. The port documents
+its numbers in its clock header.
 
-Shared HF/LF sources use the existing `Enable/Disable` calls with internal
-reference counts. A driver calls them for a source that can stop on its own,
-such as a crystal oscillator the CPU does not run from. Releasing one user
-preserves the source while another user or the MCU still needs it. That is
-the only purpose of the count. It is not a reason to refuse another
-operation.
+A device driver is part of the MCU port, so it knows which peripheral clock
+its device runs from. It requests that one with `SystemPeriphClockGet(n)`
+and programs its own divider from the returned frequency to get the data
+rate the application asked for. It reports the actual rate. The application
+never names a peripheral clock: it asks the driver for a baud rate or a
+timer interval.
+
+`SystemPeriphClockSet(n, Freq)` returns the frequency in effect. A
+peripheral clock is shared by the devices assigned to it, so the port does
+not change it under them and does not look for them.
+
+The HF and LF oscillators use the existing `Enable/Disable` calls with
+internal reference counts. A driver calls them for an oscillator that can
+stop on its own, such as a crystal oscillator the CPU does not run from.
+Releasing one user preserves the oscillator while another user or the MCU
+still needs it. That is the only purpose of the count. It is not a reason to
+refuse another operation.
+
+Power saving while the CPU runs comes from two things: a lower CPU
+frequency, through `SystemPowerModeSet()`, and stopping an oscillator nobody
+uses, through `Enable/Disable`. It does not come from changing oscillator.
 
 ### Low-power operation
 
@@ -47,13 +72,13 @@ the system which of these behaviors the application intends.
 `Disable` permits a subsequent `Enable` with the existing configuration.
 Device `PowerOff` requires `Init` before reuse. System sleep performs neither
 operation on behalf of a device. System power-off is a separate application
-decision with the reset-on-wake semantics of the target.
+decision: the MCU restarts from reset on wake.
 
 ### Scope of the generic API
 
 Add a generic operation only for an identified low-power or peripheral-clock
 requirement that an existing system or device operation cannot express.
-Document its caller, the resource it owns and its observable result.
+Document its caller, the hardware it changes and its observable result.
 Keep oscillator sequences, PLL calculations, register access and target
 errata inside the MCU port. A register available on one MCU or a setting
 exercised by `CoreClockTest` is insufficient reason to expose another API.
@@ -64,52 +89,39 @@ the validation build. Measure flash impact in the linked application.
 
 ### Rules for an MCU port
 
-1. The clock sources are those of `g_McuOsc`. `SystemInit()` sets them up
-   once. There is no run time source selection. A board with a crystal uses
-   it, a board without one uses the RC.
-2. Power saving while running is the CPU frequency, through
-   `SystemPowerModeSet()`, and stopping a source nobody uses, through the
-   shared clock `Enable/Disable`. It is not a change of oscillator.
+For the author of an MCU port and of its drivers.
+
+1. Take the clock sources from `g_McuOsc` and set them up once in
+   `SystemInit()`. Do not select a source at run time. A board with a
+   crystal uses it, a board without one uses the RC.
+2. Assign the peripheral clocks in the clock tree configuration and number
+   them. Each driver of the port requests the one its device runs from.
 3. The device asks for its clock. The clock code does not read device
-   registers, does not loop over clock channels or generators to find users,
-   and does not ask a driver whether a clock is in use.
-4. `Enable` counts a user and starts the source on the first one. `Disable`
-   releases one user and stops the source after the last one, where the
-   hardware can stop it. The count is used for nothing else.
-5. `SystemPeriphClockSet()` returns the frequency in effect. A port changes
-   a divider only for a domain that has one user by construction.
-6. `SystemPeriphClockGet()` returns the frequency in effect for the requested
-   domain. On SAM D11/D21 this is the stored generator frequency.
-   `SystemCoreClockUpdate()` applies the CPU divider to the stored main
-   generator frequency, sets `SystemCoreClock`, and updates the delay factors.
-7. The application prepares its devices and arms the wake source before
-   calling `SystemSleep()`. The MCU port enters sleep and returns after wake.
+   registers, does not search the clock tree for users, and does not ask a
+   driver whether a clock is in use.
+4. `Enable` counts a user and starts the oscillator on the first one.
+   `Disable` releases one user and stops the oscillator after the last one,
+   where the hardware can stop it. Use the count for nothing else.
+5. `SystemPeriphClockSet()` returns the frequency in effect. Change a
+   divider only for a peripheral clock that feeds a single device.
+6. Store the frequency of a clock when the clock setup sets it, and return
+   the stored value from `SystemPeriphClockGet()`. `SystemCoreClockUpdate()`
+   applies the CPU divider to the stored main frequency, sets
+   `SystemCoreClock` and updates the delay factors. Do not rebuild a PLL
+   frequency from the registers on each call.
+7. `SystemSleep()` enters the MCU sleep state and returns after wake. It does
+   not ask a driver whether sleep is allowed and does not pause or resume a
+   driver. The application prepares its devices and arms the wake source
+   before the call.
 8. A function that only `CoreClockTest` or `CorePowerTest` calls is not a
    reason to keep code in the library.
 
 `SystemCoreClockSelect()` and `SystemLowFreqClockSelect()` are not services
-for applications or drivers. Some ports call them from their own startup.
-Those ports keep them as private startup functions; the declarations leave
-`system_core_clock.h` once every such port is converted. A new port does not
-define them.
-
-### Port status
-
-| Port | Run time selection removed | Clock code reads no device | `SystemSleep` leaves drivers alone |
-| --- | --- | --- | --- |
-| SAM D11, SAM D21 | Yes | Yes | Yes |
-| SAM4L | No | No | No |
-| SAM4E | No | No | Not reviewed |
-| Nordic | No | Partly: selection is refused from the request counts | Not reviewed |
-| ST, NXP, Renesas, Espressif | No | Not reviewed | Espressif: no. Others not reviewed |
-
-SAM D is the reference for the conversion. `system_samd.c` went from 4,466
-to 2,366 bytes at `-Os`, and the SAM D11 `CoreClockTest` Release image from
-14,960 to 11,684 bytes of flash on a 16 KB part. The removed code was the
-scan for clock users, the run time divider setter, the frequency rebuilt
-from the registers, the run time source selection and the driver calls of
-`SystemSleep`. SAM D results are from host tests and a register model; the
-hardware run is still to do.
+for applications or drivers. Some ports still call them from their own
+startup. Those ports make them private startup functions when they are
+brought to these rules; the declarations then leave `system_core_clock.h`.
+A new port does not define them. The state of each port is in
+[MCU power/clock port evidence](core-power-clock-ports.md#port-rules-status).
 
 ## Oscillator configuration and clock execution
 
@@ -153,11 +165,11 @@ The responsibilities are deliberately separated:
 - The shared HF/LF Enable/Disable functions manage oscillator or
   shared-clock usage and the corresponding reference counts; they do not
   disable an essential CPU clock or replace peripheral-module gates.
-- Existing `SystemPeriphClockGet/Set` functions manage derived peripheral
-  clock frequencies and MCU-specific clock-domain indices where supported.
-- Peripheral `Init/Enable/Disable` methods select suitable clock inputs
-  from their requested operating frequency and handle module setup without
-  requiring applications to understand the clock tree.
+- `SystemPeriphClockGet/Set` give the frequency of the numbered peripheral
+  clocks the port assigned in its clock tree configuration.
+- Peripheral `Init/Enable/Disable` methods request the peripheral clock of
+  their device, program their divider for the requested rate and handle the
+  device setup. Applications do not need to know the clock tree.
 
 Do not introduce duplicate enums, a private oscillator resource API, or a
 synthesized-LFCLK mode to express this model.
@@ -175,7 +187,7 @@ selection; see "Rules for an MCU port".
 
 ### Generic clock functions
 
-Declared in `include/coredev/system_core_clock.h` on the working branch:
+Declared in `include/coredev/system_core_clock.h`:
 
 ```cpp
 bool SystemHighFreqClockEnable(void);
