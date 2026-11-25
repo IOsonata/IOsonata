@@ -10,7 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 CLOCK = ROOT / "exemples/misc/core_clock_test.cpp"
-POWER = ROOT / "exemples/misc/power_off_demo.cpp"
+POWER = ROOT / "exemples/misc/core_power_test.cpp"
 I2C = ROOT / "exemples/i2c/i2c_slave_demo.cpp"
 NRF_UART = ROOT / "ARM/Nordic/src/uart_nrfx.cpp"
 
@@ -252,7 +252,7 @@ class DemoDriverOwnership(unittest.TestCase):
 	def test_power_clock_examples_use_plain_engineering_terms(self):
 		paths = (
 			ROOT / "exemples/misc/core_clock_test.cpp",
-			ROOT / "exemples/misc/power_off_demo.cpp",
+			ROOT / "exemples/misc/core_power_test.cpp",
 			ROOT / "exemples/misc/hfxo_test.cpp",
 			ROOT / "exemples/misc/hfxo_test_ble.cpp",
 			ROOT / "exemples/misc/hfxo_test_ble.md",
@@ -275,7 +275,7 @@ class DemoDriverOwnership(unittest.TestCase):
 	def test_shared_clock_examples_do_not_access_vendor_registers(self):
 		paths = (
 			ROOT / "exemples/misc/core_clock_test.cpp",
-			ROOT / "exemples/misc/power_off_demo.cpp",
+			ROOT / "exemples/misc/core_power_test.cpp",
 			ROOT / "exemples/misc/hfxo_test.cpp",
 			ROOT / "exemples/misc/hfxo_test_ble.cpp",
 		)
