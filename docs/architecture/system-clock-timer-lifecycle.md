@@ -64,9 +64,6 @@ the validation build. Measure flash impact in the linked application.
 
 ### Rules for an MCU port
 
-These rules follow from the table above. A port that breaks one of them
-grows without serving the application.
-
 1. The clock sources are those of `g_McuOsc`. `SystemInit()` sets them up
    once. There is no run time source selection. A board with a crystal uses
    it, a board without one uses the RC.
@@ -81,13 +78,12 @@ grows without serving the application.
    hardware can stop it. The count is used for nothing else.
 5. `SystemPeriphClockSet()` returns the frequency in effect. A port changes
    a divider only for a domain that has one user by construction.
-6. `SystemPeriphClockGet()` and `SystemCoreClockUpdate()` return what the
-   clock setup stored when it set the clock. Rebuilding a PLL or DFLL
-   frequency from the registers on every call costs flash and divisions.
-7. `SystemSleep()` enters the MCU sleep state and returns. It does not ask a
-   driver for permission and does not pause or resume a driver. The
-   application does that with the driver's `Enable`, `Disable` and
-   `PowerOff` before it calls `SystemSleep()`.
+6. `SystemPeriphClockGet()` returns the frequency in effect for the requested
+   domain. On SAM D11/D21 this is the stored generator frequency.
+   `SystemCoreClockUpdate()` applies the CPU divider to the stored main
+   generator frequency, sets `SystemCoreClock`, and updates the delay factors.
+7. The application prepares its devices and arms the wake source before
+   calling `SystemSleep()`. The MCU port enters sleep and returns after wake.
 8. A function that only `CoreClockTest` or `CorePowerTest` calls is not a
    reason to keep code in the library.
 
@@ -571,10 +567,10 @@ Timer or RTC. Loop-cost calibration only affects assembly fallback.
 Every successful CPU source or divider transition, including reduced-power
 frequencies and wakeup restoration, must do the following in System Core:
 
-1. Complete the clock change and read the effective CPU frequency from the
-   relevant hardware clock register/divider.
+1. After the clock change takes effect, determine the CPU frequency from
+   the selected source frequency and the active CPU divider.
 2. Update `SystemCoreClock` with that frequency.
-3. Recalculate BOTH `SystemMicroSecLoopCnt` and `SystemnsDelayFactor`
+3. Recalculate `SystemMicroSecLoopCnt` and `SystemnsDelayFactor`
    before returning control to callers that can use delay functions.
 
 `ArmDelayClockSetDivisors` applies the existing MCU-specific loop
@@ -596,11 +592,8 @@ loop costs. A target without DWT uses its port-provided cost and scales the
 loop rate from the actual CPU frequency. Calibration may briefly mask
 interrupts; it must not occur during ordinary delay calls.
 
-`SystemCoreClockUpdate` is the canonical place to read hardware clock
-state and update factors. Ports such as SAM4L that assign the core
-frequency directly during intermediate clock transitions must refresh
-both factors at each assignment as well. This prevents stale factors
-during low-power CPU divider changes and subsequent restoration.
+On SAM4L, code that sets `SystemCoreClock` during an intermediate clock
+change must also update both delay factors before a delay uses them.
 
 The clock owner must serialize clock hardware transitions and factor
 updates against other execution contexts; callers must not alter CPU

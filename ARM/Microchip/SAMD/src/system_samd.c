@@ -130,7 +130,7 @@ __attribute__((weak)) McuOsc_t g_McuOsc = {
 	0U	// No DC/DC regulator stage on SAM D11/D21
 };
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Delay-loop iterations per second.
 extern uint32_t SystemMicroSecLoopCnt;
 
 // CPU clock after reset is OSC8M divided by 8
@@ -867,8 +867,7 @@ static uint32_t SamdDfllFromLf(void)
 	return SamdDfllStart(mul, false) ? mul * ref : 0U;
 }
 
-// Main clock on OSC8M undivided, generator 0, the main branch setting that
-// runs on both boards. Interrupts disabled.
+// Switch generator 0 to OSC8M at 8 MHz. Interrupts are disabled.
 static bool SamdMainOsc8m(void)
 {
 	uint32_t ctrl;
@@ -1022,10 +1021,7 @@ static bool SamdClockInit(void)
 	return true;
 }
 
-// A failed step leaves the main clock on OSC8M at 8 MHz, as the main branch
-// does: s_SamdStartupError and s_SamdStartupLine tell the first step that
-// failed, also when the DFLL48M took over from the FDPLL96M, s_SamdStartupLog
-// all the failed steps and s_SamdStartupReg the clock registers after them.
+// If clock setup fails, try OSC8M at 8 MHz.
 static bool SamdSystemClockInit(void)
 {
 	uint32_t primask = __get_PRIMASK();
@@ -1088,8 +1084,7 @@ uint32_t SystemPeriphClockGet(int Idx)
 	return SamdGclkGenFreq((uint32_t)Idx);
 }
 
-// The generator dividers are set at startup. The closest frequency is the
-// one there is, as on the other ports.
+// Generator dividers are fixed at startup. Return the configured frequency.
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
 	(void)Freq;
