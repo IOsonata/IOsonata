@@ -119,7 +119,7 @@ int32_t nRFxMpslLfclkWait(void);
 void nRFxMpslLfclkCalibrationStart(void);
 bool nRFxMpslLfclkCalibrationIsEnabled(void);
 uint32_t nRFxMpslLfclkCalibrationCount(void);
-void nRFxMpslClockIrq(void);
+bool nRFxMpslClockIrq(void);
 #endif
 
 

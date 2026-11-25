@@ -489,10 +489,12 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("mpsl_init(externalClock ? nullptr : &lfclk", init)
         self.assertIn("nRFxMpslLfclkCalibrationStart();", init)
         self.assertIn("return nRFxMpslLfclkCalibrationIsEnabled();", self.mpsl)
-        self.assertIn("nRFxMpslClockIrq();", self.mpsl)
+        self.assertIn("if (nRFxMpslClockIrq())", self.mpsl)
+        period = function(self.mpsl, "static void MpslLfCalibrationIrq(",
+                          "static mpsl_clock_lfclk_ctrl_source_t")
         start = function(self.clock, "void nRFxMpslLfclkCalibrationStart(",
                          "bool nRFxMpslLfclkCalibrationIsEnabled(")
-        irq = function(self.clock, "void nRFxMpslClockIrq(",
+        irq = function(self.clock, "bool nRFxMpslClockIrq(",
                        "// The external MPSL clock driver uses")
         self.assertIn("nRFxMpslHfclkRequest();", start)
         self.assertIn("CLOCK_INTENSET_DONE_Msk", start)
@@ -500,8 +502,12 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("NRF_CLOCK->TASKS_CAL = 1U", self.clock)
         self.assertIn("NRF_CLOCK->EVENTS_DONE", irq)
         self.assertIn("nRFxMpslHfclkRelease();", irq)
-        self.assertIn("NRF_CLOCK->CTIV = 16U;", irq)
-        self.assertIn("NRF_CLOCK->TASKS_CTSTART = 1U;", irq)
+        # The period belongs to the MPSL file, not to the clock code.
+        self.assertIn("NRF_CLOCK->CTIV = 16U;", period)
+        self.assertIn("NRF_CLOCK->TASKS_CTSTART = 1U;", period)
+        self.assertIn("nRFxMpslLfclkCalibrationStart();", period)
+        for name in ("CTIV", "CTTO", "CTSTART", "AppEvtHandlerQue"):
+            self.assertNotIn(name, self.clock)
         self.assertIn("s_bNRFxMpslCalibrationPending", self.clock)
 
     def test_lfrc_calibration_does_not_use_blocking_delay(self):

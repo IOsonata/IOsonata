@@ -405,7 +405,10 @@ from `g_McuOsc.LowPwrOsc` when initializing MPSL:
   calibration after MPSL initialization, then schedule calibration every
   four seconds through the CLOCK calibration timer. A separate HFXO
   reference is held until `EVENTS_DONE`, so a radio or application clock
-  request cannot be inadvertently released by calibration.
+  request cannot be inadvertently released by calibration. The clock code
+  (`system_clock_nrfx.cpp`) runs one calibration per request. The four
+  second period is handled by the MPSL file (`nrf_mpsl.cpp`), the
+  subsystem that needs it.
 
 The external HFCLK callbacks are nonblocking for MPSL high-priority radio
 requests. The POWER_CLOCK handler processes HFCLKSTARTED, DONE and CTTO
