@@ -27,10 +27,15 @@ clock to stay on.
 
 The peripheral clocks are assigned by the clock tree configuration of the
 MCU port. `SystemInit()` sets them up, and the port numbers them: peripheral
-clock 0, 1, 2 and so on. What each number is depends on the MCU. On one MCU
-peripheral clock 0 can be the clock of the UARTs and 1 the clock of the SPI;
-on another, 0 is the main clock and 1 the 32 kHz clock. The port documents
-its numbers in its clock header.
+clock 0, 1, 2 and so on. How many there are and what each number is depends
+on the MCU. Examples:
+
+- An STM32 can have peripheral clock 0 for the UARTs and 1 for the SPI.
+- A Nordic nRF has one fixed 16 MHz peripheral clock, so only peripheral
+  clock 0 is available.
+
+A number the MCU does not have returns 0. The port documents its numbers in
+its clock header.
 
 A device driver is part of the MCU port, so it knows which peripheral clock
 its device runs from. It requests that one with `SystemPeriphClockGet(n)`
