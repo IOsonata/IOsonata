@@ -851,7 +851,11 @@ static uint64_t SamdTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 		trig->bActive = false;
 		actual = 0;
 	}
-	SamdTimerUnlock(d, state);
+	// The caller may enter Standby immediately with interrupts masked.
+	// Resuming continuous RTC reads here can request a SYNCRDY IRQ before
+	// the compare. SamdTimerLock restarts reads when the count is needed,
+	// including for the close-deadline check and the compare handler.
+	EnableInterrupt(state);
 
 	if (check)
 	{

@@ -70,6 +70,7 @@ static bool s_StopFail;
 static bool s_StartFail;
 static bool s_ResetFail;
 static bool s_RtcWaitFail;
+static bool s_RtcCompareSyncBusy;
 static int s_RtcRunSyncFail = -1;
 bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg);
 static uint32_t SystemPeriphClockGet(int);
@@ -156,8 +157,12 @@ static bool ModelOverflow(SamdTimerData_t *d)
 	s_Count[d->pTimer->DevNo].Overflow = false;
 	return flag;
 }
-static bool ModelArm(SamdTimerData_t *d, int n, bool)
+static bool ModelArm(SamdTimerData_t *d, int n, bool enable)
 {
+	if (enable && d->pTimer->DevNo == 0)
+	{
+		s_RtcCompareSyncBusy = true;
+	}
 	s_Count[d->pTimer->DevNo].Matched &= ~(1U << n);
 	return true;
 }
@@ -178,8 +183,18 @@ static bool ModelMatched(SamdTimerData_t *d, int n)
 COUNTER_OPS(SamdRtc)
 COUNTER_OPS(SamdTc)
 COUNTER_OPS(SamdTcc)
-bool SamdRtcWait(SamdTimerData_t *, bool) { return !s_RtcWaitFail; }
-void SamdRtcResume(SamdTimerData_t *) {}
+bool SamdRtcWait(SamdTimerData_t *, bool)
+{
+	s_RtcCompareSyncBusy = false;
+	return !s_RtcWaitFail;
+}
+void SamdRtcResume(SamdTimerData_t *)
+{
+	if (s_RtcCompareSyncBusy)
+	{
+		NVIC_SetPendingIRQ(RTC_IRQn);
+	}
+}
 bool SamdRtcEvent(SamdTimerData_t *d)
 {
 	return s_Count[d->pTimer->DevNo].Matched != 0 || s_Count[d->pTimer->DevNo].Overflow;
@@ -240,6 +255,16 @@ int main()
 	TimerDev_t timer = {};
 	TimerCfg_t cfg = { .DevNo = 0, .IntPrio = 1, .EvtHandler = Event };
 
+	// A long compare followed immediately by WFI must have no pending
+	// synchronization interrupt. Only advancing to the deadline fires it.
+	cfg.Freq = 1024;
+	assert(TimerInit(&timer, &cfg));
+	assert(nsTimerEnableTrigger(&timer, 0, 1000000000ULL, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
+	assert((s_Pending & (1U << RTC_IRQn)) == 0);
+	Advance(0, 1024);
+	assert(s_Events[0][0] == 1);
+	assert(TimerPowerOff(&timer));
+	cfg.Freq = 0;
 	assert(sDelay(0));
 	assert(sDelay(1));
 	s_Events[0][0] = 0;

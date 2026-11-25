@@ -424,9 +424,16 @@ static void CorePowerTestSleep(uint32_t Caps)
 		TimerDisableTrigger(pTimer, 0);
 		TimerDisable(pTimer);
 		expected = (uint64_t)CORE_POWER_TEST_WAKE_MS * 1000ULL;
-		CorePowerTestResult("Standby timer wake", period != 0U && s_TimerWoke &&
+		ok = period != 0U && s_TimerWoke &&
 			(uint64_t)elapsed >= expected * 98ULL / 100ULL &&
-			(uint64_t)elapsed <= expected * 102ULL / 100ULL);
+			(uint64_t)elapsed <= expected * 102ULL / 100ULL;
+		CorePowerTestResult("Standby timer wake", ok);
+		if (CORE_POWER_TEST_TIMER_WAKE_ONLY && !ok)
+		{
+			PowerTestStatus("Trigger armed", period != 0U ? ": yes\r\n" : ": no\r\n");
+			PowerTestStatus("RTC callback", s_TimerWoke ? ": yes\r\n" : ": no\r\n");
+			PowerTestValue("Elapsed us 0x", elapsed);
+		}
 #else
 		while (IOPinRead(WAKE_BUT_PORT, WAKE_BUT_PIN) ==
 			(WAKE_BUT_SENSE == IOPINSENSE_HIGH_TRANSITION ? 1 : 0))
