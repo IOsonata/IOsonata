@@ -16,13 +16,18 @@ can use the same device code on different hardware.
 ### Peripheral clock selection
 
 The driver chooses the MCU-specific domain for `SystemPeriphClockGet/Set`.
-The system chooses the best available rate consistent with existing users.
-A rate setter returns the actual frequency in effect, including the current
-frequency when a fixed or shared domain must keep running at that rate.
-The driver uses that value to program its own divider and report the actual
-device rate. Shared HF/LF sources use the existing `Enable/Disable` calls
-with internal reference counts. Releasing one user preserves the source
-while another user or the MCU still needs it.
+A rate setter returns the actual frequency in effect. For a fixed domain, or
+one shared by several devices, that is the current frequency: the port does
+not change a shared divider under the other devices and does not look for
+them. The driver uses the returned value to program its own divider and
+report the actual device rate.
+
+Shared HF/LF sources use the existing `Enable/Disable` calls with internal
+reference counts. A driver calls them for a source that can stop on its own,
+such as a crystal oscillator the CPU does not run from. Releasing one user
+preserves the source while another user or the MCU still needs it. That is
+the only purpose of the count. It is not a reason to refuse another
+operation.
 
 ### Low-power operation
 
@@ -56,6 +61,59 @@ exercised by `CoreClockTest` is insufficient reason to expose another API.
 Startup and sleep must link independently of unused peripheral drivers.
 Porting measurements, delay calibration and diagnostic output belong in
 the validation build. Measure flash impact in the linked application.
+
+### Rules for an MCU port
+
+These rules follow from the table above. A port that breaks one of them
+grows without serving the application.
+
+1. The clock sources are those of `g_McuOsc`. `SystemInit()` sets them up
+   once. There is no run time source selection. A board with a crystal uses
+   it, a board without one uses the RC.
+2. Power saving while running is the CPU frequency, through
+   `SystemPowerModeSet()`, and stopping a source nobody uses, through the
+   shared clock `Enable/Disable`. It is not a change of oscillator.
+3. The device asks for its clock. The clock code does not read device
+   registers, does not loop over clock channels or generators to find users,
+   and does not ask a driver whether a clock is in use.
+4. `Enable` counts a user and starts the source on the first one. `Disable`
+   releases one user and stops the source after the last one, where the
+   hardware can stop it. The count is used for nothing else.
+5. `SystemPeriphClockSet()` returns the frequency in effect. A port changes
+   a divider only for a domain that has one user by construction.
+6. `SystemPeriphClockGet()` and `SystemCoreClockUpdate()` return what the
+   clock setup stored when it set the clock. Rebuilding a PLL or DFLL
+   frequency from the registers on every call costs flash and divisions.
+7. `SystemSleep()` enters the MCU sleep state and returns. It does not ask a
+   driver for permission and does not pause or resume a driver. The
+   application does that with the driver's `Enable`, `Disable` and
+   `PowerOff` before it calls `SystemSleep()`.
+8. A function that only `CoreClockTest` or `CorePowerTest` calls is not a
+   reason to keep code in the library.
+
+`SystemCoreClockSelect()` and `SystemLowFreqClockSelect()` are not services
+for applications or drivers. Some ports call them from their own startup.
+Those ports keep them as private startup functions; the declarations leave
+`system_core_clock.h` once every such port is converted. A new port does not
+define them.
+
+### Port status
+
+| Port | Run time selection removed | Clock code reads no device | `SystemSleep` leaves drivers alone |
+| --- | --- | --- | --- |
+| SAM D11, SAM D21 | Yes | Yes | Yes |
+| SAM4L | No | No | No |
+| SAM4E | No | No | Not reviewed |
+| Nordic | No | Partly: selection is refused from the request counts | Not reviewed |
+| ST, NXP, Renesas, Espressif | No | Not reviewed | Espressif: no. Others not reviewed |
+
+SAM D is the reference for the conversion. `system_samd.c` went from 4,466
+to 2,366 bytes at `-Os`, and the SAM D11 `CoreClockTest` Release image from
+14,960 to 11,684 bytes of flash on a 16 KB part. The removed code was the
+scan for clock users, the run time divider setter, the frequency rebuilt
+from the registers, the run time source selection and the driver calls of
+`SystemSleep`. SAM D results are from host tests and a register model; the
+hardware run is still to do.
 
 ## Oscillator configuration and clock execution
 
@@ -95,7 +153,7 @@ respect the actual routing and capabilities of each MCU.
 The responsibilities are deliberately separated:
 
 - `g_McuOsc` describes the board's oscillator configuration.
-- System core clock selection configures the MCU clock tree.
+- `SystemInit()` configures the MCU clock tree from `g_McuOsc`.
 - The shared HF/LF Enable/Disable functions manage oscillator or
   shared-clock usage and the corresponding reference counts; they do not
   disable an essential CPU clock or replace peripheral-module gates.
@@ -114,16 +172,10 @@ synthesized-LFCLK mode to express this model.
 - `LowPwrOsc`: low-frequency oscillator description.
 - The types come from the existing `OSC_TYPE` enum: RC, XTAL and TCXO.
 
-`SystemInit()` establishes the initial hardware clocks and power state.
-`SystemCoreClockSelect()` remains the explicit MCU core-clock selection
-interface; `SystemLowFreqClockSelect()` remains the explicit low-frequency
-source-selection interface. Selection must not double as an Enable/Disable
-reference-count operation.
-
-Normal peripheral operation must not require calling these selection
-functions. When a clock is enabled, the MCU clock implementation uses the oscillator
-configuration in `g_McuOsc`. Explicit source changes must not disrupt
-active clock consumers.
+`SystemInit()` establishes the hardware clocks and power state from
+`g_McuOsc`. When a clock is enabled, the MCU clock implementation uses the
+oscillator configuration in `g_McuOsc`. There is no run time source
+selection; see "Rules for an MCU port".
 
 ### Generic clock functions
 
@@ -231,6 +283,11 @@ default low-frequency source is the one configured in
 `g_McuOsc.LowPwrOsc`.
 
 ## Nordic implementation notes
+
+The Nordic sections below describe the code as it is. It still has run time
+source selection and refuses a selection from the request counts. Where they
+differ from "Rules for an MCU port", the rules are the target and the Nordic
+code is to be converted.
 
 The Nordic working branch now uses `SystemHighFreqClockEnable/Disable` for
 shared HF oscillator ownership and `SystemLowFreqClockEnable/Disable` for
@@ -572,9 +629,9 @@ Do not add success-only stubs to conceal missing behavior.
 Before implementation, compare each port's existing oscillator setup,
 clock gates, shared users and timer lifecycle. Verify at least:
 
-- Repeated Enable/Disable, zero-count Disable and counter overflow.
-- Two active consumers of a shared clock, including different Disable
-  orders and an explicit source-selection attempt while busy.
+- Repeated Enable/Disable and a Disable at a zero count.
+- Two active users of a shared clock, with both Disable orders: the source
+  stays on until the second Disable.
 - External/stack clock ownership and transitions; SoftDevice/SDC where
   applicable.
 - Timer initialization with DEFAULT, explicitly supported and

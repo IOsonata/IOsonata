@@ -1,6 +1,22 @@
 # Power and clock integration review for 0.14
 
-Working branch: review_system_power_014
+Status: history of the 0.14 review work. The design to follow is in
+[MCU core power, clock and timer lifecycle](system-clock-timer-lifecycle.md),
+sections "Purpose and ownership" and "Rules for an MCU port". This review
+differs from it on these points, and the lifecycle document applies:
+
+- Here `SystemSleep` asks the device drivers whether sleep is allowed and
+  pauses and resumes them. In the design the application prepares its
+  devices through their drivers and `SystemSleep` only enters the MCU sleep
+  state. SAM D is converted; SAM4L and ESP32-C3/C6 still work as described
+  here.
+- Here active users can refuse a clock change, and explicit run time clock
+  selection is part of the interface. In the design there is no run time
+  source selection and the user counts refuse nothing.
+- `ClockDemo` and `PowerOffDemo` are now `CoreClockTest` and
+  `CorePowerTest`.
+
+Working branch at the time: review_system_power_014
 
 This review follows AGENTS.md and the existing system initialization and
 DeviceIntrf API. The system supplies power and clock policy; peripherals own
@@ -132,17 +148,6 @@ power consumption.
    their normal DeviceIntrf and Device lifecycle.
 6. Measure sleep current and distinguish accepted PMU entry from
    a CPU WFI fallback with independent hardware evidence.
-
-## Environment limits for this change set
-
-The earlier /workspace/scratch working tree is absent. The connected
-GitHub repository provided branch source and writable ref access, but
-the local environment has no checked-out IOsonata tree or ARM/RISC-V
-cross compiler. ASCII, conditional nesting and branch/diff checks
-were performed on the edited source. Existing SAM4L and SAMD host test
-stubs were updated for internal sleep calls. No actual compiler, library
-rebuild, unit test or hardware run was performed after these edits.
-GitHub reports no commit status checks for the current head.
 
 ## SAM4L master transport sleep coordination
 

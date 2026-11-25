@@ -18,9 +18,12 @@ The mode setter may return false if a transition is not supported, is invoked
 from an interrupt context, or cannot preserve the core's required clocks.
 Unsupported low-power requests must not silently change state.
 
-Applications should not need MCU-specific clock register writes, UART baud
-reconfiguration, or manual peripheral clock coordination. Each MCU port
-must honor the requirements of its peripherals before supporting a new mode.
+Applications do not write MCU clock registers. A mode change alters the CPU
+frequency, and on some MCUs the bus clocks with it. The port does not look
+for the devices on those buses and does not reprogram them. Where a mode
+changes a bus clock, the application sets the affected devices again through
+their drivers, for example the UART rate, or stops them before the change.
+The port documents which clocks each mode changes.
 Each MCU port retains its own maximum-frequency default calibration.
 When CPU frequency changes, `SystemCoreClockUpdate()` updates delay factors.
 DWT-based measurement is allowed without a Timer or RTC dependency.

@@ -108,18 +108,14 @@ class DemoDriverOwnership(unittest.TestCase):
 
 	def test_core_clock_has_one_generic_clock_path(self):
 		source = CLOCK.read_text(encoding="utf-8")
-		self.assertIn("SystemCoreClockSelect(initialCoreSource, initialCoreFreq)", source)
+		# The clock sources are those of g_McuOsc: no run time selection.
+		self.assertNotIn("SystemCoreClockSelect", source)
+		self.assertNotIn("SystemLowFreqClockSelect", source)
 		self.assertIn("SystemPeriphClockSet(clockIdx, request)", source)
-		self.assertIn("SystemLowFreqClockSelect(initialLfSource, initialLfFreq)", source)
 		self.assertIn("lowTimerCount = TimerGetLowFreqDevCount();", source)
 		self.assertIn("highTimerCount = TimerGetHighFreqDevCount();", source)
 		self.assertIn("CoreClockTestTimer(timerDevNo);", source)
-		self.assertIn('CoreClockTestPrint("LF RC timer timing test\\r\\n");', source)
-		self.assertIn('CoreClockTestPrint("Restored LF source timer timing test\\r\\n");', source)
-		self.assertIn("timerDevNo < TimerGetLowFreqDevCount();", source)
-		self.assertLess(source.index('CoreClockTestPrint("LF RC timer timing test'),
-			source.index("SystemLowFreqClockSelect(initialLfSource, initialLfFreq);",
-				source.index('CoreClockTestPrint("LF RC timer timing test')))
+		self.assertIn('CoreClockTestPrint("Timer timing test\\r\\n");', source)
 
 		self.assertIn("CoreClockTestConcurrentTimerTest(lowTimerCount, highTimerCount);", source)
 		self.assertIn("Timer independent clock ownership", source)
@@ -144,8 +140,6 @@ class DemoDriverOwnership(unittest.TestCase):
 	def test_core_clock_checks_shared_clock_lifecycle(self):
 		source = CLOCK.read_text(encoding="utf-8")
 		self.assertIn("CoreClockTestSharedClockTest();", source)
-		self.assertIn("Configured core source", source)
-		self.assertIn("Configured LF source", source)
 		for api in ("SystemHighFreqClockEnable",
 			"SystemHighFreqClockDisable", "SystemLowFreqClockEnable",
 			"SystemLowFreqClockDisable"):
@@ -163,7 +157,7 @@ class DemoDriverOwnership(unittest.TestCase):
 		self.assertIn("CoreClockTestCalibrationTest();", source)
 		self.assertLess(source.index("for (cycle = 1U;"),
 			source.index("CoreClockTestCalibrationTest();"))
-		self.assertLess(source.index("SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U)"),
+		self.assertLess(source.index("GetLowFreqOscType() == OSC_TYPE_RC"),
 			source.index("CoreClockTestCalibrationTest();"))
 		self.assertIn("SystemLowFreqClockEnable();", source)
 		self.assertIn("calibrated = SystemLowFreqClockCalibrate();", source)
