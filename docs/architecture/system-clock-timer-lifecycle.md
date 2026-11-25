@@ -1,5 +1,16 @@
 # MCU core power, clock and timer lifecycle
 
+## Design constraints
+
+1. **Low power.** A driver holds a clock for as long as its device needs it,
+   including during a transfer or while a wake event is armed. After the last
+   user releases the clock, the port stops it if the MCU permits. The
+   application decides when it can reduce CPU speed or sleep.
+2. **Small size and low resource use.** Keep flash, RAM and CPU overhead
+   small enough to leave room for the application. Using startup or sleep
+   alone must not pull unused peripheral drivers into the image. Drivers
+   already own their device state; Power & Clock does not keep a second copy.
+
 ## Purpose and ownership
 
 IOsonata Power & Clock manages MCU low-power operation and provides the
@@ -88,9 +99,10 @@ Keep oscillator sequences, PLL calculations, register access and target
 errata inside the MCU port. A register available on one MCU or a setting
 exercised by `CoreClockTest` is insufficient reason to expose another API.
 
-Startup and sleep must link independently of unused peripheral drivers.
 Porting measurements, delay calibration and diagnostic output belong in
-the validation build. Measure flash impact in the linked application.
+the validation build. To check the cost of a change, compare flash and
+static RAM in the same linked application before and after the change,
+using the same MCU, build settings and device configuration.
 
 ### Rules for an MCU port
 
