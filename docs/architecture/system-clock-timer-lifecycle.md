@@ -293,7 +293,7 @@ The Nordic working branch now uses `SystemHighFreqClockEnable/Disable` for
 shared HF oscillator ownership and `SystemLowFreqClockEnable/Disable` for
 LFCLK. The RTC, HF timer and USB controller use those shared-clock
 functions. Dedicated HFXO/SDC tests exercise reference counting and BLE
-ownership. ClockDemo separately tests generic core selection, peripheral
+ownership. CoreClockTest separately tests generic core selection, peripheral
 clock frequency and timer behavior. The redundant Nordic LFCLK private
 header has been deleted. Source review is not a substitute for a complete build,
 SoftDevice/SDC integration tests, and actual hardware validation.
@@ -514,7 +514,7 @@ nRF5340 revision 1 anomaly 137. HFXO is requested by the CAL hardware
 and does not require a separate application request.
 
 The existing startup calibration remains in place when LFRC first
-starts. It passed ClockDemo on both nRF5340 cores. Additional
+starts. It passed CoreClockTest on both nRF5340 cores. Additional
 calibrations are explicitly initiated by higher-level code, including
 any periodic calls it chooses to schedule. A Timer callback may queue a
 calibration event with AppEvtHandlerQue; AppRun executes the callback in

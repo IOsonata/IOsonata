@@ -9,7 +9,7 @@
 
 ## Historical demo notes (pre-migration)
 
-# SAM4LSxC ClockDemo
+# SAM4LSxC CoreClockTest
 
 Import `ioc` as an existing Eclipse managed project and build the matching
 IOsonata library in the same Debug or Release configuration. Console pins and
@@ -26,7 +26,7 @@ retain timer module ownership after TimerDisable. It then checks the first
 high-frequency timer at 1 MHz requested rate, with a 10 ms trigger over 250 ms.
 The returned timer rate may differ from 1 MHz. Delay and interrupt checks use
 the actual rate/period. They do not independently measure oscillator accuracy.
-No watchdog is enabled. ClockDemo does not request sleep; use PowerOffDemo
+No watchdog is enabled. CoreClockTest does not request sleep; use PowerOffDemo
 for EIC, AST and UART wake testing. Reset restores startup clocks.
 
 An omitted selector prints SKIP. A configured selector that fails prints FAIL;

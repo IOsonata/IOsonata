@@ -9,21 +9,21 @@
 
 ## Historical demo notes (pre-migration)
 
-# SAMD21 ClockDemo
+# SAMD21 CoreClockTest
 
 ## Current clock-only configuration
 
-ClockDemo runs the configured OSC8M source and APB requests, timer
+CoreClockTest runs the configured OSC8M source and APB requests, timer
 interrupts, calibrated delays and normal UART RX on SERCOM3/EDBG
 at 115200 baud. It no longer enters Standby. The optional OLED1
 wake input and SW0 Standby test belong to PowerOffDemo, whose
 WAKE_BUT_* board definitions select the requested wake pin.
 The new demo split is not yet compiled or hardware revalidated.
 
-## Historical combined ClockDemo documentation
+## Historical combined CoreClockTest documentation
 
 The following instructions and hardware observations describe the
-earlier combined clock/sleep demo. Ignore its old ClockDemo sleep
+earlier combined clock/sleep demo. Ignore its old CoreClockTest sleep
 prompts and CLOCK_DEMO_OLED1_WAKE guidance for the current code.
 
 Import `ioc` as an existing Eclipse managed project and build the matching
@@ -48,7 +48,7 @@ prompt, and send U at each UART prompt. Reset restores startup clocks.
 
 For OLED1 on EXT1, set `CLOCK_DEMO_OLED1_WAKE` to 1 in `src/board.h`.
 Use OLED1 BUTTON1 (PB04) at the wake prompts. This selects the wake input;
-ClockDemo still prints to UART and does not initialize the display.
+CoreClockTest still prints to UART and does not initialize the display.
 
 SAMD21 hardware validation: three Standby cycles with SW0 passed, including
 CPU/APB and LF descriptor checks, both delays, timer IRQs and UART RX.

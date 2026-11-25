@@ -9,7 +9,7 @@
 
 ## Historical demo notes (pre-migration)
 
-# nRF52832 ClockDemo
+# nRF52832 CoreClockTest
 
 Import `ioc` as an existing Eclipse managed project and build the matching
 IOsonata library in the same Debug or Release configuration. Console pins and
@@ -17,11 +17,11 @@ oscillator selections are in `src/board.h`, copied from this target's
 PowerOffDemo project. Default console speed is 1,000,000 baud unless board.h
 specifies another rate. No debugger is required for UART logging.
 
-ClockDemo exercises the generic core-clock selection, peripheral-clock
+CoreClockTest exercises the generic core-clock selection, peripheral-clock
 Get/Set, low-frequency source selection, shared HF/LF reference counting,
 and Timer APIs. Board definitions supply oscillator test inputs and physical
 UART configuration; they do not select an MCU-specific execution path.
-ClockDemo reports missing shared-clock API implementations as failures.
+CoreClockTest reports missing shared-clock API implementations as failures.
 HfxoTest and HfxoTestBle additionally inspect physical oscillator behavior
 and BLE ownership on supported hardware.
 

@@ -13,7 +13,7 @@ differs from it on these points, and the lifecycle document applies:
 - Here active users can refuse a clock change, and explicit run time clock
   selection is part of the interface. In the design there is no run time
   source selection and the user counts refuse nothing.
-- `ClockDemo` and `PowerOffDemo` are now `CoreClockTest` and
+- `CoreClockTest` and `PowerOffDemo` are now `CoreClockTest` and
   `CorePowerTest`.
 
 Working branch at the time: review_system_power_014
@@ -45,10 +45,10 @@ not select a target-specific sleep clock or restore peripheral registers.
 
 ## Refactor on this branch
 
-ClockDemo no longer calls SystemSleep or configures application-side
+CoreClockTest no longer calls SystemSleep or configures application-side
 sleep baud, wake pins or sleep APB dividers. It retains explicit clock
 selection, bus divider, LF clock, delay, timer IRQ and optional UART RX
-checks. ClockDemo may power off and reinitialize a UART during an
+checks. CoreClockTest may power off and reinitialize a UART during an
 intentional explicit clock-rate change; this is not a sleep operation.
 
 PowerOffDemo owns the existing GPIO, Backup and retention checks and
@@ -64,9 +64,9 @@ receives at 9600 baud. EDBG USART1 remains the default board console;
 PB00/PB01 requires an external 3.3 V adapter. The host helper runs
 repeated cycles and reports timeout and failure.
 
-SAMD11 ClockDemo uses its prior clock-only configuration by default.
+SAMD11 CoreClockTest uses its prior clock-only configuration by default.
 The old D11 combined Standby option is removed, avoiding a redundant
-profile. All five target ClockDemo board files have no wake settings.
+profile. All five target CoreClockTest board files have no wake settings.
 Historical board evidence is retained in READMEs with a clear separation
 from current, untested changes.
 
@@ -114,12 +114,12 @@ transfers, but not for hardware-specific clock or UART restoration.
   EIC/AST Standby and GPIO/AST Backup wakes passed in reported runs.
   Display driver tests also passed the reported interrupt/DMA modes.
 - SAMD11/SAMD21: reported Standby and sampled static/stack RAM retention
-  passed. Earlier combined ClockDemo runs checked post-wake clocks,
+  passed. Earlier combined CoreClockTest runs checked post-wake clocks,
   delays, timer IRQs and UART RX.
-- ESP32-C3: the recorded final ClockDemo run passed nine Light-sleep
+- ESP32-C3: the recorded final CoreClockTest run passed nine Light-sleep
   wakes and ten polling UART RX prompts. PowerOffDemo recorded six
   Light-sleep wakes and four GPIO3 Deep-sleep restarts.
-- ESP32-C6: recorded combined ClockDemo runs passed nine Light-sleep
+- ESP32-C6: recorded combined CoreClockTest runs passed nine Light-sleep
   wakes, clock restoration, timer IRQs and calibrated delays. GPIO3
   Deep-sleep restart tests also passed in reported runs.
 
@@ -204,7 +204,7 @@ ESP32-C3/C6:
 
 The demo is not responsible for disabling, reconfiguring or restoring
 these peripherals around SystemSleep. Explicit runtime clock-source
-experiments in ClockDemo remain separate from low-power sleep entry.
+experiments in CoreClockTest remain separate from low-power sleep entry.
 
 ### Validation still required
 
@@ -424,7 +424,7 @@ alongside the system power source. This expands the compiler check
 without changing the driver or public API.
 
 A clean Eclipse managed-project build of the SAM4LC and SAM4LS
-libraries and ClockDemo/PowerOffDemo in Debug and Release remains
+libraries and CoreClockTest/PowerOffDemo in Debug and Release remains
 necessary before the review branch is ready to merge. These commands
 and project builds have not yet been executed for this validation
 update. External current measurement remains unverified.

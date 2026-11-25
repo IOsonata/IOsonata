@@ -44,7 +44,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED1_PIN		7
 #define LED1_PINOP		IOPINOP_GPIO
 
-// ClockDemo retains USART1. UART wake belongs to PowerOffDemo.
+// CoreClockTest retains USART1. UART wake belongs to PowerOffDemo.
 #define UART_DEVNO 1
 #define UART_RX_PORT IOPORTC
 #define UART_RX_PIN 26

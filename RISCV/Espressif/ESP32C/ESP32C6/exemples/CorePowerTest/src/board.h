@@ -35,7 +35,7 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define POWER_DEMO_UART_OFF 1
 // To restore the validated BOOT-button Light-sleep configuration, set
 // WAKE_BUT_PIN to 9 and POWER_DEMO_RESUME_WAKE to 1.
-// UART clock gating passed nine ClockDemo wakes; PowerOff passed three Deep-sleep restarts.
+// UART clock gating passed nine CoreClockTest wakes; PowerOff passed three Deep-sleep restarts.
 // C6 GPIO9 Light-sleep: repeated wake and SRAM samples passed with UART output drained.
 // GPIO3 Deep-sleep: seven consecutive wake/restart cycles passed with UART output drained.
 

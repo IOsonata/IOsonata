@@ -174,7 +174,7 @@ class DemoDriverOwnership(unittest.TestCase):
 		source = CLOCK.read_text(encoding="utf-8")
 		macros = ("CLOCK_DEMO_SOURCES", "CLOCK_DEMO_LF_SOURCES",
 			"CLOCK_DEMO_PERIPH_DIVIDERS")
-		paths = sorted(ROOT.glob("**/exemples/ClockDemo/src/board.h"))
+		paths = sorted(ROOT.glob("**/exemples/CoreClockTest/src/board.h"))
 
 		self.assertTrue(paths)
 

@@ -146,7 +146,7 @@ clock registers or stack selection.
 
 ## Status
 
-nRF52832 `ClockDemo`, `PowerOffDemo`, portable `HfxoTestBle`
+nRF52832 `CoreClockTest`, `PowerOffDemo`, portable `HfxoTestBle`
 with S132 and SDC, SDC LFRC ownership, and the periodic calibration
 diagnostic have passed hardware testing. The latest LFRC diagnostic
 completed four calibrations in 12 seconds and observed HFXO stopped

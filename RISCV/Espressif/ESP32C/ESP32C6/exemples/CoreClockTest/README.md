@@ -9,14 +9,14 @@
 
 ## Historical demo notes (pre-migration)
 
-# ESP32-C6 ClockDemo
+# ESP32-C6 CoreClockTest
 
 ## Current clock-only configuration
 
 The current project cycles XTAL, calibrated RC_FAST and XTAL
 restoration; checks APB dividers, low-frequency RC sources,
 timer IRQs, both delays and normal UART RX on TX16/RX17
-at 1 Mbaud. ClockDemo no longer enters Light-sleep. There
+at 1 Mbaud. CoreClockTest no longer enters Light-sleep. There
 is a single startup UART RX prompt, not ten wake-related
 prompts. PowerOffDemo owns GPIO9 Light-sleep and GPIO3
 reset-on-wake Deep-sleep.
@@ -28,12 +28,12 @@ compiled or hardware revalidated.
 
 ## Historical combined clock/sleep configuration and board results
 
-The material below describes earlier combined ClockDemo builds.
+The material below describes earlier combined CoreClockTest builds.
 Its BOOT sleep prompts, CLOCK_DEMO_WAKE_PIN option, nine-wake
 run and receive-after-wake instructions are historical.
 
 Import `ioc` as an existing Eclipse managed project. Build the ESP32C6 library
-and ClockDemo in the same configuration, then flash ClockDemo.elf using the
+and CoreClockTest in the same configuration, then flash CoreClockTest.elf using the
 normal IOcomposer flash command. Debug and Release both use UART0 at
 1,000,000 baud, 8N1, without flow control. The DevKit N8 USB-to-UART bridge
 connects TX16 and RX17; the native USB JTAG/serial port is not this UART.
@@ -124,7 +124,7 @@ The updated demo accepts the measured RC rate and derives APB requests from it.
 On this board, expect CPU near 16.1 MHz and the 250 ms delay near 250000 us,
 with about 25 interrupts for both sources. The new delay check is separate from
 the counter/interrupt check; it can now fail even if callbacks agree with elapsed
-time. Rebuild both the C6 library and ClockDemo before flashing.
+time. Rebuild both the C6 library and CoreClockTest before flashing.
 
 Temporary production-source checks passed at O0 and Os for fractional-frequency
 CPU/APB readback, repeated switching, failed calibration rollback, interrupt-mask
@@ -157,13 +157,13 @@ resolved in this run. No sleep-current measurement was made.
 The UART now also implements PowerOff: it clears hardware/software FIFOs,
 releases interrupt routing and pins, and prevents Enable from restarting the
 instance. Init is required to use it again. The Deep-sleep path in PowerOffDemo
-uses that operation; ClockDemo uses resumable Disable/Enable.
+uses that operation; CoreClockTest uses resumable Disable/Enable.
 
 UART validation after these changes: production-driver host checks passed for
 C2/C3/C5/C6/C61 at O0/O2, including polling and interrupt configurations,
 reference-counted suspend, repeated resume, queue preservation, PowerOff after
 Disable, rejection of Enable after PowerOff, and successful reinitialization.
-Both UART source files cross-compiled for all five chips at O0/Os. C6 ClockDemo
+Both UART source files cross-compiled for all five chips at O0/Os. C6 CoreClockTest
 and PowerOffDemo rebuilt with all 206 library sources in Debug and Release.
 
 Hardware run at `17d081bd1`: three cycles, nine BOOT wakes and zero failures
@@ -182,7 +182,7 @@ The default run now also checks polling UART receive. At each
 terminal buffers a line). There are ten receive prompts: one at startup and
 one after each of nine BOOT wakes. Receive timeout counts as a failure and
 the demo continues. Do not send continuously while UART is disabled for sleep.
-These checks use the existing generic ClockDemo receive function; interrupt
+These checks use the existing generic CoreClockTest receive function; interrupt
 and DMA receive modes are not enabled.
 
 Rebuild both the library and demo to include the shared RISC-V delay changes.
@@ -199,9 +199,9 @@ Counts of 24 occur on samples ending just before 250 ms. These measurements
 check delay scaling against the on-chip timer, not absolute time accuracy or
 short nanosecond delays. The build configuration was not identified.
 
-Before this run, ClockDemo and PowerOffDemo produced no UART output and
+Before this run, CoreClockTest and PowerOffDemo produced no UART output and
 LedDemo did not run. RESET did not recover execution; a power cycle did,
-after which LedDemo and ClockDemo ran. The maintainer clarified that only one
+after which LedDemo and CoreClockTest ran. The maintainer clarified that only one
 power cycle was needed; RESET worked normally afterward. The flashing log
 identifies native USB Serial/JTAG, a 28364-byte Release image at offset zero,
 and successful completion through the reset-request stage. It does not show

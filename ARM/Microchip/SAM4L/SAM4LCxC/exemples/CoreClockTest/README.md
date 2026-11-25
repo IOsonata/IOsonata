@@ -9,13 +9,13 @@
 
 ## Historical demo notes (pre-migration)
 
-# SAM4LCxC ClockDemo
+# SAM4LCxC CoreClockTest
 
 Import `ioc` as an Eclipse managed project. Clean rebuild the matching
-SAM4LCxC library and ClockDemo for the same Debug or Release configuration.
+SAM4LCxC library and CoreClockTest for the same Debug or Release configuration.
 Console output uses USART1 on the EDBG virtual COM port at 1,000,000 baud.
 
-ClockDemo tests clock selection only. It cycles the RC4/RC12 references,
+CoreClockTest tests clock selection only. It cycles the RC4/RC12 references,
 checks PBA divisors 1/2/4/1, verifies timer interrupts and measures
 `msDelay` and `nsDelay` against timer time. The timer is stopped during
 clock changes. UART is drained and reinitialized when the bus rate changes.

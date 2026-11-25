@@ -9,7 +9,7 @@
 
 ## Historical demo notes (pre-migration)
 
-# nRF54L15 ClockDemo
+# nRF54L15 CoreClockTest
 
 Import `ioc` as an existing Eclipse managed project and build the matching
 IOsonata library in the same Debug or Release configuration. Console pins and

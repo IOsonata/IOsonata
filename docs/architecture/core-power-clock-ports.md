@@ -47,7 +47,7 @@ alarm wake before delivering the callback. Setup clears retained wake state
 and enables the BPM AST Backup route while preserving other routes. The
 32000 Hz RC32K request alias now reports its actual nominal 32768 Hz source.
 
-The maintainer's latest SAM4LC ClockDemo run ended with zero failures: RC4/RC12,
+The maintainer's latest SAM4LC CoreClockTest run ended with zero failures: RC4/RC12,
 PBA divisors 1/2/4/1, both delay functions, 25 timer interrupts per interval,
 six OLED1 BUTTON1 RETENTION wakes, CPU/APB/LF descriptors, UART RX and APB
 restoration passed. The 250 ms delays were approximately 251194..251600 us.
@@ -57,13 +57,13 @@ also passed on this board.
 
 Validation for this update: all 124 SAM4LC and 128 SAM4LS library sources
 compiled in Debug and Release, followed by relinks after the final edits.
-Sixteen SAM4L demo links passed: ClockDemo, button/timer PowerOffDemo on both
+Sixteen SAM4L demo links passed: CoreClockTest, button/timer PowerOffDemo on both
 families and both display demos on SAM4LC. The edited C++ sources compile with
 GNU++11. All fifteen public clock/power functions have one definition in each
 archive. Existing timer, clock and power register tests passed. Shared demo
 rebuilds also passed on D11, D21, C3 and C6.
 
-The subsequent ClockDemo AST run ended with zero failures. The visible automatic
+The subsequent CoreClockTest AST run ended with zero failures. The visible automatic
 wake intervals were 1000000 us, with timer wake interrupts, restored clocks,
 both delay functions and UART RX passing. PowerOffDemo then completed four
 consecutive AST Backup wakes: reset reason 0x1000 and retained counts 1 through 5.
@@ -88,11 +88,11 @@ This revision adds:
 
 - SAMD11/21 generic-clock divider selection, including each generator's divider
   width, binary division, active-consumer checks and CPU delay-factor updates.
-  ClockDemo now selects OSC8M again on D11 and checks 1/2/4/1 dividers, timer
+  CoreClockTest now selects OSC8M again on D11 and checks 1/2/4/1 dividers, timer
   interrupts and both delay functions at each rate on both targets.
 - SAM4L peripheral-clock setters for PBA/PBB/PBC/PBD. Rates cannot exceed the
   CPU rate; PBB must equal the CPU rate because it also supplies AHB modules.
-  ClockDemo checks the PBA dividers with the UART stopped and reinitialized.
+  CoreClockTest checks the PBA dividers with the UART stopped and reinitialized.
 - SAM4L SystemSleep selects RETENTION for asynchronous EIC/AST wake, WAIT for
   enabled PM SleepWalking wake sources, and SLEEP0 for ordinary interrupt wake.
   AST wake detection uses WER, independently of the interrupt mask. The caller
@@ -109,13 +109,13 @@ This revision adds:
   selection uses RC_SLOW. Sleep keeps the actual selected LP clock powered,
   using the hardware mux rather than inferring it from a frequency descriptor.
 
-ClockDemo now prints its small set of integer/string messages directly through
+CoreClockTest now prints its small set of integer/string messages directly through
 UART; LCDConsoleDisplayDemo remains the display/syslog demonstration. The
-expanded D11 ClockDemo uses 13,364 bytes of flash and 1,208 bytes of BSS in the
+expanded D11 CoreClockTest uses 13,364 bytes of flash and 1,208 bytes of BSS in the
 current size-optimized LTO build. Sleep checks on D11, D21 and SAM4LC now use
 a peripheral-clock divisor of four and restore the original rate afterward.
 
-Debug and Release library-source builds and ClockDemo/PowerOffDemo links passed
+Debug and Release library-source builds and CoreClockTest/PowerOffDemo links passed
 for D11, D21, SAM4LC, SAM4LS, C3 and C6. Both display demos also linked for D11
 and D21. These are GNU command-line builds derived from the managed project
 source lists; no new board execution was performed here.
@@ -131,7 +131,7 @@ Hardware validation still required for this revision:
 
 The subsequent C3/C6 PLL implementation extends the existing 160 MHz build
 option. Define ESP32C3_CPU_160MHZ or ESP32C6_CPU_160MHZ in both the library and
-ClockDemo compiler settings, then clean rebuild both. Startup initializes PLL
+CoreClockTest compiler settings, then clean rebuild both. Startup initializes PLL
 when required, and SystemCoreClockSelect(OSC_TYPE_XTAL, 40000000) returns to its
 160 MHz CPU output after RC_FAST. Without the option, XTAL still selects 40 MHz.
 The generic oscillator API is unchanged; it is not an arbitrary CPU-rate setter.
@@ -208,7 +208,7 @@ is a sample of live RAM continuity, not a full SRAM test. SAMD21 subsequently
 passed five Standby wakes with the same static and stack samples. Full SRAM
 testing and sleep-current measurements remain pending.
 
-On November 17, SAMD21 ClockDemo passed three Standby cycles with SW0/PA15
+On November 17, SAMD21 CoreClockTest passed three Standby cycles with SW0/PA15
 and another three with OLED1 BUTTON1/PB04 on EXT1. CPU/APB reporting remained
 48 MHz; the LF descriptor remained 32768 Hz. Both 250 ms delay checks measured
 about 251 ms at the actual 750 kHz timer rate, with 25 interrupts. UART RX
@@ -217,11 +217,11 @@ ClockDisplayDemo output worked, and LCDConsoleDisplayDemo display syslog
 passed all four combinations of SPI interrupt and DMA settings. These results
 do not establish other CPU/APB rates or physical oscillator accuracy.
 
-On November 17, 2026, ClockDemo at `2de35f281` passed three OSC8M-reference
+On November 17, 2026, CoreClockTest at `2de35f281` passed three OSC8M-reference
 selections at 48 MHz. The shared fixed-point delay implementation measured
 250094 us for msDelay(250) and 250107 us for nsDelay(250000000), with 25
 interrupts each and zero failures. Short nanosecond-delay accuracy is not
-established by this long-interval check. ClockDemo now provides a selectable
+established by this long-interval check. CoreClockTest now provides a selectable
 SW0 Standby run that repeats clock, delay and timer checks after three wakes;
 that combined run at `e017243bc` passed all three wakes with zero failures.
 CPU/APB and LF descriptor checks passed. Post-wake msDelay measured
@@ -513,7 +513,7 @@ See datasheet sections 28, 29 and 46 for the clock tree and electrical limits.
 
 ## SAM4L
 
-SAM4LC ClockDemo rerun passed all three RC4/RC12 selection cycles with readable
+SAM4LC CoreClockTest rerun passed all three RC4/RC12 selection cycles with readable
 UART output. CPU/APB measurements were about 44.8 MHz with RC4 and 39.64 MHz
 with RC12. Both 250 ms delays measured about 253420 us with 25 interrupts,
 within the demo's 2 percent tolerance; the final result was zero failures.
@@ -521,7 +521,7 @@ The earlier SystemSleep implementation used SLEEP0, preserving BPM mode, SCR,
 PBD clock gates and the caller's interrupt mask. Entry clears RET/BKUP and
 SLEEPDEEP/SLEEPONEXIT, and returns without sleeping if VREG is not ready.
 Peripherals retain their running clocks; enabled interrupts wake the CPU.
-That tested revision did not implement WAIT or RETENTION. Its SAM4LC ClockDemo selected
+That tested revision did not implement WAIT or RETENTION. Its SAM4LC CoreClockTest selected
 OLED1 BUTTON1/PC06 through GPIO interrupt group 8 and checks the wake callback,
 clocks, both delays, timer IRQs and UART RX across three cycles. The Release
 retest passed all checks with zero failures. Its 1260164 Hz timer measured
@@ -543,14 +543,14 @@ ownership now follows the retained Backup pin routing. Wake setup also enables
 the EIC peripheral interrupt. The clean rebuild results above confirm repeated
 wake with these corrections.
 
-SAM4LC ClockDemo hardware results on November 17 exposed UART corruption with
+SAM4LC CoreClockTest hardware results on November 17 exposed UART corruption with
 RCFAST 4 MHz selected and incorrect delay calibration: 250 ms measured as
 205823 us through `msDelay` and 586699 us through `nsDelay`. The SAM4L port now
 uses 14-cycle and 3-cycle loop factors, respectively, refreshed from the CPU
 frequency at startup and after clock updates. The later Release run exposed
 the incorrect 13-cycle microsecond factor; fixed loop alignment alone did
 not correct it. The 14-cycle factor passed the hardware retest above.
-ClockDemo also acquires and stops AST before selecting clocks because AST
+CoreClockTest also acquires and stops AST before selecting clocks because AST
 can survive reset after ClockDisplayDemo. The generic ARM delay loops use
 fixed alignment without MCU-specific conditionals.
 
@@ -563,7 +563,7 @@ RC32K reference does not provide crystal accuracy. An active FREQM user blocks
 core-clock changes. A failed measurement reports failure instead of accepting
 the nominal DFLL frequency.
 
-SAM4LC/SAM4LS Debug and Release ClockDemo and PowerOffDemo links pass, as do
+SAM4LC/SAM4LS Debug and Release CoreClockTest and PowerOffDemo links pass, as do
 existing SAM4L clock and power host checks. The SAM4LC hardware rerun above confirms UART output and delay timing.
 SAM4LS hardware validation remains pending.
 
@@ -1324,7 +1324,7 @@ used empty UART Disable/Enable hooks: they drained output but did not gate UART
 clocks. The new hooks gate serial and bus clocks, preserve configuration and
 restore UART interrupt enables on resume. PowerOff additionally clears FIFOs,
 releases pins and interrupt routing, and requires Init before reuse. The updated
-PowerOffDemo uses UART PowerOff before Deep-sleep. At `17d081bd1`, ClockDemo
+PowerOffDemo uses UART PowerOff before Deep-sleep. At `17d081bd1`, CoreClockTest
 passed three cycles and nine BOOT wakes with these Disable/Enable hooks, and
 PowerOffDemo passed three consecutive GPIO3 wake/restart cycles after UART
 PowerOff. Every Deep-sleep restart reported pin-wake reason 0x100. These results
@@ -1416,7 +1416,7 @@ passed. The new reset label has not yet been checked on hardware.
 
 Remaining work is separate from the completed C6 GPIO wake validation:
 
-- C6 ClockDemo at `e5044c35f` passed three cycles of XTAL/RC_FAST switching,
+- C6 CoreClockTest at `e5044c35f` passed three cycles of XTAL/RC_FAST switching,
   APB changes, LF selection, UART TX and timer interrupts with zero failures.
   Calibrated RC_FAST timing at `6d3947a30` also passed three cycles with zero
   failures: RC_FAST 16134719-16136308 Hz, 250 ms delay 249969-250037 us.
@@ -1433,7 +1433,7 @@ Remaining work is separate from the completed C6 GPIO wake validation:
   Both delay units pass, with 250 ms samples at 249979-250050 us and 24/25
   IRQs. Build configuration was not specified. Other peripheral operation,
   interrupt/DMA UART RX and short nanosecond delays remain untested.
-  RESET had failed to start ClockDemo, PowerOffDemo and LedDemo after flashing;
+  RESET had failed to start CoreClockTest, PowerOffDemo and LedDemo after flashing;
   one power cycle restored execution and RESET then worked normally. The
   transient native-USB flashing/reset cause is unconfirmed; no recurring
   post-flash failure or flasher fix has been established.
@@ -1443,7 +1443,7 @@ Remaining work is separate from the completed C6 GPIO wake validation:
   passed four manual wake/restart cycles with reset reason 0x100; the board
   stayed asleep between manual wake events. RTC fast-memory retention is not
   validated or exposed as application retention registers.
-- C3 ClockDemo after `04d1522a8` passed all three cycles and nine Light-sleep
+- C3 CoreClockTest after `04d1522a8` passed all three cycles and nine Light-sleep
   wakes with zero failures. XTAL, calibrated RC_FAST, shared CPU/APB division,
   RC_SLOW, restored clock descriptors and timer IRQs passed. RC_FAST measured
   20805079-20810365 Hz; 250 ms samples measured 250065-252360 us with 25 IRQs.

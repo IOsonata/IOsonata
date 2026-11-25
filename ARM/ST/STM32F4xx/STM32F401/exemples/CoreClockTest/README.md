@@ -9,7 +9,7 @@
 
 ## Historical demo notes (pre-migration)
 
-# STM32F401 ClockDemo
+# STM32F401 CoreClockTest
 
 Import `ioc` as an existing Eclipse managed project and build the matching
 IOsonata library in the same Debug or Release configuration. Console pins and

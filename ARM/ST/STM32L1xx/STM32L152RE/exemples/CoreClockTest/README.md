@@ -9,7 +9,7 @@
 
 ## Historical demo notes (pre-migration)
 
-# STM32L152RE ClockDemo
+# STM32L152RE CoreClockTest
 
 Import `ioc` as an existing Eclipse managed project and build the matching
 IOsonata library in the same Debug or Release configuration. Console pins and

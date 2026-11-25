@@ -9,7 +9,7 @@
 
 ## Historical demo notes (pre-migration)
 
-# LPC11U35 ClockDemo
+# LPC11U35 CoreClockTest
 
 Import `ioc` as an existing Eclipse managed project and build the matching
 IOsonata library in the same Debug or Release configuration. Console pins and

@@ -59,11 +59,11 @@ and rebuild to resume the normal clock test.
 
 ## Historical demo notes (pre-migration)
 
-# SAMD11 ClockDemo
+# SAMD11 CoreClockTest
 
 ## Current clock-only configuration
 
-The ClockDemo board now selects the OSC8M reference and exercises
+The CoreClockTest board now selects the OSC8M reference and exercises
 the normal clock, divider, timer and delay APIs. It no longer contains
 the Standby/resume profile or calls SystemSleep. UART uses SERCOM2 on
 the EDBG virtual COM port. Polling UART RX is disabled by default on
@@ -74,7 +74,7 @@ The code changes in review 0.14 have not been compiled or retested
 on hardware. The original clock-selection build fitted in 15,350
 bytes of flash before this refactor.
 
-## Historical combined ClockDemo documentation
+## Historical combined CoreClockTest documentation
 
 The following instructions and hardware observations describe the
 earlier combined clock/sleep demo, not the current board configuration.
@@ -97,7 +97,7 @@ Select the run in `src/board.h` with `CLOCK_DEMO_RESUME_TEST`:
 - `0`: run the three OSC8M clock-selection cycles, then measure both delays.
   UART is drained and powered off before each change, then initialized again.
 
-The two modes share the generic ClockDemo source. Combining clock selection
+The two modes share the generic CoreClockTest source. Combining clock selection
 and wake support in one D11 build exceeded flash by 600 bytes, so the board
 selects the required checks at compile time. The Standby run keeps the startup
 clock; it does not perform runtime source selection. The APB clock stays at
@@ -135,7 +135,7 @@ exceeding the 48 MHz CPU limit. The revised write sequence passes a register
 model check and both SAMD11/SAMD21 demo build configurations. The later
 board run completed all three selections.
 
-ClockDemo drains both the syslog record store and polling UART FIFO after
+CoreClockTest drains both the syslog record store and polling UART FIFO after
 startup and result output, before changing clocks, and before its final idle
 loop. A partial UART write leaves the remainder in syslog; draining only the
 UART FIFO can leave the last visible output in the middle of a line.
@@ -152,7 +152,7 @@ calibration. The SAMD port uses 13 cycles per microsecond-delay loop and three
 cycles per nanosecond-delay loop. idelay.h has no SAMD-specific calculation.
 The maintainer's run of 2de35f281 passed all three clock selections and both
 delay checks: msDelay measured 250094 us, nsDelay measured 250107 us, both
-with 25 interrupts. ClockDemo completed with zero failures at 48 MHz.
+with 25 interrupts. CoreClockTest completed with zero failures at 48 MHz.
 The maintainer's Standby run at e017243bc passed all three SW0 wakes, CPU/APB
 clock and LF descriptor checks, and timer interrupts. Post-wake msDelay
 measured 250097-250103 us; nsDelay measured 250108-250112 us, with 25 interrupts
