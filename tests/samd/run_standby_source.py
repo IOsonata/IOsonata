@@ -93,39 +93,12 @@ class StandbySourceTest(unittest.TestCase):
 		self.assertIn("SCB->SCR = previous", s)
 		self.assertLess(s.index("__WFI()"), s.index("SamdStandbyWakeDone()"))
 		self.assertLess(s.index("SamdStandbyWakeDone()"), s.rindex("EnableInterrupt(state)"))
-		self.assertIn("SamdUartPrepareSleep()", s)
-		self.assertLess(s.index("SamdUartPrepareSleep()"), s.index("SamdStandbyWakeArm()"))
-		self.assertLess(s.index("SamdStandbyWakeDone()"), s.rindex("SamdUartResumeSleep()"))
 
-	def test_adc_preserves_enabled_state_through_standby(self):
-		prepare = body(ADC, 'extern "C" bool SamdAdcPrepareSleep(')
-		resume = body(ADC, 'extern "C" void SamdAdcResumeSleep(')
-		sleep = body(SLEEP, 'void SystemSleep(')
-		self.assertIn('s_bSamdAdcSleepPaused = true', prepare)
-		self.assertIn('ADC_REGS->ADC_CTRLA = ctrl & ~ADC_CTRLA_ENABLE_Msk', prepare)
-		self.assertIn('s_pSamdAdc->Enable()', resume)
-		self.assertLess(sleep.index('SamdAdcPrepareSleep()'), sleep.index('SamdStandbyWakeArm()'))
-		self.assertGreater(sleep.rindex('SamdAdcResumeSleep()'), sleep.index('__WFI()'))
-		self.assertIn('SamdUsbAllowStandby()', sleep)
-		self.assertIn('SamdDacAllowStandby()', sleep)
-
-	def test_dma_busy_prevents_standby(self):
-		check = body(DMAC, "bool SamdDmacAllowStandby(")
-		sleep = body(SLEEP, "void SystemSleep(")
-		self.assertIn("DMAC_REGS->DMAC_BUSYCH", check)
-		self.assertIn("DMAC_REGS->DMAC_PENDCH", check)
-		self.assertIn("DMAC_REGS->DMAC_INTSTATUS", check)
-		self.assertIn("DMAC_CHCTRLA_ENABLE_Msk", check)
-		self.assertIn("DMAC_REGS->DMAC_CHID = selected", check)
-		self.assertLess(sleep.index("SamdDmacAllowStandby()"), sleep.index("SamdAdcPrepareSleep()"))
-
-	def test_hf_timer_standby_refusal(self):
-		check = body(TIMER, 'extern "C" bool SamdTimerAllowStandby(')
-		sleep = body(SLEEP, 'void SystemSleep(')
-		self.assertIn('s_SamdSysTickOwner != NULL', check)
-		self.assertIn('SAMD_RTC_TIMER_MAXCNT', check)
-		self.assertIn('s_SamdTimerData[i]->bRunning', check)
-		self.assertLess(sleep.index('SamdTimerAllowStandby()'), sleep.index('SamdAdcPrepareSleep()'))
+	def test_sleep_entry_leaves_the_device_drivers_alone(self):
+		# The application prepares its devices; SystemSleep only enters Standby.
+		source = SLEEP if isinstance(SLEEP, str) else SLEEP.read_text()
+		for name in ("PrepareSleep", "ResumeSleep", "AllowStandby"):
+			self.assertNotIn(name, source)
 
 	def test_rearm_does_not_change_gpio_ownership(self):
 		s = body(EIC, "void SamdStandbyWakeArm(")

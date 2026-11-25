@@ -8,6 +8,10 @@ wake-up requires an enabled EIC_WAKEUP line and an asynchronous source
 that remains functional in Standby. Ordinary EIC interrupts configured
 from the main generic clock are not sufficient.
 
+The application prepares its devices through their drivers before the call:
+it waits for the transfers that must finish and stops or keeps what it
+decides. SystemSleep does not ask, pause or resume a device driver.
+
 MIT License
 Copyright (c) 2026 I-SYST inc.
 ----------------------------------------------------------------------------*/
@@ -21,24 +25,11 @@ Copyright (c) 2026 I-SYST inc.
 // EIC wake line ownership is managed in iopincfg_samd.c.
 void SamdStandbyWakeArm(void);
 void SamdStandbyWakeDone(void);
-bool SamdUartPrepareSleep(void) __attribute__((weak));
-void SamdUartResumeSleep(void) __attribute__((weak));
-bool SamdI2cPrepareSleep(void) __attribute__((weak));
-void SamdI2cResumeSleep(void) __attribute__((weak));
-bool SamdSpiPrepareSleep(void) __attribute__((weak));
-void SamdSpiResumeSleep(void) __attribute__((weak));
-bool SamdUsbAllowStandby(void) __attribute__((weak));
-bool SamdDacAllowStandby(void) __attribute__((weak));
-bool SamdDmacAllowStandby(void) __attribute__((weak));
-bool SamdTimerAllowStandby(void) __attribute__((weak));
-bool SamdAdcPrepareSleep(void) __attribute__((weak));
-void SamdAdcResumeSleep(void) __attribute__((weak));
 
 void SystemSleep(void)
 {
 	uint32_t previous;
 	uint32_t state;
-	bool ready;
 
 	if (__get_IPSR() != 0U)
 	{
@@ -50,35 +41,6 @@ void SystemSleep(void)
 	// before sleeping, leaving no interrupt to wake the CPU. The SAMD11
 	// NMI handler leaves EIC_IRQn pending during this window.
 	state = DisableInterrupt();
-	ready = (SamdUsbAllowStandby == NULL || SamdUsbAllowStandby()) &&
-		(SamdDacAllowStandby == NULL || SamdDacAllowStandby()) &&
-		(SamdDmacAllowStandby == NULL || SamdDmacAllowStandby()) &&
-		(SamdTimerAllowStandby == NULL || SamdTimerAllowStandby()) &&
-		(SamdAdcPrepareSleep == NULL || SamdAdcPrepareSleep()) &&
-		(SamdI2cPrepareSleep == NULL || SamdI2cPrepareSleep()) &&
-		(SamdSpiPrepareSleep == NULL || SamdSpiPrepareSleep()) &&
-		(SamdUartPrepareSleep == NULL || SamdUartPrepareSleep());
-	if (!ready)
-	{
-		if (SamdUartResumeSleep != NULL)
-		{
-			SamdUartResumeSleep();
-		}
-		if (SamdSpiResumeSleep != NULL)
-		{
-			SamdSpiResumeSleep();
-		}
-		if (SamdI2cResumeSleep != NULL)
-		{
-			SamdI2cResumeSleep();
-		}
-		if (SamdAdcResumeSleep != NULL)
-		{
-			SamdAdcResumeSleep();
-		}
-		EnableInterrupt(state);
-		return;
-	}
 	SamdStandbyWakeArm();
 	previous = SCB->SCR;
 	// Standby returns to this caller; never inherit SLEEPONEXIT.
@@ -89,22 +51,6 @@ void SystemSleep(void)
 	__ISB();
 	SCB->SCR = previous;
 	SamdStandbyWakeDone();
-	if (SamdUartResumeSleep != NULL)
-	{
-		SamdUartResumeSleep();
-	}
-	if (SamdSpiResumeSleep != NULL)
-	{
-		SamdSpiResumeSleep();
-	}
-	if (SamdI2cResumeSleep != NULL)
-	{
-		SamdI2cResumeSleep();
-	}
-	if (SamdAdcResumeSleep != NULL)
-	{
-		SamdAdcResumeSleep();
-	}
 	(void)SystemCoreClockGet();
 	EnableInterrupt(state);
 }
