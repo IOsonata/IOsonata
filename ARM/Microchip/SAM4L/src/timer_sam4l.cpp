@@ -32,6 +32,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "timer_sam4l.h"
+#include "idelay.h"
 #include "system_sam4l.h"
 
 volatile uint32_t g_Sam4lTimerInitStage;

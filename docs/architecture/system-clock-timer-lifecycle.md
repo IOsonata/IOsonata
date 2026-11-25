@@ -70,6 +70,13 @@ Power saving while the CPU runs comes from two things: a lower CPU
 frequency, through `SystemPowerModeSet()`, and stopping an oscillator nobody
 uses, through `Enable/Disable`. It does not come from changing oscillator.
 
+### Delay functions
+
+`usDelay`, `msDelay`, `nsDelay` and `sDelay` are declared in `idelay.h` of
+the architecture, not in `system_core_clock.h`. `sDelay` sleeps for a number
+of seconds on a low frequency timer. Each MCU port implements it in its
+timer driver; a port without it does not define it.
+
 ### Low-power operation
 
 Before calling `SystemSleep()`, the application decides which operations

@@ -47,6 +47,7 @@ SOFTWARE.
 #define __IDELAY_H__
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "coredev/system_core_clock.h"
 typedef struct {
@@ -67,6 +68,21 @@ extern uint64_t SystemCoreClockPeriodus;	// Cycles per microsecond
 
 // Low 32 bits of the running CPU cycle counter; wraps modulo 2^32.
 uint32_t IOsonataRiscvCycle32(void);
+
+/**
+ * @brief Sleep for a number of seconds using a temporary low-frequency timer.
+ *
+ * The entire elapsed call (timer setup, sleeping, wake and release) is the
+ * requested duration. No CPU busy-wait loop, DWT or SysTick is used.
+ * Unsupported targets, interrupt context, masked interrupts or unavailable
+ * timers return false. Zero seconds succeeds immediately.
+ *
+ * Declared with the other delay functions and implemented by each MCU
+ * port. The port selects an available LF timer for this operation.
+ * CoreClockTest can measure an MCU-specific overhead correction; normal
+ * operation never performs calibration.
+ */
+bool sDelay(uint32_t Seconds);
 
 #ifdef __cplusplus
 }

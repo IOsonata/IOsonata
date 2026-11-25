@@ -84,6 +84,7 @@ SOFTWARE.
 
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 #include "coredev/timer.h"
 #include "clock_samd.h"
 #include "evsys_samd.h"

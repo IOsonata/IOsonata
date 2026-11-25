@@ -17,6 +17,7 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include "sam4e.h"
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 #include "coredev/timer.h"
 
 #ifdef SAM4E_TC2

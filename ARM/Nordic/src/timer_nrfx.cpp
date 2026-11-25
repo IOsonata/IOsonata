@@ -55,6 +55,7 @@ SOFTWARE.
 
 #include "timer_nrfx.h"
 #include "coredev/system_core_clock.h"
+#include "idelay.h"
 
 #if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
 	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
