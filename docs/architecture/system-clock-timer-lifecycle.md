@@ -9,9 +9,9 @@ can use the same device code on different hardware.
 | Owner | Responsibility |
 | --- | --- |
 | Board | Describe the fitted oscillators and their frequencies in `g_McuOsc`. |
-| Application | Request a device operation such as a UART baud rate or timer interval. Configure the intended wake event and request sleep or system power-off when appropriate. |
+| Application | Request a device operation such as a UART baud rate or timer interval. Decide when the application can sleep, prepare its devices through their drivers, and configure the intended wake event before calling `SystemSleep()`. |
 | Device driver | Choose a suitable clock for the requested operation. Own the device registers, pins, interrupts, DMA, module gate and device lifecycle. Hold the required shared clock while the hardware depends on it, including pending transfers and armed wake events. |
-| MCU Power & Clock | Establish the board clocks at startup. Select and share the available clock sources and domains. Enter a compatible MCU power state and restore MCU clocks on wake where required. Respect clocks already owned by another core or radio stack. |
+| MCU Power & Clock | Establish the board clocks at startup. Select and share the available clock sources and domains. Enter the MCU sleep state and restore MCU clocks on wake where required. Respect clocks already owned by another core or radio stack. |
 
 ### Peripheral clock selection
 
@@ -26,19 +26,18 @@ while another user or the MCU still needs it.
 
 ### Low-power operation
 
-`SystemSleep()` selects a resumable state compatible with active clock
-requirements and configured wake sources. If a deeper state would break a
-transfer or lose a wake event, use a compatible shallower state or return.
-Peripheral configuration and enable state belong to the driver throughout.
-The system manages the MCU clock tree, sleep controls and wake routing.
-It must not walk device instances, drain FIFOs, stop DMA, disconnect pins
-or disable and restart devices to make a deeper state possible.
+Before calling `SystemSleep()`, the application decides which operations
+must finish and which devices must remain active. It uses the device APIs
+to prepare them and arms its wake source. The drivers implement those
+operations and own the peripheral registers. `SystemSleep()` handles MCU
+sleep entry, clocks, wake routing and return to the caller.
 
-For example, an application arms a timer and sleeps until the next sensor
-sample. The timer driver chooses its source and holds it while armed.
-Power & Clock keeps that source available during sleep. If an enabled UART
-also needs to receive, its clock requirement still applies. The application
-can explicitly disable the UART when reception is no longer needed.
+For example, if the last UART transmission must reach the wire, the
+application waits for transmit completion before sleeping. If it needs
+to receive during sleep, it configures supported UART wake through the
+driver or defers sleep. For a periodic sensor sample, it arms the wake
+timer before calling `SystemSleep()`. An enabled UART alone does not tell
+the system which of these behaviors the application intends.
 
 `Disable` permits a subsequent `Enable` with the existing configuration.
 Device `PowerOff` requires `Init` before reuse. System sleep performs neither

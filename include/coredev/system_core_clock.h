@@ -419,14 +419,13 @@ void SystemPowerOff(void);
 /**
  * @brief Enter a low-power state that resumes execution on wakeup.
  *
- * Select a resumable MCU state compatible with active clock requirements
- * and wake sources configured before the call. Use a shallower state or
- * return if a deeper state cannot preserve them. RAM and stack remain valid.
+ * Before calling, the application prepares its peripherals through their
+ * drivers, waits for any transfers that must finish, and configures the
+ * intended wake sources. The application decides when it is ready to sleep.
  *
- * Drivers retain ownership of their peripheral configuration, enable
- * state and transfers. Sleep entry and wake manage MCU power, clocks and
- * wake routing. They must preserve the configured wake sources and reset
- * reasons.
+ * The MCU port handles sleep entry, clocks and wake routing. Execution
+ * resumes after this call with RAM and stack intact. Configured wake
+ * sources and reset reasons are preserved.
  *
  * Unlike SystemPowerOff, this operation never requests a reset-on-wake
  * state. It is optional on MCUs without a supported resumable sleep mode.
