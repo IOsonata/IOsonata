@@ -57,8 +57,8 @@ SOFTWARE.
 
 // SW0 is PA14, the SAMD11 EIC dedicated NMI input (active low).
 // No external switch or wire is required for Standby wake.
-#define POWER_DEMO_RESUME_WAKE 1
-#define POWER_DEMO_STANDBY_RAM_TEST 1
+#define CORE_POWER_TEST_POLLING_CONSOLE 1
+#define CORE_POWER_TEST_WAKE_MS 0
 #define WAKE_BUT_PORT IOPORTA
 #define WAKE_BUT_PIN 14
 #define WAKE_BUT_PINOP IOPINOP_GPIO

@@ -32,9 +32,11 @@ Hardware results for the single-timer Release build:
 | DevNo | Peripheral | Elapsed for 110 ms | Periodic callbacks | One-shot and PowerOff |
 | --- | --- | ---: | ---: | --- |
 | 0 | RTC | 110,779 us | 5 | PASS |
+| 2 | TC2 | 110,462 us | 5 | PASS |
 | 3 | TCC0 | 110,272 us | 5 | PASS |
+| 4 | SysTick | 110,048 us | 5 | PASS |
 
-Both runs completed with zero failures.
+All four timer implementations passed on hardware. TC1 and TC2 share the TC driver.
 
 ### Measure delay factors during porting
 
