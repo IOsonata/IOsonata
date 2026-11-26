@@ -118,7 +118,7 @@ Do not infer completion solely from `bIntEn` or `bDma`.
 Common patterns are:
 
 - synchronous direct transfer: return the number of bytes moved;
-- interrupt or DMA transfer handed to hardware: return `-1`, then report completion later;
+- interrupt or DMA transfer handed to hardware and not waited for: return `-1`, then report completion later. An I2C or SPI master does not use this, see below;
 - FIFO-backed UART TX: return the number of bytes accepted into the software FIFO, while the ISR or DMA drains it later;
 - retryable zero-byte result: return `0`, allowing the generic retry loop to make another attempt;
 - permanent failure: use the interface's documented error convention.
@@ -129,35 +129,48 @@ An interface event reports transport activity or transport completion. A higher-
 
 ## Interrupt driven master transfers
 
-An interrupt driven master transfer (`bIntEn` set, I2C or SPI master) has the
-same form as an interrupt driven slave: the handler acts on what the
-controller reports, and the data stays in the buffer the caller provided.
+An I2C or SPI master behaves the same with `bIntEn` set or cleared. A device
+driver that calls `Read`, `Write`, `Rx` or `Tx` gets its data and its byte
+count on return in both modes and does not have to know which one is
+configured. The interrupt only changes how the bytes are moved.
 
 - `TxData` and `RxData` keep the caller's pointer and length, start the
-  transfer and return `-1`. The driver holds no transfer data of its own: no
-  private copy, no transfer size limit and no fallback to another mode for a
-  long transfer.
-- At each interrupt the driver continues from the remaining part of the
+  transfer, wait for the interrupt handler to end it and return the number of
+  bytes moved, as in polling mode. They do not return `-1`.
+- The driver holds no transfer data of its own: no private copy, no transfer
+  size limit and no fallback to another mode for a long transfer.
+- At each interrupt the handler continues from the remaining part of the
   caller's buffer: the next byte, or the next DMA block up to the count the
   controller accepts. The application does not split a transfer for a
   controller limit and is not asked for anything in between.
 - The handler takes direction, byte count and errors from the controller's
   events, status flags and count registers where it has them. A software copy
   of what the controller already reports is not kept.
-- When everything given has gone out, the driver calls
-  `DeviceIntrfTxComplete()`, which sets `bTxReady` and closes the transfer
-  unless `bNoStop` is set, and reports `DEVINTRF_EVT_TX_READY`: the
-  transmitter is free for the next `TxData`.
-- `DEVINTRF_EVT_COMPLETED` is reported with the byte count once the transfer
-  is closed on the bus. A transfer ended by a bus error is closed the same
-  way and reports the bytes moved before the error.
-- The caller's buffer must stay valid until that completion. This is the same
-  rule as the buffers an application registers for a slave.
+- The handler puts the STOP on the bus, or releases the chip select, unless
+  `bNoStop` is set. It does not release the busy flag: the generic layer does
+  that through `StopTx` and `StopRx` after `TxData` or `RxData` has returned,
+  the same sequence as in polling mode.
+- When everything given has gone out the handler sets `bTxReady` and reports
+  `DEVINTRF_EVT_TX_READY`. `DEVINTRF_EVT_COMPLETED` is reported with the byte
+  count once the transfer is closed on the bus. A transfer ended by a bus
+  error is closed the same way and returns the bytes moved before the error.
+- The wait has a limit that follows the transfer length. When it expires the
+  driver stops the bus and returns the bytes moved so far.
+
+Two rules follow from the wait:
+
+- The bus interrupt priority must be higher than the priority of any
+  interrupt handler that calls a transfer on that bus. A transfer called from
+  a handler of the same or a higher priority cannot be served and ends on the
+  time limit.
+- The event callback runs inside the bus interrupt. It must not start a
+  transfer on the same interface.
 
 Conversion status: this section is the design the drivers are being brought
-to. The master drivers below still send an interrupt driven transmit from a
-private copy with a fixed size, or keep transfer state the controller already
-reports. They are converted one driver per commit and removed from this list
+to. The master drivers below still return `-1` from an interrupt driven
+transfer and send a transmit from a private copy with a fixed size. A device
+driver that reads through them in interrupt mode does not have its data on
+return. They are converted one driver per commit and removed from this list
 as they are done.
 
 | Family | I2C master | SPI master |
@@ -170,38 +183,29 @@ as they are done.
 | Renesas R9A02 | `i2c_r9a02.cpp`: copy, state flags | `spi_r9a02.cpp`: state flag |
 | NXP LPC546xx | `i2c_lpc546xx.cpp`: 64 byte copy, state flags | `spi_lpc546xx.cpp`: 64 byte copy, state flags |
 
-The Nordic PEI prepare functions of I2C and SPI use the same private copy and
-change with their driver: the transmit buffer of a prepared transfer belongs
-to the caller until the transfer is released, as its receive buffer already
-does.
+The Nordic PEI prepare functions of I2C and SPI follow the same rule for the
+data: the transmit buffer of a prepared transfer belongs to the caller until
+the transfer is released, as its receive buffer does.
 
 ## Combined-write buffer lifetime
 
 `DeviceIntrfWrite()` concatenates command and data into a temporary stack
-buffer and calls `DeviceIntrfTx()`. Its return value excludes command bytes;
-a negative deferred result is converted to zero and the byte count is the one
-reported with `DEVINTRF_EVT_COMPLETED`.
+buffer and calls `DeviceIntrfTx()`. Its return value excludes command bytes.
 
-That stack buffer is the one buffer the caller does not keep. With no copy in
-the driver, `DeviceIntrfWrite()` waits for `bTxReady` on an I2C or SPI
-interface when `TxData` returns `-1`, as `DeviceIntrfRead()` does for its
-command phase, so the driver can send from the buffer it was given. A write
-that must not block goes through `DeviceIntrfTx()` with a buffer the
-application keeps.
+An I2C or SPI master sends from that stack buffer directly: `TxData` returns
+after the data has gone out, with or without interrupt, so the buffer is no
+longer in use when `DeviceIntrfWrite()` returns. A master driver that is not
+converted yet copies the data before it returns `-1`.
 
 Other interface types use `-1` with their own meaning, for example a memory
-controller reporting that a program operation was started. `DeviceIntrfWrite()`
-does not wait for those.
-
-The wait has an iteration budget that follows the length of the write. A
-driver that has not been converted yet still sends from its private copy; the
-wait only makes the combined write return after the transfer instead of
-before it.
+controller reporting that a program operation was started. A negative result
+is converted to zero by `DeviceIntrfWrite()`.
 
 `DeviceIntrfRead()` waits for a deferred command phase with an iteration
-budget. The current helper does not propagate that wait result or the raw
-`StartRx` result. Drivers must handle their own command/restart failures; the
-helper is not a general asynchronous transaction state machine.
+budget, for the drivers that still return `-1`. The current helper does not
+propagate that wait result or the raw `StartRx` result. Drivers must handle
+their own command/restart failures; the helper is not a general asynchronous
+transaction state machine.
 
 ## Events
 
