@@ -351,9 +351,8 @@ I2C HAL mode is initialized and hardware ENABLE is valid.
 
 TWIM exposes STARTRX, STARTTX, STOP, SUSPEND and RESUME as task
 destinations after I2CPreparePeiTransfer() has armed a single
-seven-bit RX or TX EasyDMA transfer. TX uses the existing 64-byte
-driver staging buffer, bounded by the selected EasyDMA MAXCNT;
-RX memory remains caller-owned, DMA-capable RAM. The prepare method
+seven-bit RX or TX EasyDMA transfer, bounded by the selected EasyDMA
+MAXCNT. TX and RX memory remain caller-owned, DMA-capable RAM. The prepare method
 loads TWIM.ADDRESS, RXD/TXD.PTR and MAXCNT and either LASTTX_STOP
 or LASTRX_STOP shortcut, clears old events, and does not issue a
 START task. No I2C interrupt is needed for a one-block transaction.

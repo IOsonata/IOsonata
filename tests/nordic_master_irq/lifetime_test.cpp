@@ -16,9 +16,6 @@ using std::max;
 #define SPI_PRESENT 1
 #define I2C_TIMEOUT_CNT 8
 #define NRFSPI_TIMEOUT 8
-#ifndef NRFX_I2C_TXBUF_SIZE
-#define NRFX_I2C_TXBUF_SIZE 64
-#endif
 #define NRFX_SPI_TXBUF_SIZE 256
 #define NRFX_I2C_DMA_MAXCNT TEST_DMA_MAX
 #define NRFX_SPI_DMA_MAXCNT TEST_DMA_MAX
@@ -152,8 +149,6 @@ struct nRFTwiDev_t
 	const uint8_t *pTxData = NULL;
 	volatile int Async = 0;
 	volatile bool bAsyncErr = false, bStopped = false;
-	bool bTxRejected = false;
-	alignas(4) uint8_t TxBuf[NRFX_I2C_TXBUF_SIZE];
 };
 struct nRFSpiDev_t
 {
@@ -436,23 +431,16 @@ int main()
 {
 	for (bool dma : {false, true})
 	{
-		int limit = dma ? min(NRFX_I2C_TXBUF_SIZE, NRFX_I2C_DMA_MAXCNT) : NRFX_I2C_TXBUF_SIZE;
-		for (int operation = 0; operation < 3; operation++)
+		// An I2C transmit is sent from the caller's buffer, the driver
+		// keeps no copy of it.
 		{
+			const int length = 40;
 			Init(dma);
 			auto p = &i2c.DevIntrf;
-			int r = operation == 0 ? DeviceIntrfTx(p, 0x22, source, limit + 1) :
-				operation == 1 ? DeviceIntrfWrite(p, 0x22, source, 1, source + 1, limit) :
-				DeviceIntrfRead(p, 0x22, source, limit + 1, receive, sizeof(receive));
-			CHECK(r == 0 && tasks == 0 && txBytes == 0);
-			CHECK(txAttempts == 3);
-			CHECK(!Busy(p) && p->bTxReady && completed == 0 && timedout == 0);
-			CHECK(!i2cDev.bTxRejected);
-			CHECK(DeviceIntrfTx(p, 0x22, source, limit) == -1);
-			CHECK(memcmp(i2cDev.TxBuf, source, limit) == 0);
-			memset(source, 0x55, limit);
-			I2cFinish(limit, dma);
-			CHECK(completed == 1 && lastCount == limit && !Busy(p));
+			CHECK(DeviceIntrfTx(p, 0x22, source, length) == -1);
+			CHECK(i2cDev.pTxData == source);
+			I2cFinish(length, dma);
+			CHECK(completed == 1 && lastCount == length && !Busy(p));
 		}
 		for (int length : {NRFX_SPI_TXBUF_SIZE, NRFX_SPI_TXBUF_SIZE + 9, 66000})
 		{

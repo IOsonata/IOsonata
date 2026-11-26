@@ -229,8 +229,8 @@ extern "C" {
 bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData);
 
 // Prepare a single seven-bit TWIM master TX or RX EasyDMA block without
-// triggering START. TX uses the driver's private static 64-byte buffer;
-// RX remains caller-owned SRAM until STOPPED and successful release.
+// triggering START. The TX and the RX buffers remain caller-owned SRAM
+// until STOPPED and successful release.
 // The normal I2C busy flag protects ownership while prepared.
 bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen);

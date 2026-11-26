@@ -15,11 +15,11 @@ Checks cover:
 - one `DEVINTRF_EVT_COMPLETED` with the byte count, `bTxReady` after a TX;
 - SPI command then read: the command phase keeps the bus and reports no
   completion;
-- TWIM transmit and receive: TX fits one DMA block; RX can span several blocks.
+- TWIM transmit and receive from the caller's buffer, over several DMA blocks.
   The bus is released and one `DEVINTRF_EVT_COMPLETED` is reported only after
   the hardware has stopped, with no extra STOP task;
-- oversized interrupt-driven I2C TX, combined write and read command are
-  rejected before any START, STOP or byte, and release the interface;
+- TWIM combined write: `DeviceIntrfWrite()` waits for the end of the transmit
+  of its own buffer;
 - TWIM register read: the command phase suspends the bus, sets `bTxReady`
   and reports nothing, `DeviceIntrfRead()` waits for it, then the receive;
 - TWIM bus error: the driver stops the bus, the completion reports the bytes
@@ -54,15 +54,13 @@ latency, bus timing and errata are not modeled.
 
 ## Interrupt-driven transmit limits
 
-Nordic I2C TX must fit the driver's owned buffer, configured by
-`NRFX_I2C_TXBUF_SIZE` (64 bytes by default). With EasyDMA it must also fit one
-hardware DMA block. `DeviceIntrfWrite()` counts command and data bytes together;
-the command of `DeviceIntrfRead()` must also fit. An oversized call returns 0,
-sends no address or data, and reports no asynchronous completion. A later
-valid transfer can start normally. Increase `NRFX_I2C_TXBUF_SIZE` when building
-the target library if larger storage is needed, within the hardware DMA limit.
-The driver does not split a write into extra addressed I2C phases. Polling
-transmit is unchanged.
+Nordic I2C TX is sent from the caller's buffer, of any length: the driver
+keeps the pointer and the remaining count and has no copy. The buffer must stay
+valid until `DEVINTRF_EVT_COMPLETED`. `DeviceIntrfWrite()` waits for the end of
+the transmit of the buffer it builds on its stack. With EasyDMA a transmit
+longer than one hardware DMA block continues with the next block, as the
+polling transmit does: the TWIM starts each block with a START and the
+address.
 
 Nordic SPI TX uses `NRFX_SPI_TXBUF_SIZE` (256 bytes by default). A transfer
 that fits returns after copying. A longer transfer waits for completion while

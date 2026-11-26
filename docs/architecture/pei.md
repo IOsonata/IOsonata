@@ -433,9 +433,8 @@ serial peripheral base addresses are not interchangeable modes.
 
 TWIM STARTRX/STARTTX/STOP/SUSPEND/RESUME are hardware PEI
 destinations only after I2CPreparePeiTransfer() reserves the
-ordinary I2C busy flag and stages one TX or RX buffer. TX is copied
-into the driver's existing private 64-byte buffer, and RX is
-caller-owned RAM. The driver configures one seven-bit address and
+ordinary I2C busy flag and stages one TX or RX buffer. Both are
+caller-owned RAM that stays valid until the transfer is released. The driver configures one seven-bit address and
 LASTTX_STOP or LASTRX_STOP hardware shortcut, but no START task.
 ERROR can connect directly to STOP over PPI on NACK; no CPU
 event-forwarding ISR is introduced. All routes must be disabled

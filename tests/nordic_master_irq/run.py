@@ -46,24 +46,31 @@ def call(name, *args, sp=0x200FF000):
     return signed(u.reg_read(UC_ARM_REG_R0))
 
 def call_break(name, args, brk, action):
-    """Run name until the function brk is entered, run action, then resume."""
+    """Run name until the function brk is entered, run action, then resume.
+
+    The stop is asked for on each instruction of brk until the emulator takes
+    it: a stop asked for on the entry alone can be dropped when the call
+    follows a conditional block."""
     hit = []
     def code(uc, address, size, data):
-        if not hit:
-            hit.append(address)
-            uc.emu_stop()
+        hit.append(address)
+        uc.emu_stop()
     prefixes = ('_Z%d%s' % (len(brk), brk), '_ZL%d%s' % (len(brk), brk))
     where = [v for k, v in symbols.items() if k == brk or k.startswith(prefixes)][0] & ~1
-    h = u.hook_add(UC_HOOK_CODE, code, begin=where, end=where)
+    last = min(v & ~1 for v in symbols.values() if (v & ~1) > where) - 2
+    h = u.hook_add(UC_HOOK_CODE, code, begin=where, end=last)
     u.ctl_flush_tb()    # blocks translated earlier do not run a new hook
     setup(name, args, 0x200FF000)
     u.emu_start(symbols[name] | 1, 0xF0000, count=10000000)
     u.hook_del(h)
+    u.ctl_flush_tb()
     assert hit, (name, 'never reached', brk)
+    stopped = u.reg_read(UC_ARM_REG_PC) & ~1
+    assert where <= stopped <= last, (name, 'did not stop in', brk, hex(stopped))
     ctx = u.context_save()
     action()
     u.context_restore(ctx)
-    u.emu_start(hit[0] | 1, 0xF0000, count=10000000)
+    u.emu_start(stopped | 1, 0xF0000, count=10000000)
     assert u.reg_read(UC_ARM_REG_PC) == 0xF0000, (name, 'did not return after', brk)
     return signed(u.reg_read(UC_ARM_REG_R0))
 
@@ -192,9 +199,10 @@ TXBUF = [call('txbuf_address', bus, 0) for bus in range(2)]
 def transfer(bus, kind, length, maximum, finish, block_check=None):
     """Run one interrupt transfer and its DMA blocks, return what TxData returned.
 
-    A transmit that fits the driver copy is checked to be sent from the copy:
-    the caller's buffer is overwritten as soon as the call returns. A longer
-    transmit waits in the driver, its blocks are completed from that wait."""
+    An SPI transmit that fits the driver copy is checked to be sent from the
+    copy: the caller's buffer is overwritten as soon as the call returns. A
+    longer SPI transmit waits in the driver, its blocks are completed from
+    that wait. An I2C transmit is sent from the caller's buffer."""
     pattern = bytes((0x30 + i) & 0xFF for i in range(length))
     u.mem_write(BUF, pattern)
     copied = kind == 'tx' and length <= TXBUF_SIZE[bus]
@@ -219,7 +227,7 @@ def transfer(bus, kind, length, maximum, finish, block_check=None):
             done += n
         check(not pending, pending)
 
-    if kind == 'tx' and not copied:
+    if kind == 'tx' and not copied and bus == 1:
         r = call_break(kind, (bus, length), 'nRFxSPIAsyncTxWait', run_blocks)
         check(call('events', 0) == 1, 'long transmit returned before its end', bus, length)
     else:
@@ -331,14 +339,10 @@ def twim_block(i, last):
     else:
         check(shorts[0] == SH_RX_STOP, 'i2c rx shorts', hex(shorts[0]))
 
-for operation in ('tx', 'write_data', 'read_command'):
-    twim_reset()
-    r = call(operation, 0, min(TWIM_MAX, TXBUF_SIZE[0]) + 1)
-    check(r == 0 and not pending and not actions and not shorts, 'oversized TWIM command', operation)
-    check(call('busy', 0) == 0 and call('events', 0) == 0, 'rejected TWIM transfer still busy', operation)
-
+# A transmit has no size limit: it is sent from the caller's buffer, one DMA
+# block after the other.
 for kind, length in [('tx', 4), ('rx', 20), ('rx', TWIM_MAX + 7),
-                     ('tx', min(TWIM_MAX, TXBUF_SIZE[0]))]:
+                     ('tx', TWIM_MAX), ('tx', TWIM_MAX + 5)]:
     twim_reset()
     r = transfer(0, kind, length, TWIM_MAX, twim_finish, twim_block)
     check(r == -1, 'i2c', kind, length, 'returns', r)
@@ -368,6 +372,24 @@ twim_finish()
 check(actions == [] and call('busy', 0) == 0, 'receive end', actions)
 check(call('events', 0) == 1 and call('events', 1) == 8 and call('events', 3) == BUF, 'read completion')
 
+# Combined write: DeviceIntrfWrite() joins command and data on its stack and
+# waits for the end of the transmit, the driver sends from that buffer.
+twim_reset()
+def i2c_write_done():
+    check(len(pending) == 1 and pending[0][0] == 'tx' and pending[0][2] == 6, pending)
+    check(pending[0][1] != BUF, 'combined write not sent from the buffer of DeviceIntrfWrite')
+    # DeviceIntrfWrite() is suspended with its buffer on the stack: the
+    # calls made from here use another stack area.
+    check(call('tx_ready', 0, sp=0x200F0000) == 0, 'combined write ended early')
+    check(bytes(u.mem_read(pending[0][1], 6)) == bytes(u.mem_read(BUF, 1)) + bytes(u.mem_read(BUF + 1, 5)),
+          'combined write data')
+    twim_finish()
+    check(call('tx_ready', 0, sp=0x200F0000) == 1, 'combined write not flagged ready')
+r = call_break('write_data', (0, 6), 'DeviceIntrfWaitTxComplete', i2c_write_done)
+check(r == 0, 'combined write returns', r)
+check(call('events', 0) == 1 and call('events', 1) == 6 and call('busy', 0) == 0, 'combined write completion',
+      call('events', 0), call('events', 1))
+
 # Register read longer than one DMA block
 twim_reset()
 r = call_break('read_reg', (0, TWIM_MAX + 3), 'DeviceIntrfWaitTxComplete', lambda: twim_finish())
@@ -390,7 +412,7 @@ for kind in ('tx', 'rx'):
           call('busy', 0), call('events', 0), call('events', 1))
     check(actions == ['stop'], 'second STOP task', actions)
     # The bus can be used again
-    check(call('tx', 0, 2) == -1 and pending == [('tx', TXBUF[0], 2)], 'transfer after an error', pending)
+    check(call('tx', 0, 2) == -1 and pending == [('tx', BUF, 2)], 'transfer after an error', pending)
     twim_finish()
     check(call('events', 0) == 2 and call('busy', 0) == 0, 'transfer after an error ended')
 
@@ -425,17 +447,10 @@ if T[0]:
         isr(0)
         check(get(base + T[index]) == 0, 'TWI event not cleared', index)
 
-    for operation in ('tx', 'write_data', 'read_command'):
-        twi_init()
-        r = call(operation, 0, TXBUF_SIZE[0] + 1)
-        check(r == 0 and not actions and not sent, 'oversized TWI command', operation)
-        check(call('busy', 0) == 0 and call('events', 0) == 0, 'rejected TWI transfer still busy', operation)
-
     for length in (1, 3):
         twi_init()
         u.mem_write(BUF, bytes(range(0x10, 0x10 + length)))
         check(call('tx', 0, length) == -1, 'twi tx')
-        u.mem_write(BUF, b'\x55' * length)  # caller buffer gone
         check(actions == ['starttx'] and sent == [0x10], 'twi tx start', actions, sent)
         for i in range(length):
             check(call('events', 0) == 0 and call('busy', 0) == 1, 'twi tx early end')

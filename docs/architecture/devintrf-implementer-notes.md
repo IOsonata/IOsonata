@@ -162,7 +162,7 @@ as they are done.
 
 | Family | I2C master | SPI master |
 |---|---|---|
-| Nordic | `i2c_nrfx.cpp`: 64 byte copy, transfer state flags | `spi_nrfx.cpp`: 256 byte copy, wait and abort flags |
+| Nordic | `i2c_nrfx.cpp`: copy removed; transfer state flags remain | `spi_nrfx.cpp`: 256 byte copy, wait and abort flags |
 | ST | `i2c_stm32v2.cpp`: 64 byte copy, state flags | `spi_stm32.cpp`: 256 byte copy, state flags |
 | Microchip SAM4L | `i2c_sam4l.cpp`: 256 byte copy per bus, state enum | `spi_sam4l.cpp`: 256 byte copy, state flag |
 | Microchip SAM D | `i2c_samd.cpp`: shared copy, state enum | `spi_samd.cpp`: shared copy |

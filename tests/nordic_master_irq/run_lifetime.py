@@ -31,7 +31,7 @@ i2c = (root / 'ARM/Nordic/src/i2c_nrfx.cpp').read_text()
 spi = (root / 'ARM/Nordic/src/spi_nrfx.cpp').read_text()
 parts = []
 for text, names in [(i2c, [
-    'nRFxI2CAsyncTxBuff', 'nRFxI2CStartRx', 'nRFxI2CDmaNextBlock',
+    'nRFxI2CStartRx', 'nRFxI2CDmaNextBlock',
     'nRFxI2CRxDataDMA', 'nRFxI2CRxData', 'nRFxI2CStopRx', 'nRFxI2CStartTx',
     'nRFxI2CTxDataDMA', 'nRFxI2CTxData', 'nRFxI2CStopTx', 'nRFxI2CAsyncEnd',
     'nRFxI2CTwimIrq', 'nRFxI2CTwiIrq']), (spi, [
@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory() as directory:
             command = [args.cxx, '-std=gnu++17', opt, '-g', '-fpermissive',
                        '-fno-pie', '-no-pie', '-fsanitize=address,undefined',
                        '-fno-omit-frame-pointer', f'-DTEST_DMA_MAX={maximum}',
-                       f'-DNRFX_I2C_TXBUF_SIZE={capacity}', '-I' + str(tmp),
+                       '-I' + str(tmp),
                        '-I' + str(root / 'include'),
                        str(root / 'tests/nordic_master_irq/lifetime_test.cpp'),
                        str(root / 'src/device_intrf.cpp'), '-o', str(binary)]

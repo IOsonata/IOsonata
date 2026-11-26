@@ -52,11 +52,13 @@ def main():
     assert "pDev->Cfg.Mode != I2CMODE_MASTER" in prep
     assert "pDev->Cfg.AddrType != I2CADDR_TYPE_NORMAL" in prep
     assert "pDev->Cfg.bIntEn" in prep
-    assert "TxLen > NRFX_I2C_TXBUF_SIZE" in prep
+    assert "TxLen > NRFX_I2C_DMA_MAXCNT" in prep
+    # TX is sent from the caller's buffer, the driver has no copy of it
+    assert "TxBuf" not in prep and "memcpy" not in prep
+    assert "(uint32_t)(uintptr_t)pTx" in prep
     assert "RxLen > NRFX_I2C_DMA_MAXCNT" in prep
     assert "((TxLen == 0U) == (RxLen == 0U))" in prep
     assert "atomic_flag_test_and_set(&pDev->DevIntrf.bBusy)" in prep
-    assert "memcpy(dev->TxBuf, pTx, TxLen);" in prep
     assert "dev->pDmaReg->TXD.PTR =" in prep
     assert "dev->pDmaReg->RXD.PTR =" in prep
     assert "TWIM_SHORTS_LASTTX_STOP_Msk" in prep

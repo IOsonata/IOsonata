@@ -204,9 +204,8 @@ TWIS event registers as PEI sources. TWIM STARTTX, STARTRX,
 STOP, SUSPEND and RESUME task destinations require a single
 prepared transaction. Initialize a 7-bit, noninterrupt EasyDMA
 master and call I2CPreparePeiTransfer() with exactly one
-nonempty TX or RX block. TX is copied into the existing private
-64-byte driver buffer; caller-owned RX memory must stay valid
-through STOPPED and release. The generic I2C busy flag is held
+nonempty TX or RX block. The caller-owned TX or RX memory must stay
+valid through STOPPED and release. The generic I2C busy flag is held
 while the PEI transaction is prepared. Connect an ERROR->STOP
 route for error recovery; the last-byte STOP shortcut handles
 successful transfer completion.

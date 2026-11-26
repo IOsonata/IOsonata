@@ -38,7 +38,8 @@ static const I2CCfg_t s_I2cCfg = {
 	.EvtCB = nullptr
 };
 
-static const uint8_t s_TestData[] = { 0xA5 };
+// In RAM: the prepared transfer sends from this buffer by EasyDMA
+static uint8_t s_TestData[] = { 0xA5 };
 
 static_assert(sizeof(s_Leds) / sizeof(s_Leds[0]) >= 4,
 	"PeiTwiDemo requires separate LED1 and RGB blue");

@@ -12,10 +12,10 @@ releases it and reports DEVINTRF_EVT_COMPLETED with the number of bytes moved
 (the receive buffer for a receive). A transmit that keeps the bus for a
 following receive (bNoStop) leaves it suspended and only sets bTxReady. A bus
 error stops the transfer, the completion then reports the bytes moved so far.
-Interrupt driven transmit is sent from a copy and must fit
-NRFX_I2C_TXBUF_SIZE, and one DMA block when EasyDMA is enabled. Larger
-transmits return 0 without starting the bus. DeviceIntrfWrite includes the
-command bytes in this limit. Polling transmit keeps its existing limits.
+Interrupt driven transfers use the caller's buffer, which must stay valid
+until the completion. The driver keeps the pointer and the remaining count
+and continues from them at each interrupt, of any length. DeviceIntrfWrite
+waits for the end of the transmit of its own combined buffer.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2016
@@ -115,15 +115,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NRFX_I2C_TRBUFF_SIZE	4
 
-// Interrupt driven transmit of up to this size is sent from a copy, so that
-// the caller's buffer, such as the one DeviceIntrfWrite() builds on its
-// stack, may be gone before the transfer ends. Larger interrupt driven
-// transmits are refused before starting the bus. With EasyDMA the transfer
-// must also fit NRFX_I2C_DMA_MAXCNT, so it needs no extra address phase.
-#ifndef NRFX_I2C_TXBUF_SIZE
-#define NRFX_I2C_TXBUF_SIZE			64
-#endif
-
 // Default fifo size if one is not provided in the config.
 #define NRFX_I2C_BUFF_SIZE			8
 
@@ -153,9 +144,7 @@ typedef struct {
 	volatile int Async;		// Interrupt driven master transfer, NRFX_I2C_ASYNC_xxx
 	volatile bool bAsyncErr;// The transfer met a bus error
 	volatile bool bStopped;	// The interrupt handler has already stopped the bus
-	bool bTxRejected;		// Refused command, do not start its receive phase
 	bool bPeiPrepared;		// TWIM DMA and bBusy reserved for hardware PEI
-	alignas(4) uint8_t TxBuf[NRFX_I2C_TXBUF_SIZE];	// Copy of an interrupt driven transmit
 } nRFTwiDev_t;
 
 #define NRFX_I2C_ASYNC_IDLE		0
@@ -233,14 +222,6 @@ static uint32_t nRFxI2CDmaTimeout(int Length, uint32_t Rate)
 {
 	uint64_t cycles = (uint64_t)SystemCoreClock * Length * 10 / Rate + I2C_TIMEOUT_CNT;
 	return cycles > INT32_MAX ? INT32_MAX : (uint32_t)cycles;
-}
-
-// The caller has checked that the complete transmit fits in TxBuf.
-static const uint8_t *nRFxI2CAsyncTxBuff(nRFTwiDev_t * const pDev, const uint8_t *pData, int DataLen)
-{
-	memcpy(pDev->TxBuf, pData, DataLen);
-
-	return pDev->TxBuf;
 }
 
 bool nRFxI2CWaitStop(nRFTwiDev_t * const pDev, int Timeout)
@@ -507,7 +488,7 @@ bool nRFxI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
-	if (dev->bTxRejected || dev->bPeiPrepared)
+	if (dev->bPeiPrepared)
 	{
 		return false;
 	}
@@ -577,7 +558,7 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		return 0;
 	}
 
-	if (pBuff == nullptr || dev->bTxRejected)
+	if (pBuff == nullptr)
 	{
 		return 0;
 	}
@@ -650,7 +631,7 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 		return 0;
 	}
 
-	if (pBuff == NULL || Bufflen <= 0 || dev->bTxRejected)
+	if (pBuff == NULL || Bufflen <= 0)
 	{
 		return 0;
 	}
@@ -715,12 +696,6 @@ void nRFxI2CStopRx(DevIntrf_t * const pDev)
 {
     nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
-	if (dev->bTxRejected)
-	{
-		dev->bTxRejected = false;
-		return;
-	}
-
 	if (dev->bStopped)
 	{
 		// The interrupt handler ended the transfer with STOP
@@ -752,8 +727,6 @@ bool nRFxI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	{
 		return false;
 	}
-	dev->bTxRejected = false;
-
 #ifdef TWI_PRESENT
 	dev->pReg->ADDRESS = DevAddr;
 	NRF_TWI_Type *reg = dev->pReg;
@@ -792,18 +765,12 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		{
 			return 0;
 		}
-		if (DataLen > NRFX_I2C_TXBUF_SIZE || DataLen > NRFX_I2C_DMA_MAXCNT)
-		{
-			dev->bTxRejected = true;
-			return 0;
-		}
-
 		// The interrupt handler moves through the DMA blocks. At the end it
 		// sets bTxReady, then stops the bus and reports
 		// DEVINTRF_EVT_COMPLETED, or keeps the bus suspended when bNoStop is
 		// set, which is what DeviceIntrfRead() waits for before the receive.
 		pDev->bTxReady = false;
-		dev->pTxData = nRFxI2CAsyncTxBuff(dev, pData, DataLen);
+		dev->pTxData = pData;
 		dev->TxIdx = 0;
 		dev->TxDatalen = DataLen;
 		dev->RxBufflen = 0;
@@ -874,17 +841,11 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 #ifdef TWI_PRESENT
 	if (pDev->bIntEn == true)
 	{
-		if (Datalen > NRFX_I2C_TXBUF_SIZE)
-		{
-			dev->bTxRejected = true;
-			return 0;
-		}
-
 		// The interrupt handler writes each byte. At the end it sets
 		// bTxReady, then stops the bus and reports DEVINTRF_EVT_COMPLETED on
 		// STOPPED, or keeps the bus when bNoStop is set.
 		pDev->bTxReady = false;
-		dev->pTxData = nRFxI2CAsyncTxBuff(dev, pData, Datalen);
+		dev->pTxData = pData;
 		dev->TxIdx = 0;
 		dev->TxDatalen = Datalen;
 		dev->RxBufflen = 0;
@@ -936,12 +897,6 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 void nRFxI2CStopTx(DevIntrf_t * const pDev)
 {
     nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
-
-	if (dev->bTxRejected)
-	{
-		dev->bTxRejected = false;
-		return;
-	}
 
 	if (dev->bStopped)
 	{
@@ -1422,7 +1377,6 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	s_nRFxI2CDev[pCfgData->DevNo].Async = NRFX_I2C_ASYNC_IDLE;
 	s_nRFxI2CDev[pCfgData->DevNo].bAsyncErr = false;
 	s_nRFxI2CDev[pCfgData->DevNo].bStopped = false;
-	s_nRFxI2CDev[pCfgData->DevNo].bTxRejected = false;
 	s_nRFxI2CDev[pCfgData->DevNo].bPeiPrepared = false;
 	//s_nRFxI2CDev[pCfgData->DevNo].bTxReady = true;
 	pDev->DevIntrf.EnCnt = 1;
@@ -1883,9 +1837,9 @@ static bool I2CPeiReady(I2CDev_t *pDev)
 }
 
 // TWIM STARTTX and STARTRX are hardware task destinations only after a
-// complete single-block transaction has been prepared. The existing
-// driver's private TxBuf owns TX DMA RAM, and the application owns RX
-// DMA RAM until the PEI transfer has stopped and been released.
+// complete single-block transaction has been prepared. The application
+// owns the TX and the RX DMA RAM until the PEI transfer has stopped and
+// been released. EasyDMA reads the TX data from RAM only.
 bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
 {
@@ -1896,7 +1850,6 @@ bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 		!pDev->DevIntrf.bDma || pDev->Cfg.AddrType != I2CADDR_TYPE_NORMAL ||
 		pDev->Cfg.bIntEn || DevAddr == 0U || DevAddr > 0x7FU ||
 		pDev->DevIntrf.bNoStop || !pDev->DevIntrf.bTxReady ||
-		TxLen > NRFX_I2C_TXBUF_SIZE ||
 		TxLen > NRFX_I2C_DMA_MAXCNT || RxLen > NRFX_I2C_DMA_MAXCNT ||
 		((TxLen == 0U) == (RxLen == 0U)) ||
 		(TxLen != 0U && pTx == NULL) ||
@@ -1905,7 +1858,7 @@ bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 		return false;
 	}
 	dev = I2CPeiDevice(pDev);
-	if (dev == NULL || dev->bPeiPrepared || dev->bTxRejected ||
+	if (dev == NULL || dev->bPeiPrepared ||
 		dev->Async != NRFX_I2C_ASYNC_IDLE)
 	{
 		return false;
@@ -1915,19 +1868,15 @@ bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 		return false;
 	}
 	// Check transfer state after acquiring the bus lock.
-	if (dev->bPeiPrepared || dev->bTxRejected ||
+	if (dev->bPeiPrepared ||
 		dev->Async != NRFX_I2C_ASYNC_IDLE)
 	{
 		atomic_flag_clear(&pDev->DevIntrf.bBusy);
 		return false;
 	}
-	if (TxLen > 0U)
-	{
-		memcpy(dev->TxBuf, pTx, TxLen);
-	}
 	dev->pDmaReg->ADDRESS = DevAddr;
 	dev->pDmaReg->TXD.PTR = TxLen != 0U ?
-		(uint32_t)(uintptr_t)dev->TxBuf : 0U;
+		(uint32_t)(uintptr_t)pTx : 0U;
 	dev->pDmaReg->TXD.MAXCNT = TxLen;
 	dev->pDmaReg->RXD.PTR = RxLen != 0U ?
 		(uint32_t)(uintptr_t)pRx : 0U;
