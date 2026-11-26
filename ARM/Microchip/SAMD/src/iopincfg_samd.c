@@ -80,8 +80,8 @@ typedef struct {
 typedef struct {
 	IOPinEvtHandler_t Handler;
 	void *pCtx;
-	int8_t PortNo;			//!< -1 line not used
-	int8_t PinNo;
+	uint8_t Port1;			//!< Port number + 1, 0 line not used
+	uint8_t PinNo;
 } SamdPinInt_t;
 
 #pragma pack(pop)
@@ -129,9 +129,8 @@ static volatile bool s_bSamdNmiPending;
 #define SAMD_EIC_LINES		EIC_EXTINT_NUM
 #endif
 
-static SamdPinInt_t s_SamdPinInt[SAMD_EIC_LINES] = {
-	[0 ... SAMD_EIC_LINES - 1] = { NULL, NULL, -1, -1 }
-};
+// Zero initialized: it takes no flash
+static SamdPinInt_t s_SamdPinInt[SAMD_EIC_LINES];
 
 // Lines with the event output on, for the event system
 static uint32_t s_SamdEicEvent;
@@ -461,7 +460,7 @@ void IOPinDisableInterrupt(int IntNo)
 #if defined(__SAMD11D14AM__)
 	if (IntNo == SAMD_EIC_NMI_LINE)
 	{
-		if (s_SamdPinInt[IntNo].PortNo >= 0)
+		if (s_SamdPinInt[IntNo].Port1 != 0U)
 		{
 			res = SamdEicNmiSense(IOPINSENSE_DISABLE);
 		}
@@ -473,7 +472,7 @@ void IOPinDisableInterrupt(int IntNo)
 		EIC_REGS->EIC_INTENCLR = 1UL << IntNo;
 		EIC_REGS->EIC_INTFLAG = 1UL << IntNo;
 
-		if (s_SamdPinInt[IntNo].PortNo >= 0)
+		if (s_SamdPinInt[IntNo].Port1 != 0U)
 		{
 			res = SamdEicSense(IntNo, IOPINSENSE_DISABLE, false);
 		}
@@ -481,17 +480,17 @@ void IOPinDisableInterrupt(int IntNo)
 
 	if (res)
 	{
-		if (s_SamdPinInt[IntNo].PortNo >= 0)
+		if (s_SamdPinInt[IntNo].Port1 != 0U)
 		{
 			// Pin back to GPIO
-			PORT_REGS->GROUP[s_SamdPinInt[IntNo].PortNo].PORT_PINCFG[s_SamdPinInt[IntNo].PinNo] &=
+			PORT_REGS->GROUP[s_SamdPinInt[IntNo].Port1 - 1U].PORT_PINCFG[s_SamdPinInt[IntNo].PinNo] &=
 				(uint8_t)~PORT_PINCFG_PMUXEN_Msk;
 		}
 
 		s_SamdPinInt[IntNo].Handler = NULL;
 		s_SamdPinInt[IntNo].pCtx = NULL;
-		s_SamdPinInt[IntNo].PortNo = -1;
-		s_SamdPinInt[IntNo].PinNo = -1;
+		s_SamdPinInt[IntNo].Port1 = 0U;
+		s_SamdPinInt[IntNo].PinNo = 0U;
 
 		if (EIC_REGS->EIC_INTENSET == 0U &&
 			(EIC_REGS->EIC_NMICTRL & EIC_NMICTRL_NMISENSE_Msk) == EIC_NMICTRL_NMISENSE_NONE)
@@ -523,8 +522,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	state = DisableInterrupt();
 
 	// The line may be in use by another pin or by the event system
-	if ((s_SamdPinInt[IntNo].PortNo >= 0 &&
-		 (s_SamdPinInt[IntNo].PortNo != (int)PortNo || s_SamdPinInt[IntNo].PinNo != (int)PinNo)) ||
+	if ((s_SamdPinInt[IntNo].Port1 != 0U &&
+		 (s_SamdPinInt[IntNo].Port1 != PortNo + 1U || s_SamdPinInt[IntNo].PinNo != PinNo)) ||
 		(IntNo < EIC_EXTINT_NUM && (s_SamdEicEvent & (1UL << IntNo)) != 0U))
 	{
 		EnableInterrupt(state);
@@ -537,8 +536,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	{
 		s_SamdPinInt[IntNo].Handler = pEvtCB;
 		s_SamdPinInt[IntNo].pCtx = pCtx;
-		s_SamdPinInt[IntNo].PortNo = (int8_t)PortNo;
-		s_SamdPinInt[IntNo].PinNo = (int8_t)PinNo;
+		s_SamdPinInt[IntNo].Port1 = (uint8_t)(PortNo + 1U);
+		s_SamdPinInt[IntNo].PinNo = (uint8_t)PinNo;
 
 #if defined(__SAMD11D14AM__)
 		if (IntNo == SAMD_EIC_NMI_LINE)
@@ -575,8 +574,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	{
 		s_SamdPinInt[IntNo].Handler = NULL;
 		s_SamdPinInt[IntNo].pCtx = NULL;
-		s_SamdPinInt[IntNo].PortNo = -1;
-		s_SamdPinInt[IntNo].PinNo = -1;
+		s_SamdPinInt[IntNo].Port1 = 0U;
+		s_SamdPinInt[IntNo].PinNo = 0U;
 		(void)SamdEicStopIdle();
 	}
 
@@ -591,7 +590,7 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
 	// The line is fixed by the pin
 	int intno = SamdExtIntFind(PortNo, PinNo);
 
-	if (intno < 0 || s_SamdPinInt[intno].PortNo >= 0)
+	if (intno < 0 || s_SamdPinInt[intno].Port1 != 0U)
 	{
 		return -1;
 	}
@@ -650,7 +649,7 @@ bool SamdEicEvent(int ExtInt, IOPINSENSE Sense)
 	state = DisableInterrupt();
 
 	// Not on a line with a pin interrupt
-	res = s_SamdPinInt[ExtInt].PortNo < 0 && SamdEicStart() &&
+	res = s_SamdPinInt[ExtInt].Port1 == 0U && SamdEicStart() &&
 		  SamdEicSense(ExtInt, Sense, Sense != IOPINSENSE_DISABLE);
 	if (res && Sense != IOPINSENSE_DISABLE)
 	{
