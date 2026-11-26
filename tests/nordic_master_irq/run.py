@@ -193,49 +193,25 @@ def spi_finish():
 def check(cond, *info):
     assert cond, info
 
-TXBUF_SIZE = [get(symbols['txbuf_size'] + i * 4) for i in range(2)]
-TXBUF = [call('txbuf_address', bus, 0) for bus in range(2)]
-
 def transfer(bus, kind, length, maximum, finish, block_check=None):
     """Run one interrupt transfer and its DMA blocks, return what TxData returned.
 
-    An SPI transmit that fits the driver copy is checked to be sent from the
-    copy: the caller's buffer is overwritten as soon as the call returns. A
-    longer SPI transmit waits in the driver, its blocks are completed from
-    that wait. An I2C transmit is sent from the caller's buffer."""
+    The driver has no copy of the data: every block is checked to use the
+    caller's buffer, at the offset reached so far."""
     pattern = bytes((0x30 + i) & 0xFF for i in range(length))
     u.mem_write(BUF, pattern)
-    copied = kind == 'tx' and length <= TXBUF_SIZE[bus]
-    src = TXBUF[bus] if copied else BUF
-    staged = bus == 1 and kind == 'tx'
-    if staged:
-        maximum = min(maximum, TXBUF_SIZE[bus])
     blocks = sequence(kind, length, maximum)
-
-    def run_blocks():
-        done = 0
-        for i, n in enumerate(blocks):
-            ptr = TXBUF[bus] if staged else src + done
-            check(len(pending) == 1 and pending[0] == (kind, ptr, n), bus, kind, length,
-                  pending, (ptr, n))
-            if staged:
-                check(bytes(u.mem_read(ptr, n)) == pattern[done:done + n], 'staged TX data', done, n)
-            if block_check:
-                block_check(i, i == len(blocks) - 1)
-            check(call('busy', bus) == 1 and call('events', 0) == 0, 'released early', bus, kind, length, i)
-            finish()
-            done += n
-        check(not pending, pending)
-
-    if kind == 'tx' and not copied and bus == 1:
-        r = call_break(kind, (bus, length), 'nRFxSPIAsyncTxWait', run_blocks)
-        check(call('events', 0) == 1, 'long transmit returned before its end', bus, length)
-    else:
-        r = call(kind, bus, length)
-        if copied:
-            u.mem_write(BUF, b'\x55' * len(pattern))
-            check(bytes(u.mem_read(src, len(pattern))) == pattern, 'transmit not sent from a copy', bus, length)
-        run_blocks()
+    r = call(kind, bus, length)
+    done = 0
+    for i, n in enumerate(blocks):
+        check(len(pending) == 1 and pending[0] == (kind, BUF + done, n), bus, kind, length,
+              pending, (BUF + done, n))
+        if block_check:
+            block_check(i, i == len(blocks) - 1)
+        check(call('busy', bus) == 1 and call('events', 0) == 0, 'released early', bus, kind, length, i)
+        finish()
+        done += n
+    check(not pending, pending)
     return r
 
 def sequence(kind, total, maximum=None):
@@ -250,7 +226,7 @@ def sequence(kind, total, maximum=None):
 check(call('init', 1, 0, 1, 1) == 1, 'spi init')
 active = 1
 for kind, length in [('tx', 10), ('rx', 20), ('tx', min(2 * DMA_MAX + 5, 66000)), ('rx', DMA_MAX + 7), ('tx', DMA_MAX),
-                     ('tx', TXBUF_SIZE[1]), ('tx', TXBUF_SIZE[1] + 1)]:
+                     ('tx', 257)]:
     pending.clear()
     call('init', 1, 0, 1, 1)
     r = transfer(1, kind, length, DMA_MAX, spi_finish)
@@ -550,7 +526,6 @@ if S[0]:
         spi_legacy_init()
         u.mem_write(BUF, bytes(range(0x10, 0x10 + length)))
         check(call('tx', 1, length) == -1, 'spi tx')
-        u.mem_write(BUF, b'\x55' * length)  # caller buffer gone
         for i in range(length):
             check(sent == list(range(0x10, 0x11 + i)), 'spi tx bytes', sent)
             check(call('events', 0) == 0 and call('busy', 1) == 1, 'spi tx early end')

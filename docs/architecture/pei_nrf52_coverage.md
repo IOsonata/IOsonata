@@ -323,8 +323,8 @@ SPIS ACQUIRE/RELEASE tasks are not connected through PEI: the
 existing slave ISR owns the semaphore and DMA pointer updates.
 
 SPIM START, STOP, SUSPEND and RESUME may be connected after
-SPIPreparePeiTransfer() arms one block with the existing private TX
-buffer (max 256 bytes) and optionally caller-owned RX RAM. The
+SPIPreparePeiTransfer() arms one block with caller-owned TX and
+optionally RX RAM, each within the EasyDMA MAXCNT. The
 configured SPI must be MASTER, 8-bit, noninterrupt EasyDMA and
 manual-CS; the caller owns chip select, RX lifetime and PPI teardown.
 nRF52832 one-byte RX anomaly 58 is rejected where the driver's CPU

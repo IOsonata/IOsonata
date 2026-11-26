@@ -97,7 +97,12 @@ static void Complete()
 	}
 	else if (s_CameraMode && r.TXD.MAXCNT)
 	{
-		s_CameraReg = *(uint8_t *)(uintptr_t)r.TXD.PTR;
+		// TXD.PTR holds 32 bits. An interrupt driven transmit uses the
+		// caller's buffer, which can be on the 64 bit host stack: take the
+		// byte through the driver's own pointer.
+		const nRFSpiDev_t &d = g_nRFxSPIDev[4];
+		s_CameraReg = d.TxDatalen > 0 ? d.pTxData[d.TxIdx] :
+			*(uint8_t *)(uintptr_t)r.TXD.PTR;
 	}
 	r.EVENTS_ENDRX = r.EVENTS_ENDTX = r.EVENTS_END = 1;
 }
@@ -177,12 +182,11 @@ int main()
 	for (unsigned i = 0; i < sizeof(s_Tx); ++i)
 		s_Tx[i] = i;
 
-	// Async TX owns a copy and completes through the actual dedicated vector.
+	// Async TX is sent from the caller's buffer and completes through the
+	// actual dedicated vector.
 	assert(s_Spi.Tx(0, s_Tx, 64) == -1);
 	assert(!g_CsHigh && g_Regs[4].TXD.MAXCNT == 64);
-	assert(memcmp((void *)(uintptr_t)g_Regs[4].TXD.PTR, s_Tx, 64) == 0);
-	memset(s_Tx, 0xff, 64);
-	assert(*(uint8_t *)(uintptr_t)g_Regs[4].TXD.PTR == 0);
+	assert(g_Regs[4].TXD.PTR == (uintptr_t)s_Tx);
 	Complete(); SPIM4_IRQHandler();
 	assert(s_Events == 1 && s_Count == 64 && s_Event == DEVINTRF_EVT_COMPLETED);
 	SPIM4_IRQHandler(); assert(s_Events == 1);
@@ -214,21 +218,15 @@ int main()
 	assert(s_Events == events + 1 && s_Count == sizeof(s_Tx));
 	s_AutoIrq = false;
 
-	// Long async TX cancellation never retains the caller's pointer.
+	// Long async TX is sent from the caller's buffer, block after block.
+	events = s_Events;
 	assert(s_Spi.Tx(0, s_Tx, sizeof(s_Tx)) == -1);
-	assert(g_nRFxSPIDev[4].bTxAbort && g_nRFxSPIDev[4].pTxData == nullptr);
-	SPIM4_IRQHandler();
-	assert(s_Event == DEVINTRF_EVT_TX_TIMEOUT && !g_nRFxSPIDev[4].bTxAbort);
-
-	// A short command that never completes must not start the read phase.
-	cfg = Config(true);
-	cfg.EvtCB = nullptr;
-	assert(s_Spi.Init(cfg));
-	s_Blocks = 0;
-	assert(s_Spi.Read(0, s_Tx, 2, s_Rx, 16) == -1);
-	assert(s_Blocks == 1 && g_nRFxSPIDev[4].bTxAbort);
-	SPIM4_IRQHandler();
-	assert(g_CsHigh && !g_nRFxSPIDev[4].bTxAbort);
+	assert(g_Regs[4].TXD.PTR == (uintptr_t)s_Tx && s_Events == events);
+	while (s_Events == events)
+	{
+		Complete(); SPIM4_IRQHandler();
+	}
+	assert(s_Count == sizeof(s_Tx) && g_CsHigh);
 
 	cfg = Config(false); assert(s_Spi.Init(cfg)); s_Poll = true;
 	s_Blocks = 0;

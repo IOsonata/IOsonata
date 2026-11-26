@@ -10,8 +10,8 @@ completion events and runs the shared interrupt handler.
 Checks cover:
 
 - SPI TX and RX return -1 and keep the bus until the last DMA block;
-- SPI TX blocks use the driver's copy buffer with CS kept asserted between
-  blocks; RX blocks advance through the caller's receive buffer;
+- SPI TX and RX blocks advance through the caller's buffer with CS kept
+  asserted between blocks;
 - one `DEVINTRF_EVT_COMPLETED` with the byte count, `bTxReady` after a TX;
 - SPI command then read: the command phase keeps the bus and reports no
   completion;
@@ -62,15 +62,11 @@ longer than one hardware DMA block continues with the next block, as the
 polling transmit does: the TWIM starts each block with a START and the
 address.
 
-Nordic SPI TX uses `NRFX_SPI_TXBUF_SIZE` (256 bytes by default). A transfer
-that fits returns after copying. A longer transfer waits for completion while
-each DMA block is copied into that same owned storage; CS stays asserted.
-If the wait expires, the driver detaches the caller's buffer and requests STOP.
-It keeps the interface and staging buffer reserved until STOPPED confirms the
-DMA ended, then reports `DEVINTRF_EVT_TX_TIMEOUT`. Without EasyDMA, READY ends
-the byte already in flight. If that final event never arrives, the interface
-stays busy and reinitialization is refused. A failed read command cannot start
-its receive phase. No bounded hardware reset is assumed.
+Nordic SPI TX is sent from the caller's buffer in the same way, one DMA block
+after the other with CS kept asserted. The command phase of a register read
+keeps the bus and sets `bTxReady`; `DeviceIntrfRead()` waits for it. The
+driver has no transmit timeout of its own: an SPI master clocks the transfer
+itself.
 
 ## Host lifetime and timeout checks
 

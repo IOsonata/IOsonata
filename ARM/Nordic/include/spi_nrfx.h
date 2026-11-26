@@ -66,12 +66,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NRFX_SPI_DMA_MAXCNT ((1 << SPIS0_EASYDMA_MAXCNT_SIZE) - 1)
 #endif
 
-// Interrupt driven transmit of up to this size is sent from a copy, so that
-// the caller's buffer, such as the one DeviceIntrfWrite() builds on its
-// stack, may be gone before the transfer ends. A longer transmit waits for
-// completion or cancellation; each DMA block is staged in the same buffer.
+#ifdef NRF5340_XXAA_APPLICATION
+// The nRF5340 application core has no SPI without EasyDMA. Its polling
+// transmit goes through this RAM block by block, so that data in flash can
+// be sent.
 #ifndef NRFX_SPI_TXBUF_SIZE
 #define NRFX_SPI_TXBUF_SIZE		256
+#endif
 #endif
 
 #ifdef __cplusplus
@@ -109,11 +110,10 @@ typedef struct {
 	int TxDatalen;
 	int TxIdx;
 	const uint8_t *pTxData;
-	volatile bool *pTxWait;	// Completion of a transmit using the caller's buffer
-	volatile bool bTxAbort;	// Timed out, waiting for STOPPED or READY
-	bool bCmdFailed;		// Cancelled command, do not start its receive phase
 	bool bPeiPrepared;	// PPI-started SPIM owns the existing DMA buffers
-	alignas(4) uint8_t TxBuf[NRFX_SPI_TXBUF_SIZE];	// Copy of an interrupt driven transmit
+#ifdef NRF5340_XXAA_APPLICATION
+	alignas(4) uint8_t TxBuf[NRFX_SPI_TXBUF_SIZE];	// Polling transmit staging
+#endif
 } nRFSpiDev_t;
 
 typedef struct {

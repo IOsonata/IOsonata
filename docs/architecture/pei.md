@@ -416,8 +416,8 @@ driver-owned DMA transaction. SPIS ACQUIRE/RELEASE remain with the
 slave interrupt handler, which owns its semaphore and buffers.
 
 SPIM preparation requires an 8-bit master with manual CS,
-noninterrupt EasyDMA, a stable caller-owned RX buffer if used,
-and a single TX block copied into the existing private TX buffer.
+noninterrupt EasyDMA, and stable caller-owned TX and RX buffers
+in RAM for a single block.
 Disconnect PPI routes before SPIReleasePeiTransfer(). The nRF52832
 PeiSpiDemo exercises BUT1 -> SPIM2 START, END -> STOP and LED1,
 STOPPED -> RGB blue, without any slave peripheral. Target compilation

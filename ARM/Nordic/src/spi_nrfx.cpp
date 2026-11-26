@@ -18,12 +18,10 @@ buffer for a receive). A transmit that keeps the bus for a following receive
 Master without EasyDMA and bIntEn : the interrupt handler moves one byte per
 READY event and ends the transfer the same way.
 
-A transmit of up to NRFX_SPI_TXBUF_SIZE bytes is sent from a copy, so the
-caller's buffer may be released as soon as TxData returns. A longer transmit
-waits for completion or cancellation before TxData returns. Each DMA block
-uses the same owned buffer. If the wait expires, no more caller bytes are read.
-The transfer ends with DEVINTRF_EVT_TX_TIMEOUT after STOPPED (READY without EasyDMA).
-Until that event the interface and its copy buffer remain busy.
+Interrupt driven transfers use the caller's buffer, which must stay valid
+until the completion. The driver keeps the pointer and the remaining count
+and continues from them at each interrupt, of any length. DeviceIntrfWrite
+waits for the end of the transmit of its own combined buffer.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2016
@@ -211,59 +209,6 @@ static uint32_t nRFxSPIDmaTimeout(int Length, uint32_t Rate)
 	return cycles > INT32_MAX ? INT32_MAX : (uint32_t)cycles;
 }
 
-// Start an interrupt driven transmit. Up to NRFX_SPI_TXBUF_SIZE bytes are
-// sent from a copy and the call returns at once. A longer transmit keeps its
-// source until completion or cancellation; every DMA block uses TxBuf.
-static const uint8_t *nRFxSPIAsyncTxBuff(nRFSpiDev_t * const pDev, const uint8_t *pData, int DataLen)
-{
-	if (DataLen <= NRFX_SPI_TXBUF_SIZE)
-	{
-		memcpy(pDev->TxBuf, pData, DataLen);
-
-		return pDev->TxBuf;
-	}
-
-	return pData;
-}
-
-// A command retaining CS must finish or enter cancellation before Read can
-// start RX, even when its bytes fit in TxBuf.
-static void nRFxSPIAsyncTxWait(nRFSpiDev_t * const pDev, int DataLen, volatile bool &Done)
-{
-	if (DataLen <= NRFX_SPI_TXBUF_SIZE && !pDev->pSpiDev->DevIntrf.bNoStop)
-	{
-		return;
-	}
-
-	uint32_t wait = nRFxSPIDmaTimeout(DataLen, pDev->pSpiDev->Cfg.Rate);
-	while (Done == false && --wait > 0);
-
-	uint32_t irq = __get_PRIMASK();
-	__disable_irq();
-
-	// Completion may have started another transfer from its callback.
-	if (Done == false)
-	{
-		// DMA only uses TxBuf. Detach the caller before returning. A late
-		// interrupt may finish the abort, but cannot send another block.
-		pDev->bTxAbort = true;
-		pDev->bCmdFailed = pDev->pSpiDev->DevIntrf.bNoStop;
-		pDev->pTxData = NULL;
-		pDev->pTxWait = NULL;
-		Done = true;
-
-#ifdef SPIM_PRESENT
-		if (pDev->pSpiDev->DevIntrf.bDma)
-		{
-			pDev->pDmaReg->INTENSET = SPIM_INTENSET_STOPPED_Msk;
-			pDev->pDmaReg->TASKS_STOP = 1;
-		}
-#endif
-		// Without DMA, READY ends the byte already in the shift register.
-	}
-
-	__set_PRIMASK(irq);
-}
 #ifdef SPIM_PRESENT
 bool nRFxSPIWaitDMA(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
@@ -527,7 +472,7 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
-	if (dev->bTxAbort || dev->bCmdFailed || dev->bPeiPrepared)
+	if (dev->bPeiPrepared)
 	{
 		return false;
 	}
@@ -563,17 +508,6 @@ int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
-
-	if (dev->bTxAbort || dev->bCmdFailed)
-	{
-		uint32_t irq = __get_PRIMASK();
-		__disable_irq();
-		bool pending = dev->bTxAbort;
-
-		dev->bCmdFailed = false;
-		__set_PRIMASK(irq);
-		return pending ? -1 : 0;
-	}
 
 #ifdef SPI_PRESENT
 	if (pBuff == NULL || BuffLen <= 0)
@@ -643,11 +577,8 @@ static void nRFxSPIDmaNextBlock(nRFSpiDev_t * const pDev)
 	}
 	else
 	{
-		int l = min(pDev->TxDatalen, min(NRFX_SPI_DMA_MAXCNT, NRFX_SPI_TXBUF_SIZE));
-
-		memmove(pDev->TxBuf, &pDev->pTxData[pDev->TxIdx], l);
-		NRFX_SPI_TX(pDev->pDmaReg).PTR = (uint32_t)pDev->TxBuf;
-		NRFX_SPI_TX(pDev->pDmaReg).MAXCNT = l;
+		NRFX_SPI_TX(pDev->pDmaReg).PTR = (uint32_t)&pDev->pTxData[pDev->TxIdx];
+		NRFX_SPI_TX(pDev->pDmaReg).MAXCNT = min(pDev->TxDatalen, NRFX_SPI_DMA_MAXCNT);
 	}
 
 	pDev->pDmaReg->EVENTS_END = 0;
@@ -714,13 +645,6 @@ static void nRFxSPIDmaEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev)
 		// A command phase that keeps the bus is not a completion, the
 		// data phase that follows reports it.
 		report = pIntrf->bNoStop == false;
-		if (pDev->pTxWait)
-		{
-			volatile bool *done = pDev->pTxWait;
-
-			pDev->pTxWait = NULL;
-			*done = true;
-		}
 		DeviceIntrfTxComplete(pIntrf);
 	}
 
@@ -767,17 +691,6 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	if (dev->bPeiPrepared)
 	{
 		return 0;
-	}
-
-	if (dev->bTxAbort || dev->bCmdFailed)
-	{
-		uint32_t irq = __get_PRIMASK();
-		__disable_irq();
-		bool pending = dev->bTxAbort;
-
-		dev->bCmdFailed = false;
-		__set_PRIMASK(irq);
-		return pending ? -1 : 0;
 	}
 
 	if (pBuff == NULL || BuffLen <= 0)
@@ -859,8 +772,6 @@ void nRFxSPIStopRx(DevIntrf_t * const pDev)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
-	dev->bCmdFailed = false;
-
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_AUTO)
 	{
 		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PortNo,
@@ -873,7 +784,7 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
-	if (dev->bTxAbort || dev->bCmdFailed || dev->bPeiPrepared)
+	if (dev->bPeiPrepared)
 	{
 		return false;
 	}
@@ -923,10 +834,7 @@ int nRFxSPITxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 		// The interrupt handler writes each byte. At the end it sets
 		// bTxReady, then releases the bus and reports DEVINTRF_EVT_COMPLETED,
 		// or keeps the bus when bNoStop is set.
-		dev->pTxData = nRFxSPIAsyncTxBuff(dev, pData, DataLen);
-		volatile bool done = false;
-		dev->pTxWait = (DataLen > NRFX_SPI_TXBUF_SIZE || pDev->bNoStop) ? &done : NULL;
-		dev->bTxAbort = false;
+		dev->pTxData = pData;
 		dev->TxDatalen = DataLen;
 		dev->TxIdx = 0;
 		dev->RxBufflen = 0;
@@ -934,8 +842,6 @@ int nRFxSPITxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 		dev->pReg->TXD = dev->pTxData[0];
 		dev->TxIdx++;
 		dev->TxDatalen--;
-		nRFxSPIAsyncTxWait(dev, DataLen, done);
-
 		return -1;
 	}
     else
@@ -988,16 +894,11 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		// The interrupt handler moves through the DMA blocks, releases the
 		// bus and reports DEVINTRF_EVT_COMPLETED.
 		pDev->bTxReady = false;
-		dev->pTxData = nRFxSPIAsyncTxBuff(dev, pData, DataLen);
-		volatile bool done = false;
-		dev->pTxWait = (DataLen > NRFX_SPI_TXBUF_SIZE || pDev->bNoStop) ? &done : NULL;
-		dev->bTxAbort = false;
+		dev->pTxData = pData;
 		dev->TxIdx = 0;
 		dev->RxBufflen = 0;
 		dev->TxDatalen = DataLen;
 		nRFxSPIDmaNextBlock(dev);
-		nRFxSPIAsyncTxWait(dev, DataLen, done);
-
 		return -1;
 	}
 
@@ -1078,27 +979,6 @@ void *nRFxSPIGetHandle(DevIntrf_t * const pDev)
 	return dev->pSpiDev;
 }
 
-static void nRFxSPIAsyncTxAbortEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev, int Count)
-{
-	pDev->TxDatalen = 0;
-	pDev->TxIdx = 0;
-	pDev->bTxAbort = false;
-	if (pDev->bCmdFailed)
-	{
-		// The interrupted read still owns the bus until its rejected receive
-		// phase runs. Do not let the timeout callback replace it before then.
-		atomic_store(&pIntrf->bTxReady, true);
-	}
-	else
-	{
-		DeviceIntrfTxComplete(pIntrf);
-	}
-	if (pIntrf->EvtCB)
-	{
-		pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, NULL, Count);
-	}
-}
-
 void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev)
 //extern "C" void SPI_IRQHandler(int DevNo)
 {
@@ -1167,24 +1047,6 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 #ifdef SPIM_PRESENT
 		if (pDev->bDma)
 		{
-			if (dev->bTxAbort)
-			{
-				dev->pDmaReg->EVENTS_END = 0;
-				NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
-				NRFX_SPI_ENDTX(dev->pDmaReg) = 0;
-				if (dev->pDmaReg->EVENTS_STOPPED)
-				{
-					int count = dev->TxIdx + NRFX_SPI_TX(dev->pDmaReg).AMOUNT;
-
-					dev->pDmaReg->EVENTS_STOPPED = 0;
-					dev->pDmaReg->INTENCLR = SPIM_INTENCLR_STOPPED_Msk;
-					NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
-					NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
-					nRFxSPIAsyncTxAbortEnd(pDev, dev, count);
-				}
-				return;
-			}
-
 			if (dev->pDmaReg->EVENTS_END)
 			{
 				nRFxSPIDmaEnd(pDev, dev);
@@ -1200,12 +1062,6 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 				dev->pReg->EVENTS_READY = 0;
 
 				uint8_t d = dev->pReg->RXD;
-
-				if (dev->bTxAbort)
-				{
-					nRFxSPIAsyncTxAbortEnd(pDev, dev, dev->TxIdx);
-					return;
-				}
 
 				if (dev->RxBufflen > 0)
 				{
@@ -1244,13 +1100,6 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 						bool report = pDev->bNoStop == false;
 
 						dev->TxIdx = 0;
-						if (dev->pTxWait)
-						{
-							volatile bool *done = dev->pTxWait;
-
-							dev->pTxWait = NULL;
-							*done = true;
-						}
 						DeviceIntrfTxComplete(pDev);
 						if (report && pDev->EvtCB)
 						{
@@ -1503,11 +1352,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	{
 		return false;
 	}
-	if (g_nRFxSPIDev[pCfgData->DevNo].bTxAbort ||
-		g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed ||
-		g_nRFxSPIDev[pCfgData->DevNo].bPeiPrepared)
+	if (g_nRFxSPIDev[pCfgData->DevNo].bPeiPrepared)
 	{
-		// TxBuf may still be in use by the cancelled DMA block.
 		return false;
 	}
 
@@ -1530,9 +1376,6 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	g_nRFxSPIDev[pCfgData->DevNo].TxDatalen = 0;
 	g_nRFxSPIDev[pCfgData->DevNo].TxIdx = 0;
 	g_nRFxSPIDev[pCfgData->DevNo].pTxData = NULL;
-	g_nRFxSPIDev[pCfgData->DevNo].pTxWait = NULL;
-	g_nRFxSPIDev[pCfgData->DevNo].bTxAbort = false;
-	g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed = false;
 	g_nRFxSPIDev[pCfgData->DevNo].bPeiPrepared = false;
 
 	pDev->DevIntrf.pDevData = (void*)&g_nRFxSPIDev[pCfgData->DevNo];
@@ -1915,7 +1758,8 @@ static bool SPIPeiReady(SPIDev_t *pDev)
 }
 
 // Configure SPIM DMA before connecting a PPI START task.
-// TX uses the driver buffer; RX uses the caller buffer until release.
+// TX and RX use the caller's buffers until release. EasyDMA reads the TX
+// data from RAM only.
 bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 	const uint8_t *pTx, uint32_t TxLen, uint8_t *pRx, uint32_t RxLen)
 {
@@ -1926,7 +1770,7 @@ bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 		!pDev->DevIntrf.bDma || pDev->Cfg.ChipSel != SPICSEL_MAN ||
 		pDev->Cfg.DataSize != 8U || pDev->Cfg.bIntEn ||
 		pDev->DevIntrf.bNoStop || !pDev->DevIntrf.bTxReady ||
-		TxLen > NRFX_SPI_TXBUF_SIZE || TxLen > NRFX_SPI_DMA_MAXCNT ||
+		TxLen > NRFX_SPI_DMA_MAXCNT ||
 		RxLen > NRFX_SPI_DMA_MAXCNT ||
 		(TxLen == 0U && RxLen == 0U) ||
 		(TxLen != 0U && pTx == NULL) ||
@@ -1935,8 +1779,7 @@ bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 		return false;
 	}
 	dev = SPIPeiDevice(pDev);
-	if (dev == NULL || dev->bPeiPrepared || dev->bTxAbort ||
-		dev->bCmdFailed || dev->pTxWait != NULL ||
+	if (dev == NULL || dev->bPeiPrepared ||
 		dev->RxBufflen != 0 || dev->TxDatalen != 0)
 	{
 		return false;
@@ -1953,19 +1796,14 @@ bool SPIPreparePeiTransfer(SPIDev_t *pDev,
 	{
 		return false;
 	}
-	if (dev->bPeiPrepared || dev->bTxAbort || dev->bCmdFailed ||
-		dev->pTxWait != NULL || dev->RxBufflen != 0 ||
+	if (dev->bPeiPrepared || dev->RxBufflen != 0 ||
 		dev->TxDatalen != 0)
 	{
 		atomic_flag_clear(&pDev->DevIntrf.bBusy);
 		return false;
 	}
-	if (TxLen != 0U)
-	{
-		memcpy(dev->TxBuf, pTx, TxLen);
-	}
 	dev->pDmaReg->TXD.PTR = TxLen != 0U ?
-		(uint32_t)(uintptr_t)dev->TxBuf : 0U;
+		(uint32_t)(uintptr_t)pTx : 0U;
 	dev->pDmaReg->TXD.MAXCNT = TxLen;
 	dev->pDmaReg->RXD.PTR = RxLen != 0U ?
 		(uint32_t)(uintptr_t)pRx : 0U;

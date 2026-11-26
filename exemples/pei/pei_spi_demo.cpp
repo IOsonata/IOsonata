@@ -44,7 +44,8 @@ static const SPICfg_t s_SpiCfg = {
 	.EvtCB = nullptr
 };
 
-static const uint8_t s_TestData[] = {
+// In RAM: the prepared transfer sends from this buffer by EasyDMA
+static uint8_t s_TestData[] = {
 	0xA5, 0x5A, 0x11, 0x22, 0x33, 0x44, 0x55, 0xCC,
 };
 
