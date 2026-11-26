@@ -155,9 +155,25 @@ controller reports, and the data stays in the buffer the caller provided.
   rule as the buffers an application registers for a slave.
 
 Conversion status: this section is the design the drivers are being brought
-to. The I2C and SPI master drivers written in October 2026 still send an
-interrupt driven transmit from a private copy with a fixed size. They are
-converted one driver per commit, Nordic I2C first.
+to. The master drivers below still send an interrupt driven transmit from a
+private copy with a fixed size, or keep transfer state the controller already
+reports. They are converted one driver per commit and removed from this list
+as they are done.
+
+| Family | I2C master | SPI master |
+|---|---|---|
+| Nordic | `i2c_nrfx.cpp`: 64 byte copy, transfer state flags | `spi_nrfx.cpp`: 256 byte copy, wait and abort flags |
+| ST | `i2c_stm32v2.cpp`: 64 byte copy, state flags | `spi_stm32.cpp`: 256 byte copy, state flags |
+| Microchip SAM4L | `i2c_sam4l.cpp`: 256 byte copy per bus, state enum | `spi_sam4l.cpp`: 256 byte copy, state flag |
+| Microchip SAM D | `i2c_samd.cpp`: shared copy, state enum | `spi_samd.cpp`: shared copy |
+| Renesas RA4M1 | `i2c_ra4m1.cpp`: 64 byte copy, state flags | `spi_ra4m1.cpp`: state flag |
+| Renesas R9A02 | `i2c_r9a02.cpp`: copy, state flags | `spi_r9a02.cpp`: state flag |
+| NXP LPC546xx | `i2c_lpc546xx.cpp`: 64 byte copy, state flags | `spi_lpc546xx.cpp`: 64 byte copy, state flags |
+
+The Nordic PEI prepare functions of I2C and SPI use the same private copy and
+change with their driver: the transmit buffer of a prepared transfer belongs
+to the caller until the transfer is released, as its receive buffer already
+does.
 
 ## Combined-write buffer lifetime
 
@@ -167,7 +183,7 @@ a negative deferred result is converted to zero and the byte count is the one
 reported with `DEVINTRF_EVT_COMPLETED`.
 
 That stack buffer is the one buffer the caller does not keep. With no copy in
-the driver, `DeviceIntrfWrite()` has to wait for `bTxReady` on an I2C or SPI
+the driver, `DeviceIntrfWrite()` waits for `bTxReady` on an I2C or SPI
 interface when `TxData` returns `-1`, as `DeviceIntrfRead()` does for its
 command phase, so the driver can send from the buffer it was given. A write
 that must not block goes through `DeviceIntrfTx()` with a buffer the
@@ -175,12 +191,12 @@ application keeps.
 
 Other interface types use `-1` with their own meaning, for example a memory
 controller reporting that a program operation was started. `DeviceIntrfWrite()`
-must not wait for those.
+does not wait for those.
 
-Status: the wait is not in `DeviceIntrfWrite()` yet. It goes in with the first
-converted driver, after the host tests of every port that runs a combined
-write in interrupt mode have been run again. Until then a target used through
-this helper must consume or copy the buffer before returning.
+The wait has an iteration budget that follows the length of the write. A
+driver that has not been converted yet still sends from its private copy; the
+wait only makes the combined write return after the transfer instead of
+before it.
 
 `DeviceIntrfRead()` waits for a deferred command phase with an iteration
 budget. The current helper does not propagate that wait result or the raw
