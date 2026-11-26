@@ -311,8 +311,7 @@ static bool SamdEicStart(void)
 
 		PM_REGS->PM_APBAMASK |= PM_APBAMASK_EIC_Msk;
 
-		if (!SamdLowFreqClockStandbyEnable() ||
-			!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_EIC_Val, SAMD_GCLK_LF))
+		if (!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_EIC_Val, SAMD_GCLK_LF))
 		{
 			SystemLowFreqClockDisable();
 

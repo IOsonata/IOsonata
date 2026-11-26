@@ -234,7 +234,11 @@ SAM D is the first port converted to the port rules of
 ### Design, November 25, 2026
 
 - The clock sources are fixed by `g_McuOsc` at startup. There is no run time
-  source selection. The clock code stores the frequencies of generators 0
+  source selection. `g_McuOsc` is not range checked: with a wrong setting
+  the oscillator or the PLL does not start and the main clock stays on
+  OSC8M. The 32 kHz oscillator selected for generator 1 is set to run in
+  Standby when it is started, since the RTC and the EIC, the Standby wake
+  sources, are clocked from it. The clock code stores the frequencies of generators 0
   and 1 when it sets them and reads no device or driver state.
 - `SystemHighFreqClockEnable/Disable` and `SystemLowFreqClockEnable/Disable`
   count the users of a shared clock, so that one user's disable does not
@@ -259,9 +263,9 @@ SAM D is the first port converted to the port rules of
 - `SystemResetReason` reads PM RCAUSE. `SystemPowerOff` is not supported.
 
 Sizes at -Os with Arm GNU 14.2.1, code and initialized data: the clock file
-2,418 bytes, the sleep file 60, the pin driver 1,861 on D11 and 1,866 on D21.
-Linked with the managed project options, D11 `CorePowerTest` uses 15,776 of
-16,384 flash bytes and D11 `CoreClockTest` 14,396.
+2,114 bytes, the sleep file 60, the pin driver 1,853 on D11 and 1,858 on D21.
+Linked with the managed project options, D11 `CorePowerTest` uses 16,024 of
+16,384 flash bytes and D11 `CoreClockTest` 15,928.
 
 ### Hardware, November 25, 2026
 

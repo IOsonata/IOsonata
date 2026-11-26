@@ -49,7 +49,8 @@ A pin interrupt enabled with `IOPinEnableInterrupt()` or
 `IOPinAllocateInterrupt()` wakes the MCU. The EIC is a user of the low
 frequency clock: the pin driver requests it when the first pin interrupt or
 event is enabled and releases it with the last one. That clock keeps running
-in Standby, so the EIC detects the edge there. Pin edges are therefore
+in Standby (its 32 kHz oscillator is set to run in Standby when the clock
+setup starts it), so the EIC detects the edge there. Pin edges are therefore
 sampled at 32 kHz, awake or asleep: about 0.1 ms from the edge to the
 interrupt with the filter, and a shorter pulse is not seen. The shared CorePowerTest runs three RTC wake cycles
 and then three button wake cycles on boards configured for timed wake.

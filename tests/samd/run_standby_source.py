@@ -35,7 +35,6 @@ class StandbySourceTest(unittest.TestCase):
 		start = body(EIC, "static bool SamdEicStart(")
 		stop = body(EIC, "static bool SamdEicStopIdle(")
 		self.assertIn("SystemLowFreqClockEnable()", start)
-		self.assertIn("SamdLowFreqClockStandbyEnable()", start)
 		self.assertIn("SAMD_GCLK_LF", start)
 		self.assertNotIn("SAMD_GCLK_MAIN", EIC)
 		self.assertIn("SystemLowFreqClockDisable()", stop)
@@ -61,12 +60,12 @@ class StandbySourceTest(unittest.TestCase):
 		handler = body(EIC, "void EIC_Handler(")
 		self.assertIn("s_SamdPinInt[SAMD_EIC_NMI_LINE].Handler(", handler)
 
-	def test_rtc_requests_standby_oscillator(self):
-		clock = body(CLOCK, "bool SamdLowFreqClockStandbyEnable(")
-		rtc = body(RTC, "bool SamdRtcSetup(")
-		self.assertIn("SamdLowFreqClockStandbyEnable()", rtc)
-		self.assertIn("SYSCTRL_OSC32K_RUNSTDBY_Msk", clock)
-		self.assertIn("SYSCTRL_XOSC32K_RUNSTDBY_Msk", clock)
+	def test_low_frequency_oscillator_runs_in_standby(self):
+		init = body(CLOCK, "static bool SamdLowFreqInit(")
+		self.assertIn("SYSCTRL_OSC32K_RUNSTDBY_Msk", init)
+		self.assertIn("SYSCTRL_XOSC32K_RUNSTDBY_Msk", init)
+		for src in (CLOCK, EIC, RTC):
+			self.assertNotIn("SamdLowFreqClockStandbyEnable", src)
 
 	def test_samd11_board_selects_sw0(self):
 		board = (ROOT / "ARM/Microchip/SAMD/SAMD11/exemples/CorePowerTest/src/board.h").read_text(encoding="utf-8")

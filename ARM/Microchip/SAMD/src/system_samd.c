@@ -313,57 +313,6 @@ static bool SamdGclkChannelStop(uint16_t Ctrl)
 	return res;
 }
 
-// The low-frequency clock generator supplies RTC and EIC. A peripheral
-// that needs to work in Standby requests the source oscillator's RUNSTDBY
-// bit here, rather than changing oscillator registers in its own driver.
-// With GCLK1.OE clear, GCLK1 itself runs when the channel requests it.
-bool SamdLowFreqClockStandbyEnable(void)
-{
-	uint32_t state;
-	uint32_t gen;
-	uint32_t value;
-	bool ready = false;
-
-	state = DisableInterrupt();
-	gen = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_LF);
-	if (gen != UINT32_MAX && (gen & GCLK_GENCTRL_GENEN_Msk) != 0U)
-	{
-		switch (gen & GCLK_GENCTRL_SRC_Msk)
-		{
-			case GCLK_GENCTRL_SRC_OSC32K:
-				value = SYSCTRL_REGS->SYSCTRL_OSC32K;
-				if ((value & (SYSCTRL_OSC32K_ENABLE_Msk |
-					SYSCTRL_OSC32K_EN32K_Msk)) ==
-					(SYSCTRL_OSC32K_ENABLE_Msk | SYSCTRL_OSC32K_EN32K_Msk) &&
-					(SYSCTRL_REGS->SYSCTRL_PCLKSR &
-					SYSCTRL_PCLKSR_OSC32KRDY_Msk) != 0U)
-				{
-					SYSCTRL_REGS->SYSCTRL_OSC32K =
-						value | SYSCTRL_OSC32K_RUNSTDBY_Msk;
-					ready = (SYSCTRL_REGS->SYSCTRL_OSC32K &
-						SYSCTRL_OSC32K_RUNSTDBY_Msk) != 0U;
-				}
-				break;
-			case GCLK_GENCTRL_SRC_XOSC32K:
-				value = SYSCTRL_REGS->SYSCTRL_XOSC32K;
-				if ((value & (SYSCTRL_XOSC32K_ENABLE_Msk |
-					SYSCTRL_XOSC32K_EN32K_Msk)) ==
-					(SYSCTRL_XOSC32K_ENABLE_Msk | SYSCTRL_XOSC32K_EN32K_Msk) &&
-					(SYSCTRL_REGS->SYSCTRL_PCLKSR &
-					SYSCTRL_PCLKSR_XOSC32KRDY_Msk) != 0U)
-				{
-					SYSCTRL_REGS->SYSCTRL_XOSC32K =
-						(uint16_t)(value | SYSCTRL_XOSC32K_RUNSTDBY_Msk);
-					ready = (SYSCTRL_REGS->SYSCTRL_XOSC32K &
-						SYSCTRL_XOSC32K_RUNSTDBY_Msk) != 0U;
-				}
-				break;
-		}
-	}
-	EnableInterrupt(state);
-	return ready;
-}
-
 bool SamdGclkChannelEnable(uint8_t Channel, uint8_t Generator)
 {
 	uint32_t want = GCLK_CLKCTRL_ID(Channel) | GCLK_CLKCTRL_GEN(Generator) | GCLK_CLKCTRL_CLKEN_Msk;
@@ -460,50 +409,6 @@ static uint32_t SamdDpllFreq(uint32_t RefFreq)
 	return (RefFreq >> 4) * ratio + ((RefFreq & 15U) * ratio >> 4);
 }
 
-static bool SamdLowFreqValid(OSC_TYPE Type, uint32_t Freq)
-{
-	if (Type == OSC_TYPE_RC)
-	{
-		// OSC32K, nominal 32.768 kHz
-		return Freq == 32000UL || Freq == SAMD_OSC32K_FREQ;
-	}
-
-	if (Type == OSC_TYPE_XTAL)
-	{
-		return Freq == SAMD_OSC32K_FREQ;
-	}
-
-	// Clock on XIN32, used as DFLL48M reference
-	return Type == OSC_TYPE_TCXO && Freq >= SAMD_DFLL_REF_MIN && Freq <= SAMD_DFLL_REF_MAX;
-}
-
-static bool SamdConfigValid(const McuOsc_t *pOsc)
-{
-	if (pOsc->CoreOsc.Type == OSC_TYPE_RC)
-	{
-		// OSC8M
-		if (pOsc->CoreOsc.Freq != SAMD_OSC8M_FREQ)
-		{
-			return false;
-		}
-	}
-	else if (pOsc->CoreOsc.Type == OSC_TYPE_XTAL)
-	{
-		// XOSC crystal range
-		if (pOsc->CoreOsc.Freq < 400000UL || pOsc->CoreOsc.Freq > 32000000UL)
-		{
-			return false;
-		}
-	}
-	else if (pOsc->CoreOsc.Type != OSC_TYPE_TCXO || pOsc->CoreOsc.Freq < 2UL * SAMD_DPLL_REF_MIN ||
-			 pOsc->CoreOsc.Freq > 32000000UL)
-	{
-		return false;
-	}
-
-	return SamdLowFreqValid(pOsc->LowPwrOsc.Type, pOsc->LowPwrOsc.Freq);
-}
-
 // OSC8M undivided, 8 MHz, always on.
 // OSC8M is the CPU clock after reset and is enabled then: the code runs on
 // it, a prescaler change does not restart it. OSC8MRDY stayed low on
@@ -528,6 +433,8 @@ static bool SamdOsc8mStart(void)
 
 // Low frequency oscillator and generator 1. The oscillator not selected is
 // stopped once generator 1 has switched.
+// The selected oscillator runs in Standby: the RTC and the EIC, the wake
+// sources of Standby, are clocked from generator 1.
 static bool SamdLowFreqInit(void)
 {
 	uint32_t src;
@@ -538,7 +445,7 @@ static bool SamdLowFreqInit(void)
 	{
 		uint32_t calib = (SAMD_OTP4_WORD_1 & SAMD_OSC32K_CAL_Msk) >> SAMD_OSC32K_CAL_Pos;
 		uint32_t ctrl = SYSCTRL_OSC32K_CALIB(calib) | SYSCTRL_OSC32K_STARTUP(SAMD_OSC32K_STARTUP) |
-						SYSCTRL_OSC32K_EN32K_Msk;
+						SYSCTRL_OSC32K_EN32K_Msk | SYSCTRL_OSC32K_RUNSTDBY_Msk;
 
 		// Configured first, enabled by a separate write
 		if ((SYSCTRL_REGS->SYSCTRL_OSC32K & ~SYSCTRL_OSC32K_ONDEMAND_Msk) != (ctrl | SYSCTRL_OSC32K_ENABLE_Msk))
@@ -555,7 +462,8 @@ static bool SamdLowFreqInit(void)
 	}
 	else
 	{
-		uint16_t ctrl = SYSCTRL_XOSC32K_STARTUP(SAMD_XOSC32K_STARTUP) | SYSCTRL_XOSC32K_EN32K_Msk;
+		uint16_t ctrl = SYSCTRL_XOSC32K_STARTUP(SAMD_XOSC32K_STARTUP) | SYSCTRL_XOSC32K_EN32K_Msk |
+						SYSCTRL_XOSC32K_RUNSTDBY_Msk;
 
 		if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL)
 		{
@@ -719,6 +627,7 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 	uint32_t coarse = (SAMD_OTP4_WORD_1 & FUSES_OTP4_WORD_1_DFLL48M_COARSE_CAL_Msk) >>
 					  FUSES_OTP4_WORD_1_DFLL48M_COARSE_CAL_Pos;
 	uint32_t ctrl;
+	uint32_t ready = SYSCTRL_PCLKSR_DFLLRDY_Msk;
 
 	if (!SamdDfllStop())
 	{
@@ -739,26 +648,22 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 
 	if (bUsb)
 	{
-		if (!SamdDfllWrite(&SYSCTRL_REGS->SYSCTRL_DFLLMUL, SYSCTRL_DFLLMUL_CSTEP(7U) |
-						   SYSCTRL_DFLLMUL_FSTEP(10U) | SYSCTRL_DFLLMUL_MUL(Mul)))
-		{
-			return false;
-		}
+		Mul |= SYSCTRL_DFLLMUL_CSTEP(7U) | SYSCTRL_DFLLMUL_FSTEP(10U);
 		ctrl = SYSCTRL_DFLLCTRL_MODE_Msk | SYSCTRL_DFLLCTRL_USBCRM_Msk | SYSCTRL_DFLLCTRL_CCDIS_Msk |
 			   SYSCTRL_DFLLCTRL_BPLCKC_Msk;
 	}
 	else
 	{
-		// Half of the largest steps
-		if (!SamdDfllWrite(&SYSCTRL_REGS->SYSCTRL_DFLLMUL, SYSCTRL_DFLLMUL_CSTEP(31U) |
-						   SYSCTRL_DFLLMUL_FSTEP(511U) | SYSCTRL_DFLLMUL_MUL(Mul)))
-		{
-			return false;
-		}
+		// Closed loop on the reference: wait for the coarse and fine locks
+		Mul |= SYSCTRL_DFLLMUL_CSTEP(31U) | SYSCTRL_DFLLMUL_FSTEP(511U);
 		ctrl = SYSCTRL_DFLLCTRL_MODE_Msk | SYSCTRL_DFLLCTRL_WAITLOCK_Msk | SYSCTRL_DFLLCTRL_QLDIS_Msk;
+		ready |= SYSCTRL_PCLKSR_DFLLLCKC_Msk | SYSCTRL_PCLKSR_DFLLLCKF_Msk;
+	}
+	if (!SamdDfllWrite(&SYSCTRL_REGS->SYSCTRL_DFLLMUL, Mul))
+	{
+		return false;
 	}
 
-	// Mode first, then enabled
 	if (!SamdPclkWait(SYSCTRL_PCLKSR_DFLLRDY_Msk, SAMD_SYNC_POLL_LIMIT))
 	{
 		return SamdStartupFailed(SAMD_STARTUP_DFLL, __LINE__);
@@ -770,18 +675,8 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 	}
 	SYSCTRL_REGS->SYSCTRL_DFLLCTRL = (uint16_t)(ctrl | SYSCTRL_DFLLCTRL_ENABLE_Msk);
 
-	if (bUsb)
+	if (!SamdPclkWait(ready, SAMD_DFLL_LOCK_POLL_LIMIT))
 	{
-		// Open loop until the USB start of frame comes
-		if (!SamdPclkWait(SYSCTRL_PCLKSR_DFLLRDY_Msk, SAMD_SYNC_POLL_LIMIT))
-		{
-			return SamdStartupFailed(SAMD_STARTUP_DFLL, __LINE__);
-		}
-	}
-	else if (!SamdPclkWait(SYSCTRL_PCLKSR_DFLLLCKC_Msk | SYSCTRL_PCLKSR_DFLLLCKF_Msk |
-						   SYSCTRL_PCLKSR_DFLLRDY_Msk, SAMD_DFLL_LOCK_POLL_LIMIT))
-	{
-		// No lock, the reference does not run: the DFLL48M is stopped
 		(void)SamdStartupFailed(SAMD_STARTUP_DFLL, __LINE__);
 		(void)SamdDfllStop();
 
@@ -907,11 +802,6 @@ static bool SamdClockInit(void)
 	uint32_t src;
 	uint32_t div;
 	uint32_t freq;
-
-	if (!SamdConfigValid(&g_McuOsc))
-	{
-		return SamdStartupFailed(SAMD_STARTUP_CONFIG, __LINE__);
-	}
 
 	// Wait state for the final clock, manual page write. The CPU and the
 	// buses are not divided.
@@ -1104,7 +994,7 @@ bool SystemHighFreqClockEnable(void)
 
 	state = __get_PRIMASK();
 	__disable_irq();
-	ready = s_HfUsers != UINT32_MAX && (SystemCoreClockGet() != 0U);
+	ready = s_HfUsers != UINT32_MAX && s_GenFreq[SAMD_GCLK_MAIN] != 0U;
 	if (ready)
 	{
 		s_HfUsers++;

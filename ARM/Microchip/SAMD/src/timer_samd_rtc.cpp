@@ -97,8 +97,7 @@ bool SamdRtcSetup(SamdTimerData_t *pData)
 
 	PM_REGS->PM_APBAMASK |= PM_APBAMASK_RTC_Msk;
 
-	if (!SamdLowFreqClockStandbyEnable() ||
-		!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_RTC_Val, SAMD_GCLK_LF))
+	if (!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_RTC_Val, SAMD_GCLK_LF))
 	{
 		return false;
 	}
