@@ -176,18 +176,16 @@ until the transfer is released.
 ## Combined-write buffer lifetime
 
 `DeviceIntrfWrite()` concatenates command and data into a temporary stack
-buffer and calls `DeviceIntrfTx()`. Its return value excludes command bytes;
-a negative deferred result is converted to zero.
+buffer and sends it with its own transfer loop. Its return value excludes
+command bytes; a negative deferred result is converted to zero.
 
-A synchronous I2C or SPI master has sent the buffer when `TxData` returns, so
-the stack buffer is no longer in use. For the drivers not converted yet that
-return `-1` and send from the caller's buffer, `DeviceIntrfWrite()` waits for
-`bTxReady` on an I2C or SPI interface, as `DeviceIntrfRead()` does for its
-command phase. This wait has no use once the conversion is done.
-
-Other interface types use `-1` with their own meaning, for example a memory
-controller reporting that a program operation was started. `DeviceIntrfWrite()`
-does not wait for those.
+That buffer is gone when `DeviceIntrfWrite()` returns. A driver has finished
+with it when `TxData` returns, or sends from its own copy of the data. A
+synchronous I2C or SPI master has sent it when `TxData` returns; the master
+drivers not converted yet send it before `TxData` returns, or keep a private
+copy of an interrupt driven transmit.
+`DeviceIntrfWrite()` itself does not wait: it is used by every interface type,
+including the ones that are asynchronous by nature.
 
 `DeviceIntrfRead()` waits for a deferred command phase with an iteration
 budget. The current helper does not propagate that wait result or the raw
