@@ -145,44 +145,25 @@ typedef struct {
 	bool SlaveTxActive;
 } SAM4L_I2CDEV;
 
-static SAM4L_I2CDEV s_Sam4lI2CDev[SAM4L_I2C_MASTER_COUNT] = {
-	{
-		.DevNo = 0,
-		.MasterPbaMask = PM_PBAMASK_TWIM0,
-		.SlavePbaMask = PM_PBAMASK_TWIS0,
-		.MasterIrq = TWIM0_IRQn,
-		.SlaveIrq = TWIS0_IRQn,
-		.pMReg = SAM4L_TWIM0,
-		.pSReg = SAM4L_TWIS0,
-	},
-	{
-		.DevNo = 1,
-		.MasterPbaMask = PM_PBAMASK_TWIM1,
-		.SlavePbaMask = PM_PBAMASK_TWIS1,
-		.MasterIrq = TWIM1_IRQn,
-		.SlaveIrq = TWIS1_IRQn,
-		.pMReg = SAM4L_TWIM1,
-		.pSReg = SAM4L_TWIS1,
-	},
-	{
-		.DevNo = 2,
-		.MasterPbaMask = PM_PBAMASK_TWIM2,
-		.SlavePbaMask = 0,
-		.MasterIrq = TWIM2_IRQn,
-		.SlaveIrq = (IRQn_Type)-1,
-		.pMReg = SAM4L_TWIM2,
-		.pSReg = nullptr,
-	},
-	{
-		.DevNo = 3,
-		.MasterPbaMask = PM_PBAMASK_TWIM3,
-		.SlavePbaMask = 0,
-		.MasterIrq = TWIM3_IRQn,
-		.SlaveIrq = (IRQn_Type)-1,
-		.pMReg = SAM4L_TWIM3,
-		.pSReg = nullptr,
-	},
+// Hardware of each DevNo, kept in flash. I2CInit copies it to the device
+// state, which is zero initialized and takes no flash.
+typedef struct {
+	uint32_t MasterPbaMask;
+	uint32_t SlavePbaMask;
+	IRQn_Type MasterIrq;
+	IRQn_Type SlaveIrq;
+	Twim *pMReg;
+	Twis *pSReg;
+} Sam4lI2CHw_t;
+
+static const Sam4lI2CHw_t s_Sam4lI2CHw[SAM4L_I2C_MASTER_COUNT] = {
+	{ PM_PBAMASK_TWIM0, PM_PBAMASK_TWIS0, TWIM0_IRQn, TWIS0_IRQn, SAM4L_TWIM0, SAM4L_TWIS0 },
+	{ PM_PBAMASK_TWIM1, PM_PBAMASK_TWIS1, TWIM1_IRQn, TWIS1_IRQn, SAM4L_TWIM1, SAM4L_TWIS1 },
+	{ PM_PBAMASK_TWIM2, 0, TWIM2_IRQn, (IRQn_Type)-1, SAM4L_TWIM2, nullptr },
+	{ PM_PBAMASK_TWIM3, 0, TWIM3_IRQn, (IRQn_Type)-1, SAM4L_TWIM3, nullptr },
 };
+
+static SAM4L_I2CDEV s_Sam4lI2CDev[SAM4L_I2C_MASTER_COUNT];
 
 static void Sam4lI2CMasterRecover(SAM4L_I2CDEV *dev);
 
@@ -370,6 +351,9 @@ static uint32_t Sam4lI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
 	I2CDev_t *i2c = dev->pI2cDev;
 	const uint32_t pba = SystemPeriphClockGet(0);
+	// Clock in kHz rounded up: the minimum times are computed in 32 bits and
+	// never come out shorter than with the exact clock
+	const uint32_t pbaKHz = (pba + 999U) / 1000U;
 
 	if (Rate == 0U || pba == 0U)
 		return 0U;
@@ -407,8 +391,7 @@ static uint32_t Sam4lI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	if (i2c->Cfg.Mode == I2CMODE_SLAVE)
 	{
 		// TWIS SUDAT is counted directly from CLK_TWIS, not the EXP prescaler.
-		uint32_t cycles = (uint32_t)(((uint64_t)pba * setupNs + 999999999ULL) /
-			1000000000ULL);
+		uint32_t cycles = (pbaKHz * setupNs + 999999U) / 1000000U;
 		if (cycles < 2U)
 			cycles = 2U;
 		if (cycles > 255U)
@@ -425,16 +408,12 @@ static uint32_t Sam4lI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	for (uint32_t exp = 0U; exp <= 7U; ++exp)
 	{
 		const uint32_t prescale = 1U << (exp + 1U);
-		const uint64_t nsDenom = 1000000000ULL * prescale;
+		const uint32_t nsDenom = 1000000U * prescale;
 
-		uint32_t data = (uint32_t)(((uint64_t)pba * setupNs + nsDenom - 1ULL) /
-			nsDenom);
-		uint32_t low = (uint32_t)(((uint64_t)pba * lowNs + nsDenom - 1ULL) /
-			nsDenom);
-		uint32_t high = (uint32_t)(((uint64_t)pba * highNs + nsDenom - 1ULL) /
-			nsDenom);
-		uint32_t staSto = (uint32_t)(((uint64_t)pba * staStoNs + nsDenom - 1ULL) /
-			nsDenom);
+		uint32_t data = (pbaKHz * setupNs + nsDenom - 1U) / nsDenom;
+		uint32_t low = (pbaKHz * lowNs + nsDenom - 1U) / nsDenom;
+		uint32_t high = (pbaKHz * highNs + nsDenom - 1U) / nsDenom;
+		uint32_t staSto = (pbaKHz * staStoNs + nsDenom - 1U) / nsDenom;
 
 		if (data == 0U) data = 1U;
 		if (low == 0U) low = 1U;
@@ -444,9 +423,8 @@ static uint32_t Sam4lI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		if (data > 15U || low > 255U || high > 255U || staSto > 255U)
 			continue;
 
-		const uint64_t rateDenom = (uint64_t)Rate * prescale;
-		uint32_t target = (uint32_t)(((uint64_t)pba + rateDenom - 1ULL) /
-			rateDenom);
+		const uint32_t rateDenom = Rate * prescale;
+		uint32_t target = (pba + rateDenom - 1U) / rateDenom;
 		uint32_t total = low + high + (data << 1);
 
 		// Do not exceed the requested SCL rate. Put any spare cycles into the
@@ -1843,6 +1821,15 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	}
 
 	SAM4L_I2CDEV *dev = &s_Sam4lI2CDev[pCfgData->DevNo];
+	const Sam4lI2CHw_t *hw = &s_Sam4lI2CHw[pCfgData->DevNo];
+
+	dev->DevNo = pCfgData->DevNo;
+	dev->MasterPbaMask = hw->MasterPbaMask;
+	dev->SlavePbaMask = hw->SlavePbaMask;
+	dev->MasterIrq = hw->MasterIrq;
+	dev->SlaveIrq = hw->SlaveIrq;
+	dev->pMReg = hw->pMReg;
+	dev->pSReg = hw->pSReg;
 	// Remove the previous mode's wake request before replacing its state.
 	if (dev->pI2cDev != nullptr)
 	{
