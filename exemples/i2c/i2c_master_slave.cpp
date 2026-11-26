@@ -360,7 +360,8 @@ static const char *ModeName(const I2CCfg_t &Cfg)
 }
 
 // Master write of the command byte then Len data bytes. Returns the data
-// bytes written. In interrupt mode the count comes with the completion.
+// bytes written. A master that completes an interrupt transfer later gives
+// the count with the completion.
 static int MasterWrite(const I2CCfg_t &Cfg, uint8_t Addr, uint8_t Cmd, const uint8_t *pData, int Len)
 {
 	int c;
@@ -368,10 +369,11 @@ static int MasterWrite(const I2CCfg_t &Cfg, uint8_t Addr, uint8_t Cmd, const uin
 	s_MasterCompleted = false;
 	s_MasterCount = 0;
 	c = g_I2CMaster.Write(Addr, &Cmd, 1, pData, Len);
-	if (Cfg.bIntEn)
+	if (c == 0 && Cfg.bIntEn)
 	{
-		// DeviceIntrfWrite() converts the -1 of an interrupt transfer into 0
-		// after subtracting the command length
+		// DeviceIntrfWrite() converts the -1 of a transfer completed later
+		// into 0 after subtracting the command length. A synchronous master
+		// returns the count, 0 when nothing was written.
 		int total = WaitMasterComplete(10000000);
 		c = total >= 1 ? total - 1 : 0;
 	}
