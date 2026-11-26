@@ -84,8 +84,6 @@ typedef struct __Sam4l_Spi_Dev
 	bool SlaveError;
 	bool SlaveDmaFrame;
 	bool SlaveRxDma;
-	bool bSleepPaused;		//!< Master stopped temporarily for SystemSleep
-	uint32_t SleepInterrupts;	//!< SPI interrupt mask before sleep
 	int SlaveTxLength;
 	uint8_t TxBuffer[SAM4L_SPI_TX_SIZE];
 	uint16_t DmaTx[SAM4L_SPI_DMA_WORDS];
@@ -230,52 +228,6 @@ static void Sam4lSpiConfigure(Sam4lSpiDev_t *dev)
 		(void)reg->SPI_RDR;
 
 	reg->SPI_CR = SPI_CR_SPIEN;
-}
-
-// SPI has no asynchronous slave wake resource. Refuse deep sleep with
-// an enabled slave; an idle master can keep all its register settings.
-bool Sam4lSpiSuspendSleep(void)
-{
-	Sam4lSpiDev_t *dev = &s_SpiDev;
-	SPIDev_t *pDev = dev->pSpiDev;
-
-	if (pDev == nullptr || atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
-		(SAM4L_PM->PM_PBAMASK & PM_PBAMASK_SPI) == 0U)
-	{
-		return true;
-	}
-	if (pDev->Cfg.Mode != SPIMODE_MASTER ||
-		atomic_flag_test(&pDev->DevIntrf.bBusy) ||
-		dev->bSleepPaused || dev->Active ||
-		(dev->pReg->SPI_SR & SPI_SR_TXEMPTY) == 0U)
-	{
-		return false;
-	}
-	if (dev->DmaInitialized &&
-		((Sam4lSpiRxChannel()->PDCA_SR & PDCA_SR_TEN) != 0U ||
-		 (Sam4lSpiTxChannel()->PDCA_SR & PDCA_SR_TEN) != 0U))
-	{
-		return false;
-	}
-	dev->SleepInterrupts = dev->pReg->SPI_IMR;
-	dev->pReg->SPI_IDR = 0xFFFFFFFFU;
-	dev->pReg->SPI_CR = SPI_CR_SPIDIS;
-	Sam4lSpiClockDisable();
-	dev->bSleepPaused = true;
-	return true;
-}
-
-void Sam4lSpiResumeSleep(void)
-{
-	Sam4lSpiDev_t *dev = &s_SpiDev;
-
-	if (dev->bSleepPaused)
-	{
-		Sam4lSpiClockEnable();
-		dev->pReg->SPI_CR = SPI_CR_SPIEN;
-		dev->pReg->SPI_IER = dev->SleepInterrupts;
-		dev->bSleepPaused = false;
-	}
 }
 
 static void Sam4lSpiDisable(DevIntrf_t * const pDev)
@@ -955,8 +907,6 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	pDev->CurDevCs = -1;
 	pDev->FirstRdData = -1;
 	s_SpiDev.pSpiDev = pDev;
-	s_SpiDev.bSleepPaused = false;
-	s_SpiDev.SleepInterrupts = 0U;
 	pDev->DevIntrf.pDevData = &s_SpiDev;
 
 	Sam4lSpiClockEnable();

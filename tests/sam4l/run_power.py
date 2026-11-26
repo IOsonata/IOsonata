@@ -27,24 +27,24 @@ with tempfile.TemporaryDirectory(prefix='sam4l-power-') as tmp:
                                     str(root / 'tests/sam4l/power_test.cpp'),
                                     '-o', str(binary)], check=True)
                     subprocess.run([str(binary)], check=True)
-# A peripheral cannot be suspended while DeviceIntrf owns an open transfer.
-# Hardware idle status alone does not imply that the transaction is closed.
-for peripheral, filename, function in (
-    ('I2C', 'i2c_sam4l.cpp', 'Sam4lI2CSuspendSleep'),
-    ('SPI', 'spi_sam4l.cpp', 'Sam4lSpiSuspendSleep'),
-    ('UART', 'uart_sam4l.cpp', 'Sam4lUartSuspendSleep'),
-):
+# SystemSleep calls no device driver and the drivers have no sleep hooks.
+power_text = (root / 'ARM/Microchip/SAM4L/src/system_power_sam4l.cpp').read_text()
+for name in ('Sam4lUart', 'Sam4lI2C', 'Sam4lSpi', 'Sam4lUsb', 'Sam4lPdca',
+             'Sam4lTimer', 'PM_AWEN', 'SAM4L_AST'):
+    assert name not in power_text, name
+for filename in ('uart_sam4l.cpp', 'i2c_sam4l.cpp', 'spi_sam4l.cpp',
+                 'usb_ctrlr_sam4l.cpp'):
     source_text = (root / 'ARM/Microchip/SAM4L/src' / filename).read_text()
-    body = source_text.split('bool ' + function + '(void)\n{', 1)[1].split(
-        '\nvoid ', 1)[0]
-    assert 'atomic_flag_test(&pDev->DevIntrf.bBusy)' in body, peripheral
-print('SAM4L interface transfer ownership sleep checks PASS')
+    for name in ('SuspendSleep', 'ResumeSleep', 'PrepareSleep',
+                 'AllowDeepSleep', 'bSleepPaused'):
+        assert name not in source_text, (filename, name)
+print('SAM4L SystemSleep driver independence checks PASS')
 
 # PICOUART shares the physical RXD0 pin directly. Do not switch PB00
 # to GPIO or gate USART0 before the low-power receiver is armed.
 uart_source = (root / 'ARM/Microchip/SAM4L/src/uart_sam4l.cpp').read_text()
-uart_prep = uart_source.split('bool Sam4lUartPrepareSleep(void)', 1)[1].split(
-    'bool Sam4lUartSuspendSleep(void)', 1)[0]
+uart_prep = uart_source.split('static bool Sam4lUartWakeArm(void)\n{', 1)[1].split(
+    'static void Sam4lUartWakeDisarm(void)\n{', 1)[0]
 uart_arm = uart_prep.split('s_Sam4lUartSleep.bActive = true;', 1)[1]
 sequence = (
     'dev->pReg->US_IDR = 0xFFFFFFFFU;',
@@ -61,16 +61,19 @@ assert positions == sorted(positions), 'SAM4L PICOUART direct RX handover order'
 assert 'gpio->GPIO_GPERS' not in uart_prep
 assert 'gpio->GPIO_PVR' not in uart_prep
 assert 'gpio->GPIO_STERS' not in uart_prep
-assert uart_arm.count('Sam4lUartResumeSleep();') == 1
+assert uart_arm.count('Sam4lUartWakeDisarm();') == 1
 assert 'atomic_flag_test(&pDev->DevIntrf.bBusy)' in uart_prep
 assert 'SAM4L_PICO_ENABLE_TIMEOUT' in uart_source
 assert 'rejected |= SAM4L_PICO_STALE_DATA;' not in uart_prep
 assert 'SAM4L_PICO_REJECTED | SAM4L_PICO_ARMED_DATA' not in uart_prep
 assert 's_Sam4lUartSleep.Diagnostic |= SAM4L_PICO_ARMED_DATA;' in uart_prep
-uart_resume = uart_source.split('void Sam4lUartResumeSleep(void)\n{', 1)[1].split(
+uart_resume = uart_source.split('static void Sam4lUartWakeDisarm(void)\n{', 1)[1].split(
     'void UARTSetCtrlLineState(', 1)[0]
-assert 'SAM4L_PICO_PREPARED | SAM4L_PICO_PM_WAKE' in uart_resume
-assert 'SAM4L_PICO_PM_CAUSE | SAM4L_PICO_DATA_READY' in uart_resume
+# The PM wake status is acknowledged by SystemSleep before the application
+# releases the wake; the wake cause register identifies PICOUART.
+assert 'SAM4L_PICO_PREPARED | SAM4L_PICO_PM_CAUSE | SAM4L_PICO_DATA_READY' in uart_resume
+enable = uart_source.split('bool UARTEnableWake(UARTDev_t *pDev, bool bEnable)\n{', 1)[1].split('\n}\n', 1)[0]
+assert 'Sam4lUartWakeArm()' in enable and 'Sam4lUartWakeDisarm()' in enable
 print('SAM4L PICOUART direct RX handover and retained-status handling PASS')
 
 # Wake test changes host baud only while the normal USART is active.

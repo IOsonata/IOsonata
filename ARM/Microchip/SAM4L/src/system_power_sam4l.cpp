@@ -62,17 +62,6 @@ static const struct {
 #endif
 };
 
-// Optional UART preparation does not pull the driver into UART-free applications.
-extern bool Sam4lUartPrepareSleep(void) __attribute__((weak));
-extern bool Sam4lUartSuspendSleep(void) __attribute__((weak));
-extern void Sam4lUartResumeSleep(void) __attribute__((weak));
-extern bool Sam4lI2CSuspendSleep(void) __attribute__((weak));
-extern void Sam4lI2CResumeSleep(void) __attribute__((weak));
-extern bool Sam4lSpiSuspendSleep(void) __attribute__((weak));
-extern void Sam4lSpiResumeSleep(void) __attribute__((weak));
-extern bool Sam4lUsbAllowDeepSleep(void) __attribute__((weak));
-extern bool Sam4lTimerClockBusy(uint32_t ClockMask) __attribute__((weak));
-
 static void Sam4lPowerClockEnable(uint32_t Mask)
 {
 	uint32_t value;
@@ -82,37 +71,6 @@ static void Sam4lPowerClockEnable(uint32_t Mask)
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
 			PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
 	SAM4L_PM->PM_PBDMASK = value;
-}
-
-// PDCA is shared by several drivers. Inspect all 16 channels before
-// entering a mode that stops the high-speed bus; never stop or clear DMA
-// channels on behalf of a peripheral.
-static bool Sam4lPdcaAllowDeepSleep(void)
-{
-	bool hsb;
-	bool pbb;
-	unsigned i;
-
-	hsb = (SAM4L_PM->PM_HSBMASK & PM_HSBMASK_PDCA) != 0U;
-	pbb = (SAM4L_PM->PM_PBBMASK & PM_PBBMASK_PDCA) != 0U;
-
-	if (hsb != pbb)
-	{
-		// The channel registers cannot be read safely with one bus gate off.
-		return false;
-	}
-	if (!hsb)
-	{
-		return true;
-	}
-	for (i = 0U; i < 16U; i++)
-	{
-		if ((SAM4L_PDCA->PDCA_CHANNEL[i].PDCA_SR & PDCA_SR_TEN) != 0U)
-		{
-			return false;
-		}
-	}
-	return true;
 }
 
 uint32_t SystemResetReason(void)
@@ -232,146 +190,75 @@ bool SystemWakePin(int PortNo, int PinNo, int Sense)
 	return true;
 }
 
+// RETENTION: the core and the logic are off, RAM and registers are kept.
+// The wake sources are the interrupts the application enabled through the
+// device drivers and that work without the main clock: an EIC pin, the AST
+// timer, the UART receive wake. No device driver is called from here.
 void SystemSleep(void)
 {
 	uint32_t state;
-	uint32_t entryClocks;
 	uint32_t scr;
 	uint32_t clocks;
 	uint32_t pmcon;
-	uint32_t eic;
-	uint32_t tcClocks;
 	uint32_t wakeMask;
 	uint32_t irqEnabled;
 	uint32_t irqPending;
-	uint32_t mode;
 	uint32_t wakeEic;
-	bool ast;
-	bool deep;
-	bool ready;
-	bool slept;
 
 	if (__get_IPSR() != 0U)
 	{
 		return;
 	}
+
 	state = DisableInterrupt();
-	entryClocks = SAM4L_PM->PM_PBDMASK;
-	if (Sam4lUartPrepareSleep != NULL && !Sam4lUartPrepareSleep())
-	{
-		EnableInterrupt(state);
-		return;
-	}
+
 	scr = SCB->SCR;
 	clocks = SAM4L_PM->PM_PBDMASK;
-
 	Sam4lPowerClockEnable(PM_PBDMASK_BPM | PM_PBDMASK_BSCIF | PM_PBDMASK_EIC);
 	pmcon = SAM4L_BPM->BPM_PMCON;
-	eic = SAM4L_EIC->EIC_CTRL & SAM4L_EIC->EIC_IMR & SAM4L_EIC->EIC_ASYNC;
-	ast = (clocks & PM_PBDMASK_AST) != 0U &&
-		(SAM4L_AST->AST_CR & AST_CR_EN) != 0U && SAM4L_AST->AST_WER != 0U;
-	deep = eic != 0U || ast || SAM4L_PM->PM_AWEN != 0U;
-	if (deep)
-	{
-		tcClocks = SAM4L_PM->PM_PBAMASK &
-			(PM_PBAMASK_TC0 | PM_PBAMASK_TC1);
-		ready = Sam4lPdcaAllowDeepSleep() &&
-			(tcClocks == 0U ||
-			 (Sam4lTimerClockBusy != NULL && !Sam4lTimerClockBusy(tcClocks))) &&
-			(Sam4lUsbAllowDeepSleep == NULL || Sam4lUsbAllowDeepSleep()) &&
-			(Sam4lI2CSuspendSleep == NULL || Sam4lI2CSuspendSleep()) &&
-			(Sam4lSpiSuspendSleep == NULL || Sam4lSpiSuspendSleep()) &&
-			(Sam4lUartSuspendSleep == NULL || Sam4lUartSuspendSleep());
-		if (!ready)
-		{
-			if (Sam4lUartResumeSleep != NULL)
-			{
-				Sam4lUartResumeSleep();
-			}
-			if (Sam4lSpiResumeSleep != NULL)
-			{
-				Sam4lSpiResumeSleep();
-			}
-			if (Sam4lI2CResumeSleep != NULL)
-			{
-				Sam4lI2CResumeSleep();
-			}
-			SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
-				PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
-			SAM4L_PM->PM_PBDMASK = entryClocks;
-			EnableInterrupt(state);
-			return;
-		}
-	}
 	wakeMask = SAM4L_PM->PM_IMR & PM_IMR_WAKE;
 	irqEnabled = NVIC_GetEnableIRQ(PM_IRQn);
 	irqPending = NVIC_GetPendingIRQ(PM_IRQn);
-	slept = false;
-	// EIC and AST wake directly. Other asynchronous users require AWEN.
-	// WAIT permits SleepWalking; RETENTION is used for EIC/AST alone.
+
+	// The power mode is changed only with the regulator ready
 	if ((SAM4L_BSCIF->BSCIF_PCLKSR & BSCIF_PCLKSR_VREGOK) != 0U)
 	{
-		mode = pmcon & ~(BPM_PMCON_BKUP | BPM_PMCON_RET | BPM_PMCON_SLEEP_Msk);
-		if (deep && SAM4L_PM->PM_AWEN == 0U)
-		{
-			mode |= BPM_PMCON_RET;
-		}
 		SAM4L_BPM->BPM_UNLOCK = BPM_UNLOCK_KEY(0xaa) |
 			BPM_UNLOCK_ADDR(offsetof(Bpm, BPM_PMCON));
-		SAM4L_BPM->BPM_PMCON = mode;
+		SAM4L_BPM->BPM_PMCON = (pmcon & ~(BPM_PMCON_BKUP | BPM_PMCON_SLEEP_Msk)) |
+			BPM_PMCON_RET;
 		(void)SAM4L_BPM->BPM_PMCON;
-		SCB->SCR = scr & ~(SCB_SCR_SLEEPDEEP_Msk | SCB_SCR_SLEEPONEXIT_Msk);
-		if (deep)
+		SCB->SCR = (scr & ~SCB_SCR_SLEEPONEXIT_Msk) | SCB_SCR_SLEEPDEEP_Msk;
+
+		// SystemWakePin uses level-triggered EIC wake. Its flag can stay set
+		// after the button is released; acknowledge it just before WFI.
+		// Flags of other EIC interrupt handlers are not touched. This goes
+		// away when the wake pin moves to the pin driver.
+		wakeEic = SAM4L_EIC->EIC_CTRL & SAM4L_EIC->EIC_IMR & SAM4L_EIC->EIC_ASYNC &
+			SAM4L_BPM->BPM_BKUPPMUX;
+		if (wakeEic != 0U)
 		{
-			SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
-			// SystemWakePin uses level-triggered EIC wake. An EIC flag
-			// can remain set after the button is released; acknowledge it
-			// immediately before the next WFI, not while the button is
-			// still held after wake (when the level would set it again).
-			// Do not clear flags owned by other EIC interrupt handlers.
-			wakeEic = eic & SAM4L_BPM->BPM_BKUPPMUX;
-			if (wakeEic != 0U)
-			{
-				SAM4L_EIC->EIC_ICR = SAM4L_EIC->EIC_ISR & wakeEic;
-			}
-			if (wakeMask == 0U)
-			{
-				SAM4L_PM->PM_ICR = PM_ICR_WAKE;
-			}
-			SAM4L_PM->PM_IER = PM_IER_WAKE;
-			NVIC_EnableIRQ(PM_IRQn);
+			SAM4L_EIC->EIC_ICR = SAM4L_EIC->EIC_ISR & wakeEic;
 		}
+
+		// The PM wake interrupt brings the core back
+		if (wakeMask == 0U)
+		{
+			SAM4L_PM->PM_ICR = PM_ICR_WAKE;
+		}
+		SAM4L_PM->PM_IER = PM_IER_WAKE;
+		NVIC_EnableIRQ(PM_IRQn);
+
 		__DSB();
 		__WFI();
 		__NOP();
-		slept = true;
+
 		SAM4L_BPM->BPM_UNLOCK = BPM_UNLOCK_KEY(0xaa) |
 			BPM_UNLOCK_ADDR(offsetof(Bpm, BPM_PMCON));
 		SAM4L_BPM->BPM_PMCON = pmcon;
 		(void)SAM4L_BPM->BPM_PMCON;
 		SCB->SCR = scr;
-	}
-	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
-		PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
-	SAM4L_PM->PM_PBDMASK = clocks;
-	__DSB();
-	__ISB();
-	// Collect the PICOUART wake byte before acknowledging the shared PM
-	// WAKE status. All private peripheral state is restored first.
-	if (Sam4lUartResumeSleep != NULL)
-	{
-		Sam4lUartResumeSleep();
-	}
-	if (Sam4lSpiResumeSleep != NULL)
-	{
-		Sam4lSpiResumeSleep();
-	}
-	if (Sam4lI2CResumeSleep != NULL)
-	{
-		Sam4lI2CResumeSleep();
-	}
-	if (slept && deep)
-	{
+
 		if (wakeMask == 0U)
 		{
 			SAM4L_PM->PM_IDR = PM_IDR_WAKE;
@@ -387,7 +274,15 @@ void SystemSleep(void)
 			NVIC_DisableIRQ(PM_IRQn);
 		}
 	}
+
+	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xaa) |
+		PM_UNLOCK_ADDR(offsetof(Pm, PM_PBDMASK));
+	SAM4L_PM->PM_PBDMASK = clocks;
+	__DSB();
+	__ISB();
+
 	(void)SystemCoreClockGet();
+
 	EnableInterrupt(state);
 }
 

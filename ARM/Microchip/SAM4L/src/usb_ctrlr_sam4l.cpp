@@ -134,14 +134,6 @@ typedef struct __Sam4l_Usb_State {
 
 static Sam4lUsbState_t s_Usb;
 
-// The system may enter deep resumable sleep only after the USB controller
-// has stopped. USB suspend is a bus state, not permission to stop USBC
-// clocks or disconnect while the host still owns the session.
-bool Sam4lUsbAllowDeepSleep(void)
-{
-	return !s_Usb.Started && !s_Usb.Closing;
-}
-
 alignas(32) static volatile Sam4lUsbBank_t s_Bank[SAM4L_USB_EP_COUNT][2];
 alignas(4) static uint8_t s_Ep0Buffer[SAM4L_USB_EP0_MPS];
 static_assert(sizeof(Sam4lUsbBank_t) == 16, "USBC bank descriptor stride");

@@ -9,7 +9,7 @@ November 25, 2026.
 | Port | No run time source selection | Clock code reads no device or driver state | `SystemSleep` leaves the drivers alone | Wake source set through the device driver |
 | --- | --- | --- | --- | --- |
 | SAM D11, SAM D21 | Yes | Yes | Yes | Yes |
-| SAM4L | No | No | No | No |
+| SAM4L | No | No | Yes, not run on hardware | No |
 | SAM4E | No | No | Not reviewed | No |
 | Nordic | No | No | Not reviewed | No |
 | ST | No | Not reviewed | Not reviewed | No |
@@ -48,7 +48,7 @@ false on these ports.
 | Family | Resumable sleep and seconds delay | System OFF | Running CPU mode |
 | --- | --- | --- | --- |
 | SAM D11/D21 | Standby with RTC or configured EIC wake. The seconds delay borrows an unassigned RTC. | Unavailable | Divides the CPU and APB clocks by two. Peripheral generic-clock frequencies are preserved. |
-| SAM4L | SLEEP0, WAIT or RETENTION according to the wake source. The seconds delay borrows an unassigned AST. | Backup with wake pins and backup registers | Changes synchronous dividers together. Active peripherals can refuse the change. |
+| SAM4L | RETENTION. Wake by an EIC pin, the AST timer or the UART receive wake armed with `UARTEnableWake`. The seconds delay borrows an unassigned AST. | Backup with wake pins and backup registers | Changes synchronous dividers together. Active peripherals can refuse the change. |
 | SAM4E | CPU sleep keeps TC and MCK running for interrupt wake. A nonzero seconds delay is unavailable because the Timer driver exposes TC channels only. | Backup with wake pins and backup registers | Changes the MCK prescaler when peripheral clock users permit it. |
 
 Arm GCC linked CoreClockTest and CorePowerTest in Debug and Release for
