@@ -226,11 +226,13 @@ settings. IrDA, half duplex, 9-bit and mark or space parity are rejected.
 
 DMA: `bDMAMode` of the UART and `bDmaEn` of an SPI or I2C master take DMAC
 channels at init, which fails when the channels are not free (12 on SAM
-D21, 6 on SAM D11). The polling and interrupt modes stay as without DMA:
-without `bIntMode` or `bIntEn` the CPU waits for a DMA transfer or serves it
-from the next call, with it the DMAC interrupt ends the transfer. The DMAC
-interrupt has the most urgent priority of the drivers using it. PowerOff
-gives the channels back: transfers return 0 until the next init.
+D21, 6 on SAM D11). The polling and interrupt modes stay as without DMA.
+UART: without `bIntMode` the CPU serves a DMA transfer from the next call,
+with it the DMAC interrupt ends the transfer. SPI and I2C master: the CPU
+waits for the end of a DMA transfer in both modes, with `bIntEn` for the
+DMAC interrupt. The DMAC interrupt has the most urgent priority of the
+drivers using it. PowerOff gives the channels back: transfers return 0
+until the next init.
 
 - UART, one channel on the TX trigger (DRE): the CPU writes what DATA
   takes, the channel sends the rest of the TX CFIFO in blocks of up to half
@@ -332,8 +334,8 @@ drive: PA14, PA15, PA22 and PA23 on SAM D11; PA08, PA09, PA12, PA13, PA16,
 PA17, PA22, PA23, PB12, PB13, PB16, PB17, PB30 and PB31 on SAM D21J. The SCL
 rate is set from the main clock for an assumed 215 ns rise time, from about
 90 kHz to 1 MHz, with the low and high times of the I2C mode minimums.
-Interrupt master transfers return -1 and complete with
-`DEVINTRF_EVT_COMPLETED`; the command phase of `Read` is sent by polling.
+A master transfer is synchronous in every mode, see the SPI and I2C master
+note below.
 A new START waits for the bus to be idle, after the STOP of the previous
 transfer, up to about 15 ms. Past that, or after a polling transfer timeout,
 the SERCOM is disabled and enabled again with its settings and the bus
@@ -342,7 +344,8 @@ arbitration loss the bus stays busy until the other master's STOP.
 The slave answers one address.
 
 SPI: 4-wire, 8-bit, SCK from 93.75 kHz to 24 MHz, master chip selects on GPIO
-pins. The slave frames a transfer with its hardware SS pad;
+pins. A master transfer is synchronous in every mode, see below. The slave
+frames a transfer with its hardware SS pad;
 `DEVINTRF_EVT_STATECHG` before each frame lets the handler set the buffers,
 and the first byte is loaded while SS is high. The slave resets its SERCOM
 when SS goes high to drop the bytes loaded ahead, which takes a few
@@ -350,6 +353,15 @@ microseconds before the next frame. A byte written to DATA clears the end of
 frame flag (TXC): after such a write the slave reads the SS pin, and a high
 SS once SS went low in the frame (SSL flag) or a byte was received is also
 the end of the frame.
+
+SPI and I2C master: `TxData` and `RxData` return the count of bytes moved
+when the transfer is done, with or without `bIntEn` and DMA. With `bIntEn`
+each wait of the transfer, for a SERCOM flag or for the end of a DMA block,
+waits for the SERCOM or DMAC interrupt; the handler masks the interrupt and
+tells the wait, which reads the flags as in polling mode. The master reports
+no `DEVINTRF_EVT_COMPLETED`. The application sets the interrupt priority: a
+transfer is not called from an interrupt handler of the same or a higher
+priority than the SERCOM and the DMAC.
 
 ADC: `AdcSamd` of `adc_samd.h`, the notes of that header give the inputs,
 references, gains and timing. A channel is converted alone with its own
@@ -587,6 +599,20 @@ channel enable, moves one beat per SERCOM request (DRE or RXC of the USART
 and SPI, MB or SB of the I2C master), writes the descriptor back at the end
 of the block and at a disable, and sets TCMPL with BLOCKACT INT; the SPI
 master model takes a DATA write while a byte shifts (double buffer).
+
+The I2CMasterSlave, SPIMasterSlave and DMA test rows above were run with the
+earlier master drivers, which completed an interrupt transfer from the
+handler. The synchronous master transfers (Nov. 26, 2026) were checked with
+`tests/samd/run_master_irq.py`: the I2C, SPI and DMAC drivers built for SAM
+D21 at -O1 and -Os, run in unicorn with a SERCOM and DMAC register model, in
+the four master modes. I2C: transmit, receive of 1, 2 and 33 bytes, register
+read with a repeated START, combined write, address refused, refused bytes,
+a bus error in a DMA block. SPI: transmit and receive up to 300 bytes,
+command and read, a receive overflow in a DMA block. In interrupt mode, a
+flag or a block end whose interrupt is held off does not end the wait, and
+the handler leaves the interrupt masked. Each of 12 changes to the waits and
+handlers makes the check fail. `tests/samd/run_spi.py` checks the SPI mode
+selection and lifecycle on the host. Not run on hardware yet.
 
 Separate timer tests on the SAM D21 model, the RTC compared with a TC: the
 count read after single triggers and after disabling a trigger, single

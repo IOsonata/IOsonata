@@ -13,4 +13,6 @@ SPI defaults to polling; `DISPLAY_SPI_INT_ENABLE` and
 `DISPLAY_SPI_DMA_ENABLE` select the other transfer modes.
 Maintainer hardware validation passed with all four interrupt/DMA combinations:
 polling, interrupt only, DMA only, and interrupt with DMA. The display console
-and syslog counter worked in each configuration.
+and syslog counter worked in each configuration. That run used the earlier
+SPI master driver; the synchronous master transfers of Nov. 26, 2026 are not
+run on hardware yet.

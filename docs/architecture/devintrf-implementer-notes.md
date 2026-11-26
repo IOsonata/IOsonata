@@ -164,7 +164,7 @@ per commit and removed from this list as they are done.
 | Nordic | `i2c_nrfx.cpp`: done | `spi_nrfx.cpp`: done |
 | ST | `i2c_stm32v2.cpp`: 64 byte copy, state flags | `spi_stm32.cpp`: 256 byte copy, state flags |
 | Microchip SAM4L | `i2c_sam4l.cpp`: done | `spi_sam4l.cpp`: 256 byte copy, state flag |
-| Microchip SAM D | `i2c_samd.cpp`: shared copy, state enum | `spi_samd.cpp`: shared copy |
+| Microchip SAM D | `i2c_samd.cpp`: done | `spi_samd.cpp`: done |
 | Renesas RA4M1 | `i2c_ra4m1.cpp`: 64 byte copy, state flags | `spi_ra4m1.cpp`: state flag |
 | Renesas R9A02 | `i2c_r9a02.cpp`: copy, state flags | `spi_r9a02.cpp`: state flag |
 | NXP LPC546xx | `i2c_lpc546xx.cpp`: 64 byte copy, state flags | `spi_lpc546xx.cpp`: 64 byte copy, state flags |
