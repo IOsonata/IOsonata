@@ -66,5 +66,6 @@ SOFTWARE.
 // Keep the 100 ms calibration sample within one 16-bit TC period.
 #define CORE_CLOCK_TEST_HF_TIMER_FREQ 250000U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
+#define CORE_CLOCK_TEST_DELAY_CALIBRATION 0
 
 #endif // __BOARD_H__
