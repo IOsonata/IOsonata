@@ -203,6 +203,14 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *p
 
 	int count = DeviceIntrfTx(pDev, DevAddr, d, txlen);
 
+	if (count < 0 && (pDev->Type == DEVINTRF_TYPE_I2C || pDev->Type == DEVINTRF_TYPE_SPI))
+	{
+		// Interrupt driven transmit. The driver sends from d, which is on
+		// this stack: wait for the end of it. The iteration budget follows
+		// the length, a transfer has no fixed maximum size.
+		DeviceIntrfWaitTxComplete(pDev, txlen > 20000 ? INT32_MAX : txlen * 100000);
+	}
+
 	return count >= AdCmdLen ? count - AdCmdLen : 0;
 }
 
