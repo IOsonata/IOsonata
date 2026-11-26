@@ -8,10 +8,13 @@ one I2CDev_t API and selects the matching register block from I2CCfg_t::Mode.
 
 Master mode supports polling, interrupt-driven, and PDCA-backed transfers,
 7-bit and 10-bit addressing, transfer lengths beyond the 8-bit NBYTES field,
-and the write/repeated-start/read sequence used by DeviceIntrfRead(). Interrupt
-driven transfers use the caller's buffer, which must stay valid until the
-completion: the driver keeps the pointer and the remaining count and continues
-from them at each interrupt. The register read of DeviceIntrfRead() is polled.
+and the write/repeated-start/read sequence used by DeviceIntrfRead(). Master
+transfers are synchronous: TxData and RxData return the number of bytes moved,
+with or without bIntEn. bIntEn only changes how the driver waits for a status
+flag: the wait enables the interrupt of that flag, the interrupt handler masks
+the master interrupts and tells the wait, which then reads the status as in
+polling mode. A transfer must not be called from an interrupt handler of the
+same or a higher priority than the TWIM.
 
 Slave mode is interrupt driven, with optional PDCA data movement. The TWIS
 address-match clock stretching is used so application callbacks can install the
@@ -86,15 +89,6 @@ SOFTWARE.
 #define SAM4L_TWIM_ERROR_IRQ_MASK \
 	(TWIM_IER_ANAK | TWIM_IER_DNAK | TWIM_IER_ARBLST | TWIM_IER_TOUT | TWIM_IER_PECERR)
 
-#define SAM4L_TWIM_TX_IRQ_MASK \
-	(TWIM_IER_TXRDY | TWIM_IER_CCOMP | SAM4L_TWIM_ERROR_IRQ_MASK)
-
-#define SAM4L_TWIM_RX_IRQ_MASK \
-	(TWIM_IER_RXRDY | TWIM_IER_CCOMP | SAM4L_TWIM_ERROR_IRQ_MASK)
-
-#define SAM4L_TWIM_DMA_IRQ_MASK \
-	(TWIM_IER_CCOMP | SAM4L_TWIM_ERROR_IRQ_MASK)
-
 #define SAM4L_TWIS_ERROR_MASK \
 	(TWIS_SR_URUN | TWIS_SR_ORUN | TWIS_SR_SMBTOUT | TWIS_SR_SMBPECERR | TWIS_SR_BUSERR)
 
@@ -127,6 +121,7 @@ typedef struct {
 	bool CombinedRead;
 	int SrLen;
 	bool TenBitReadReady;
+	volatile bool bIrq;		// Master interrupt came, cleared by the wait
 
 	int SlaveRxCount;
 	int SlaveTxCount;
@@ -274,6 +269,22 @@ static void Sam4lI2CPdcaStop(SAM4L_I2CDEV *dev)
 	tx->PDCA_IDR = 0xFFFFFFFFU;
 }
 
+// Master with bIntEn: wait for the interrupt of the status flags Mask or of
+// an error instead of reading the status in a loop. The handler masks the
+// master interrupts and sets bIrq, it does not clear the flags: the caller
+// reads them as in polling mode. A flag already set raises the interrupt as
+// soon as it is enabled.
+static void Sam4lI2CMasterWaitIrq(SAM4L_I2CDEV *dev, uint32_t Mask, uint32_t *pTimeout)
+{
+	dev->bIrq = false;
+	dev->pMReg->TWIM_IER = Mask | SAM4L_TWIM_ERROR_IRQ_MASK;
+
+	while (dev->bIrq == false && *pTimeout > 1U)
+	{
+		--*pTimeout;
+	}
+}
+
 static bool Sam4lI2CPdcaWait(SAM4L_I2CDEV *dev, PdcaChannel *chan)
 {
 	uint32_t timeout = SAM4L_I2C_WAIT_COUNT;
@@ -298,6 +309,10 @@ static bool Sam4lI2CPdcaWait(SAM4L_I2CDEV *dev, PdcaChannel *chan)
 
 		if (chan->PDCA_TCR == 0U)
 			return true;
+
+		// The command completes after the last byte the PDCA moves
+		if (dev->pI2cDev->DevIntrf.bIntEn)
+			Sam4lI2CMasterWaitIrq(dev, TWIM_SR_CCOMP, &timeout);
 	} while (--timeout != 0U);
 
 	chan->PDCA_CR = PDCA_CR_TDIS;
@@ -489,6 +504,9 @@ static bool Sam4lI2CMasterWait(SAM4L_I2CDEV *dev, uint32_t Mask)
 		}
 		if ((sr & Mask) == Mask)
 			return true;
+
+		if (dev->pI2cDev->DevIntrf.bIntEn)
+			Sam4lI2CMasterWaitIrq(dev, Mask, &timeout);
 	} while (--timeout != 0U);
 
 	Sam4lI2CMasterRecover(dev);
@@ -569,20 +587,14 @@ static bool Sam4lI2CMasterStartRxChunk(SAM4L_I2CDEV *dev)
 		dev->NeedStart, stop, ackLast, repSame);
 
 	dev->ChunkRemain = chunk;
-	dev->ChunkTotal = chunk;
 	dev->NeedStart = false;
 	Sam4lI2CMasterIssue(dev, cmd);
 	return true;
 }
 
-// Address command of a 10-bit read: a write direction command with no data.
-// A command with no data is how the interrupt handler knows it.
 static bool Sam4lI2CMasterStartRxPreamble(SAM4L_I2CDEV *dev)
 {
 	const uint32_t cmd = Sam4lI2CMasterCommand(dev, false, 0, true, false, false, false);
-
-	dev->ChunkRemain = 0;
-	dev->ChunkTotal = 0;
 	Sam4lI2CMasterIssue(dev, cmd);
 	return true;
 }
@@ -695,27 +707,6 @@ static int Sam4lI2CMasterTxDma(DevIntrf_t * const pDev,
 	const uint8_t *pData, int DataLen)
 {
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
-
-	if (pDev->bIntEn && !pDev->bNoStop)
-	{
-		// The interrupt handler sends from the caller's buffer, block after
-		// block. It must stay valid until the completion.
-		dev->pTxData = pData;
-		dev->TxRemain = DataLen;
-		dev->RxRemain = 0;
-		dev->TxCount = 0;
-		pDev->bTxReady = false;
-		if (!Sam4lI2CMasterStartTxDmaChunk(dev))
-		{
-			pDev->bTxReady = true;
-			return 0;
-		}
-
-		dev->pMReg->TWIM_IER = SAM4L_TWIM_DMA_IRQ_MASK;
-		return -1;
-	}
-
-	// A transfer that keeps the bus for a following receive is synchronous.
 	dev->pTxData = pData;
 	dev->TxRemain = DataLen;
 	dev->TxCount = 0;
@@ -741,30 +732,6 @@ static int Sam4lI2CMasterTxDma(DevIntrf_t * const pDev,
 	dev->BusHeld = pDev->bNoStop && !dev->LastError;
 	return dev->TxCount;
 }
-static int Sam4lI2CMasterTxAsync(DevIntrf_t * const pDev,
-	const uint8_t *pData, int DataLen)
-{
-	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
-
-	// The interrupt handler sends from the caller's buffer, which must stay
-	// valid until the completion.
-	dev->pTxData = pData;
-	dev->TxRemain = DataLen;
-	dev->RxRemain = 0;
-	dev->TxCount = 0;
-	pDev->bTxReady = false;
-
-	if (!Sam4lI2CMasterStartTxChunk(dev))
-	{
-		dev->TxRemain = 0;
-		pDev->bTxReady = true;
-		return 0;
-	}
-
-	dev->pMReg->TWIM_IER = SAM4L_TWIM_TX_IRQ_MASK;
-	return -1;
-}
-
 static int Sam4lI2CTxData(DevIntrf_t * const pDev,
 	const uint8_t *pData, int DataLen)
 {
@@ -775,11 +742,8 @@ static int Sam4lI2CTxData(DevIntrf_t * const pDev,
 	if (dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER)
 		return 0;
 
-	if (pDev->bDma)
-		return Sam4lI2CMasterTxDma(pDev, pData, DataLen);
-
-	return pDev->bIntEn ?
-		Sam4lI2CMasterTxAsync(pDev, pData, DataLen) :
+	return pDev->bDma ?
+		Sam4lI2CMasterTxDma(pDev, pData, DataLen) :
 		Sam4lI2CMasterTxPolling(pDev, pData, DataLen);
 }
 
@@ -946,7 +910,6 @@ static int Sam4lI2CMasterReadCombinedPolling(DevIntrf_t * const pDev,
 	dev->pRxData = pBuff;
 	dev->RxRemain = BuffLen;
 	dev->RxCount = 0;
-	dev->TxRemain = 0;
 
 	// Polling owns the peripheral while the connected transfer is active.
 	reg->TWIM_IDR = 0xFFFFFFFFU;
@@ -1029,7 +992,6 @@ static int Sam4lI2CMasterRxPolling(DevIntrf_t * const pDev,
 	dev->pRxData = pBuff;
 	dev->RxRemain = BuffLen;
 	dev->RxCount = 0;
-	dev->TxRemain = 0;
 
 	if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
 	{
@@ -1074,21 +1036,6 @@ static int Sam4lI2CMasterRxDma(DevIntrf_t * const pDev,
 	dev->pRxData = pBuff;
 	dev->RxRemain = BuffLen;
 	dev->RxCount = 0;
-	dev->TxRemain = 0;
-
-	if (pDev->bIntEn)
-	{
-		if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
-		{
-			Sam4lI2CMasterStartRxPreamble(dev);
-		}
-		else
-		{
-			Sam4lI2CMasterStartRxDmaChunk(dev);
-		}
-		dev->pMReg->TWIM_IER = SAM4L_TWIM_DMA_IRQ_MASK;
-		return -1;
-	}
 
 	if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
 	{
@@ -1121,31 +1068,6 @@ static int Sam4lI2CMasterRxDma(DevIntrf_t * const pDev,
 	dev->BusHeld = pDev->bNoStop && !dev->LastError;
 	return dev->RxCount;
 }
-static int Sam4lI2CMasterRxAsync(DevIntrf_t * const pDev,
-	uint8_t *pBuff, int BuffLen)
-{
-	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
-	if (dev->LastError)
-		return 0;
-
-	dev->pRxData = pBuff;
-	dev->RxRemain = BuffLen;
-	dev->RxCount = 0;
-	dev->TxRemain = 0;
-
-	if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
-	{
-		Sam4lI2CMasterStartRxPreamble(dev);
-	}
-	else
-	{
-		Sam4lI2CMasterStartRxChunk(dev);
-	}
-
-	dev->pMReg->TWIM_IER = SAM4L_TWIM_RX_IRQ_MASK;
-	return -1;
-}
-
 static int Sam4lI2CRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	if (pBuff == nullptr || BuffLen <= 0)
@@ -1160,11 +1082,8 @@ static int Sam4lI2CRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 			Sam4lI2CMasterReadCombinedDma(pDev, pBuff, BuffLen) :
 			Sam4lI2CMasterReadCombinedPolling(pDev, pBuff, BuffLen);
 
-	if (pDev->bDma)
-		return Sam4lI2CMasterRxDma(pDev, pBuff, BuffLen);
-
-	return pDev->bIntEn ?
-		Sam4lI2CMasterRxAsync(pDev, pBuff, BuffLen) :
+	return pDev->bDma ?
+		Sam4lI2CMasterRxDma(pDev, pBuff, BuffLen) :
 		Sam4lI2CMasterRxPolling(pDev, pBuff, BuffLen);
 }
 
@@ -1187,155 +1106,13 @@ static void Sam4lI2CStopRx(DevIntrf_t * const pDev)
 	Sam4lI2CStopTx(pDev);
 }
 
-// The interrupt driven master transfer ended. The transmit count or the
-// receive count is not zero while a transfer runs, which also gives its
-// direction; both are cleared here. Release the bus through the generic
-// helpers, then report: DEVINTRF_EVT_TX_READY when everything given has gone
-// out, DEVINTRF_EVT_COMPLETED when the transfer is closed. A transmit that
-// keeps the bus (bNoStop) reports only the first.
-static void Sam4lI2CMasterAsyncComplete(SAM4L_I2CDEV *dev, bool bTx)
-{
-	DevIntrf_t *intrf = &dev->pI2cDev->DevIntrf;
-	const int count = bTx ? dev->TxCount : dev->RxCount;
-
-	dev->pMReg->TWIM_IDR = 0xFFFFFFFFU;
-	dev->TxRemain = 0;
-	dev->RxRemain = 0;
-	dev->BusHeld = intrf->bNoStop && !dev->LastError;
-
-	if (bTx)
-	{
-		const bool keep = intrf->bNoStop;
-
-		// Sets bTxReady, and closes the transfer unless the bus is kept
-		DeviceIntrfTxComplete(intrf);
-
-		if (intrf->EvtCB)
-		{
-			intrf->EvtCB(intrf, DEVINTRF_EVT_TX_READY, nullptr, count);
-			if (!keep)
-				intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
-		}
-	}
-	else
-	{
-		DeviceIntrfStopRx(intrf);
-		if (intrf->EvtCB)
-			intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
-	}
-}
-
-// Master interrupt. The TWIM interrupts are enabled only while an interrupt
-// driven transfer runs. The handler acts on the status flags: TXRDY and RXRDY
-// move one byte of the caller's buffer, CCOMP ends a command, the error flags
-// end the transfer. The remaining counts are reduced by a whole command when
-// it completes, so the count of the running direction stays above zero until
-// then.
+// Master interrupt. A transfer waits for it in Sam4lI2CMasterWaitIrq: mask the
+// master interrupts and tell the wait. The status flags are left as they are,
+// the wait reads them.
 static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 {
-	Twim *reg = dev->pMReg;
-	const uint32_t sr = reg->TWIM_SR;
-	const uint32_t pending = sr & reg->TWIM_IMR;
-	const bool tx = dev->TxRemain > 0;
-	const bool dma = dev->pI2cDev->DevIntrf.bDma;
-
-	if ((sr & SAM4L_TWIM_ERROR_MASK) != 0U)
-	{
-		// Resets the TWIM and keeps the error for the following calls
-		Sam4lI2CMasterRecover(dev);
-		Sam4lI2CMasterAsyncComplete(dev, tx);
-		return;
-	}
-
-	if ((pending & TWIM_SR_TXRDY) != 0U && tx && dev->ChunkRemain > 0)
-	{
-		reg->TWIM_THR = *dev->pTxData++;
-		--dev->ChunkRemain;
-		if (dev->ChunkRemain == 0)
-			reg->TWIM_IDR = TWIM_IDR_TXRDY;
-	}
-
-	if ((pending & TWIM_SR_RXRDY) != 0U && !tx && dev->ChunkRemain > 0)
-	{
-		*dev->pRxData++ = (uint8_t)reg->TWIM_RHR;
-		--dev->ChunkRemain;
-		++dev->RxCount;
-	}
-
-	if ((pending & TWIM_SR_CCOMP) == 0U)
-		return;
-
-	reg->TWIM_SCR = TWIM_SCR_CCOMP;
-
-	if (tx)
-	{
-		if (dma)
-		{
-			PdcaChannel *chan = Sam4lI2CPdcaTxChannel(dev);
-			if (chan->PDCA_TCR != 0U)
-			{
-				Sam4lI2CMasterRecover(dev);
-				Sam4lI2CMasterAsyncComplete(dev, true);
-				return;
-			}
-			chan->PDCA_CR = PDCA_CR_TDIS;
-			dev->pTxData += dev->ChunkTotal;
-		}
-
-		dev->TxRemain -= dev->ChunkTotal;
-		dev->TxCount += dev->ChunkTotal;
-		if (dev->TxRemain > 0)
-		{
-			if (dma)
-				Sam4lI2CMasterStartTxDmaChunk(dev);
-			else
-			{
-				Sam4lI2CMasterStartTxChunk(dev);
-				reg->TWIM_IER = TWIM_IER_TXRDY;
-			}
-			return;
-		}
-		Sam4lI2CMasterAsyncComplete(dev, true);
-		return;
-	}
-
-	if (dev->RxRemain <= 0)
-		return;
-
-	if (dev->ChunkTotal == 0)
-	{
-		// The address command of a 10-bit read is out, start the read
-		dev->BusHeld = true;
-		dev->NeedStart = true;
-		dev->TenBitReadReady = true;
-	}
-	else
-	{
-		if (dma)
-		{
-			PdcaChannel *chan = Sam4lI2CPdcaRxChannel(dev);
-			if (chan->PDCA_TCR != 0U)
-			{
-				Sam4lI2CMasterRecover(dev);
-				Sam4lI2CMasterAsyncComplete(dev, false);
-				return;
-			}
-			chan->PDCA_CR = PDCA_CR_TDIS;
-			dev->pRxData += dev->ChunkTotal;
-			dev->RxCount += dev->ChunkTotal;
-		}
-		dev->RxRemain -= dev->ChunkTotal;
-	}
-
-	if (dev->RxRemain > 0)
-	{
-		if (dma)
-			Sam4lI2CMasterStartRxDmaChunk(dev);
-		else
-			Sam4lI2CMasterStartRxChunk(dev);
-		return;
-	}
-	Sam4lI2CMasterAsyncComplete(dev, false);
+	dev->pMReg->TWIM_IDR = 0xFFFFFFFFU;
+	dev->bIrq = true;
 }
 
 static int Sam4lI2CSlaveRxDmaCount(SAM4L_I2CDEV *dev)
@@ -1846,6 +1623,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	dev->LastError = false;
 	dev->CommandPhase = false;
 	dev->TenBitReadReady = false;
+	dev->bIrq = false;
 	dev->SlaveRxCount = 0;
 	dev->SlaveTxCount = 0;
 	dev->SlaveTxLoaded = 0;

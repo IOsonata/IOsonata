@@ -170,16 +170,24 @@ skipped. These builds do not establish hardware validation.
 ## I2C master interrupt check
 
 ```sh
-python3 tests/sam4l/run_i2c_irq.py
+python3 tests/sam4l/run_i2c_irq.py [--cxx arm-none-eabi-g++]
 ```
 
-`i2c_irq_test.cpp` compiles the production `i2c_sam4l.cpp` against register
-blocks in host memory and plays the TWIM: it sets the status flags, calls the
-interrupt handler and looks at the commands and bytes the driver wrote. It
-covers interrupt driven transmit and receive from the caller's buffer over one
-and several commands (up to 600 bytes), a 10-bit read with its address command,
-an address and a data NACK followed by a new transfer, the
-`DEVINTRF_EVT_TX_READY` and `DEVINTRF_EVT_COMPLETED` reports, and the polled
-register read taking its command bytes from the caller's pointer. It builds at
-`-O0` and `-O2` with ASan and UBSan. The PDCA paths and bus timing are not
-modelled; this is not hardware validation.
+`i2c_irq_fixture.cpp` builds the production `i2c_sam4l.cpp` and
+`device_intrf.cpp` for the SAM4L at `-O1` and `-Os`; `run_i2c_irq.py` runs it
+in an Arm emulator (Python packages `unicorn` and `pyelftools`) with a TWIM and
+PDCA register model: a command, THR, RHR, the status, interrupt and clear
+registers, and the PDCA moving bytes to THR and from RHR. A master transfer is
+synchronous and waits; each time the firmware has run for a while without
+returning, the model takes the next TWIM or PDCA step and runs the TWIM
+interrupt handler when an enabled status flag is set.
+
+It covers, with interrupt and with interrupt and PDCA: transmit and receive
+from the caller's buffer over one and several commands (up to 600 bytes),
+with START, STOP and ACKLAST on the right commands; a 10-bit read with its
+address command; the register read of `DeviceIntrfRead()` with the read queued
+in NCMDR; the combined write of `DeviceIntrfWrite()`; an address NACK followed
+by a new transfer; a status flag whose interrupt is held off, which does not
+end the wait, the transfer ends on its time limit; no event reported by the
+master, and the interrupts masked after each transfer. It also runs polled
+transfers. Bus timing is not modelled; this is not hardware validation.
