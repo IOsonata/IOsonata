@@ -55,6 +55,7 @@ static uint8_t s_Rx[70000], s_Tx[800];
 static SPI s_Spi;
 static CamArducamMega s_Camera;
 static bool s_CameraMode;
+static bool s_DeferCameraRx;
 static uint8_t s_CameraReg;
 static int s_CameraOffset;
 void usDelay(uint32_t) {}
@@ -121,6 +122,10 @@ void TestTask::operator=(uint32_t value)
 	++s_Blocks;
 	s_LastPtr = r.RXD.MAXCNT ? r.RXD.PTR : r.TXD.PTR;
 	r.RXD.AMOUNT = r.TXD.AMOUNT = 0;
+	if (s_CameraMode && s_DeferCameraRx && r.RXD.MAXCNT)
+	{
+		return;
+	}
 	if ((s_Poll || s_AutoIrq) && !s_Timeout)
 	{
 		Complete();
@@ -143,10 +148,10 @@ static int Event(DevIntrf_t *dev, DEVINTRF_EVT event, uint8_t *buffer, int count
 		return 0;
 	}
 	++s_Events; s_Event = event; s_Buffer = buffer; s_Count = count;
-	// The transfer is reported from the interrupt. The chip select and the
-	// busy flag are released by the caller of the transfer after it returns.
-	assert(!g_CsHigh);
-	assert(!DeviceIntrfStartTx(dev, 0));
+	assert(g_CsHigh);
+	// Generic completion must release serialization before calling the client.
+	assert(DeviceIntrfStartTx(dev, 0));
+	DeviceIntrfStopTx(dev);
 	return 0;
 }
 
@@ -183,50 +188,51 @@ int main()
 	for (unsigned i = 0; i < sizeof(s_Tx); ++i)
 		s_Tx[i] = i;
 
-	// An interrupt driven transfer waits for its interrupt and returns its
-	// count, as a polled one. The model raises the interrupt of the actual
-	// dedicated vector when a block is started.
-	s_AutoIrq = true;
-
-	// TX is sent from the caller's buffer
-	assert(s_Spi.Tx(0, s_Tx, 64) == 64);
-	assert(g_CsHigh && g_Regs[4].TXD.MAXCNT == 64);
+	// Async TX is sent from the caller's buffer and completes through the
+	// actual dedicated vector.
+	assert(s_Spi.Tx(0, s_Tx, 64) == -1);
+	assert(!g_CsHigh && g_Regs[4].TXD.MAXCNT == 64);
 	assert(g_Regs[4].TXD.PTR == (uintptr_t)s_Tx);
+	Complete(); SPIM4_IRQHandler();
 	assert(s_Events == 1 && s_Count == 64 && s_Event == DEVINTRF_EVT_COMPLETED);
-	assert(s_TxReady == 1 && intrf->bTxReady);
 	SPIM4_IRQHandler(); assert(s_Events == 1);
 
 	// More than one 16-bit EasyDMA block; buffer address advances explicitly.
-	assert(s_Spi.Rx(0, s_Rx, sizeof(s_Rx)) == sizeof(s_Rx));
-	assert(g_CsHigh && s_Blocks == 3);
-	assert(g_Regs[4].RXD.PTR == (uintptr_t)s_Rx + 65535 && g_Regs[4].RXD.LIST == 0);
+	assert(s_Spi.Rx(0, s_Rx, sizeof(s_Rx)) == -1);
+	assert(g_Regs[4].RXD.MAXCNT == 65535 && g_Regs[4].RXD.LIST == 0);
+	Complete(); SPIM4_IRQHandler();
+	assert(s_Events == 1 && g_Regs[4].RXD.PTR == (uintptr_t)s_Rx + 65535);
 	assert(g_Regs[4].RXD.MAXCNT == sizeof(s_Rx) - 65535);
+	Complete(); SPIM4_IRQHandler();
 	assert(s_Events == 2 && s_Buffer == s_Rx && s_Count == sizeof(s_Rx));
 	assert(s_Rx[0] == 0x5a && s_Rx[69999] == 0x5a);
 
-	// The command phase keeps CS and the generic transaction lock.
+	// Command-phase completion retains CS and the generic transaction lock.
 	assert(s_Spi.StartTx(0)); intrf->bNoStop = true;
-	assert(s_Spi.TxData(s_Tx, 2) == 2);
+	s_AutoIrq = true;
+	assert(s_Spi.TxData(s_Tx, 2) == -1);
+	s_AutoIrq = false;
 	assert(!g_CsHigh && intrf->bTxReady && s_Events == 2);
 	intrf->bNoStop = false;
 	assert(intrf->StartRx(intrf, 0));
-	assert(s_Spi.RxData(s_Rx, 3) == 3);
-	assert(!g_CsHigh && s_Events == 3);
-	s_Spi.StopRx();
-	assert(g_CsHigh);
+	assert(s_Spi.RxData(s_Rx, 3) == -1);
+	Complete(); SPIM4_IRQHandler(); assert(s_Events == 3);
 
-	int events = s_Events;
-	assert(s_Spi.Tx(0, s_Tx, sizeof(s_Tx)) == sizeof(s_Tx));
-	assert(g_Regs[4].TXD.PTR == (uintptr_t)s_Tx);
-	assert(s_Events == events + 1 && s_Count == sizeof(s_Tx) && g_CsHigh);
-
-	// No interrupt: the transfer ends on the time limit of the driver and the
-	// bus can be used again.
-	s_AutoIrq = false;
-	assert(s_Spi.Tx(0, s_Tx, 16) == 0 && g_CsHigh);
 	s_AutoIrq = true;
-	assert(s_Spi.Tx(0, s_Tx, 16) == 16 && g_CsHigh);
+	int events = s_Events;
+	assert(s_Spi.Tx(0, s_Tx, sizeof(s_Tx)) == -1);
+	assert(s_Events == events + 1 && s_Count == sizeof(s_Tx));
 	s_AutoIrq = false;
+
+	// Long async TX is sent from the caller's buffer, block after block.
+	events = s_Events;
+	assert(s_Spi.Tx(0, s_Tx, sizeof(s_Tx)) == -1);
+	assert(g_Regs[4].TXD.PTR == (uintptr_t)s_Tx && s_Events == events);
+	while (s_Events == events)
+	{
+		Complete(); SPIM4_IRQHandler();
+	}
+	assert(s_Count == sizeof(s_Tx) && g_CsHigh);
 
 	cfg = Config(false); assert(s_Spi.Init(cfg)); s_Poll = true;
 	s_Blocks = 0;
@@ -290,8 +296,17 @@ int main()
 	assert(s_Camera.ReadFrameAsync(s_Rx, 976) == 700);
 	assert(g_CsHigh && s_Camera.ReadFrameComplete() == 0);
 	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
-	// A transfer of this driver has ended when it returns: the frame read
-	// does not stay pending, with or without interrupt.
+	assert(s_Camera.Start() && s_Camera.UpdateData());
+	s_CameraOffset = 0;
+	s_DeferCameraRx = true;
+	assert(s_Camera.ReadFrameAsync(s_Rx, 976) == -1);
+	assert(!g_CsHigh && s_CameraOffset == 0);
+	assert(s_Camera.ReadFrameComplete() == -1);
+	s_DeferCameraRx = false;
+	Complete();
+	SPIM4_IRQHandler();
+	assert(g_CsHigh && s_Camera.ReadFrameComplete() == 700);
+	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
 	s_CameraMode = false;
 	s_AutoIrq = false;
 	cfg = Config(false); cfg.DevNo = 5; cfg.Phy = SPIPHY_QUAD_SDR;
