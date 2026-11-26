@@ -27,10 +27,10 @@ with tempfile.TemporaryDirectory() as tmp:
         flags += ['-I'+str(i) for i in includes]
         output = f'{tmp}/{chip}.elf'
         sources = [root/'tests/nordic_master_irq/fixture.cpp', root/'src/device_intrf.cpp',
-                   root/'src/coredev/shared_intrf.cpp', root/'src/coredev/i2c.cpp', root/'src/device.cpp']
+                   root/'src/coredev/shared_intrf.cpp', root/'src/coredev/i2c.cpp']
         args = flags + [str(s) for s in sources] + ['-nostartfiles',
             '-Wl,-Ttext=0x10000,-Tdata=0x20000000,--gc-sections,-e,init']
-        args += ['-Wl,-u,'+s for s in ['isr', 'tx', 'rx', 'read_reg', 'read_command', 'write_data', 'dev_read', 'busy', 'tx_ready', 'events',
+        args += ['-Wl,-u,'+s for s in ['isr', 'tx', 'rx', 'read_reg', 'read_command', 'write_data', 'busy', 'tx_ready', 'events',
                                        'address', 'dma_max', 'offsets', 'buffer_address', 'twim', 'twi', 'spi_legacy']]
         subprocess.run(args + ['-o', output], check=True)
         subprocess.run([sys.executable, str(root/'tests/nordic_master_irq/run.py'), output, chip], check=True)

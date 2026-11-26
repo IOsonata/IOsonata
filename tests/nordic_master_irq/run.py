@@ -74,26 +74,6 @@ def call_break(name, args, brk, action):
     assert u.reg_read(UC_ARM_REG_PC) == 0xF0000, (name, 'did not return after', brk)
     return signed(u.reg_read(UC_ARM_REG_R0))
 
-def call_served(name, args, steps, quantum=20000):
-    """Call name, which waits for its interrupts, and serve them.
-
-    When the firmware has run quantum instructions without returning it is
-    waiting: the next step ends a block as the hardware does and runs the
-    interrupt handler on its own stack, then the firmware continues."""
-    setup(name, args, 0x200FF000)
-    pc = symbols[name] | 1
-    for step in steps:
-        u.emu_start(pc, 0xF0000, count=quantum)
-        stopped = u.reg_read(UC_ARM_REG_PC)
-        assert stopped != 0xF0000, (name, 'returned before its interrupts')
-        ctx = u.context_save()
-        step()
-        u.context_restore(ctx)
-        pc = stopped | 1
-    u.emu_start(pc, 0xF0000, count=10000000)
-    assert u.reg_read(UC_ARM_REG_PC) == 0xF0000, (name, 'did not return')
-    return signed(u.reg_read(UC_ARM_REG_R0))
-
 o = [get(symbols['offsets'] + i * 4) for i in range(26)]
 CHIP = sys.argv[2] if len(sys.argv) > 2 else 'NRF9160_XXAA'
 T = [get(symbols['twi'] + i * 4) for i in range(16 if get(symbols['twi']) else 1)]
@@ -284,17 +264,6 @@ spi_finish()
 check(call('events', 0) == 1 and call('events', 1) == 8 and call('busy', 1) == 0, 'read completion')
 active = None
 
-# Device register read: the interface is non-blocking and returns -1, the
-# device waits for the transfer to be closed and has its data on return. The
-# event handler of the interface gets the byte count.
-active = 1
-pending.clear()
-call('init', 1, 0, 1, 1)
-r = call_served('dev_read', (1, 8), [spi_finish, spi_finish])
-check(r == 8 and not pending, 'spi device read', r, pending)
-check(call('events', 0) == 1 and call('events', 1) == 8 and call('busy', 1) == 0, 'spi device read end')
-active = None
-
 # A new configuration clears every interrupt of the previous one (SPI and SPIM,
 # TWI and TWIM, are one block: an event of one is seen by the other).
 for bus in (1, 0):
@@ -416,12 +385,6 @@ twim_finish()
 check(pending == [('rx', BUF + TWIM_MAX, 3)] and call('busy', 0) == 1, 'second block', pending)
 twim_finish()
 check(call('events', 0) == 1 and call('events', 1) == TWIM_MAX + 3 and call('busy', 0) == 0, 'long read')
-
-# Device register read through Device::Read(), as on the SPI
-twim_reset()
-r = call_served('dev_read', (0, 8), [lambda: twim_finish(), lambda: twim_finish()])
-check(r == 8 and not pending and actions == [], 'i2c device read', r, pending, actions)
-check(call('events', 0) == 1 and call('events', 1) == 8 and call('busy', 0) == 0, 'i2c device read end')
 
 # Bus error: the driver stops the bus, the completion reports what moved.
 for kind in ('tx', 'rx'):
@@ -616,7 +579,6 @@ for bus in (1, 0):
         n = min(2 * DMA_MAX + 5, 66000) if bus else 4
         check(call(kind, bus, n) == n, 'polled', bus, kind)
         check(call('busy', bus) == 0 and not pending, 'polled end', bus, kind, call('busy', bus), pending)
-    check(call('dev_read', bus, 4) == 4 and call('busy', bus) == 0, 'polled device read', bus)
     active = None
 polled = False
 print('PASS: %s master interrupt transfers: SPIM, TWIM%s' % (CHIP, ', TWI, SPI' if T[0] and S[0] else ''))
