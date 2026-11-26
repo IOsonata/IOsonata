@@ -104,12 +104,8 @@ typedef struct {
 	uint8_t Cmd;	// Current QSPI command code
 	uint32_t ParamLen;	// Command parameter length in bytes
 	uint32_t Param[2];	// Command Parameter data
-	int RxBufflen;
-	int RxIdx;
-	uint8_t *pRxBuff;
-	int TxDatalen;
-	int TxIdx;
-	const uint8_t *pTxData;
+	uint32_t IntMask;	// Master interrupts, when bIntEn is set
+	volatile bool bIrq;	// Master interrupt came, cleared by the wait
 	bool bPeiPrepared;	// PPI-started SPIM owns the existing DMA buffers
 #ifdef NRF5340_XXAA_APPLICATION
 	alignas(4) uint8_t TxBuf[NRFX_SPI_TXBUF_SIZE];	// Polling transmit staging

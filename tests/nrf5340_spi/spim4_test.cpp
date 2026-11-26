@@ -47,7 +47,7 @@ SharedIntrf_t g_SharedIntrf[4] = {};
 extern nRFSpiDev_t g_nRFxSPIDev[];
 extern "C" void SPIM4_IRQHandler(void);
 static bool s_Poll, s_Timeout, s_QspiCalled, s_AutoIrq, s_StopFail;
-static int s_Events, s_Count, s_Blocks, s_TxReady;
+static int s_Events, s_Count, s_Blocks;
 static DEVINTRF_EVT s_Event;
 static uint8_t *s_Buffer;
 static uint32_t s_LastPtr;
@@ -55,7 +55,6 @@ static uint8_t s_Rx[70000], s_Tx[800];
 static SPI s_Spi;
 static CamArducamMega s_Camera;
 static bool s_CameraMode;
-static bool s_DeferCameraRx;
 static uint8_t s_CameraReg;
 static int s_CameraOffset;
 void usDelay(uint32_t) {}
@@ -97,12 +96,8 @@ static void Complete()
 	}
 	else if (s_CameraMode && r.TXD.MAXCNT)
 	{
-		// TXD.PTR holds 32 bits. An interrupt driven transmit uses the
-		// caller's buffer, which can be on the 64 bit host stack: take the
-		// byte through the driver's own pointer.
-		const nRFSpiDev_t &d = g_nRFxSPIDev[4];
-		s_CameraReg = d.TxDatalen > 0 ? d.pTxData[d.TxIdx] :
-			*(uint8_t *)(uintptr_t)r.TXD.PTR;
+		// The transmit is staged in the driver's RAM buffer, a global
+		s_CameraReg = *(uint8_t *)(uintptr_t)r.TXD.PTR;
 	}
 	r.EVENTS_ENDRX = r.EVENTS_ENDTX = r.EVENTS_END = 1;
 }
@@ -122,10 +117,6 @@ void TestTask::operator=(uint32_t value)
 	++s_Blocks;
 	s_LastPtr = r.RXD.MAXCNT ? r.RXD.PTR : r.TXD.PTR;
 	r.RXD.AMOUNT = r.TXD.AMOUNT = 0;
-	if (s_CameraMode && s_DeferCameraRx && r.RXD.MAXCNT)
-	{
-		return;
-	}
 	if ((s_Poll || s_AutoIrq) && !s_Timeout)
 	{
 		Complete();
@@ -141,17 +132,8 @@ static int Event(DevIntrf_t *dev, DEVINTRF_EVT event, uint8_t *buffer, int count
 		s_Camera.IntrfEvent(event, count);
 		return 0;
 	}
-	if (event == DEVINTRF_EVT_TX_READY)
-	{
-		// The transmitter is free. A command phase still keeps the bus.
-		++s_TxReady;
-		return 0;
-	}
+	// The master transfers are synchronous and report no event
 	++s_Events; s_Event = event; s_Buffer = buffer; s_Count = count;
-	assert(g_CsHigh);
-	// Generic completion must release serialization before calling the client.
-	assert(DeviceIntrfStartTx(dev, 0));
-	DeviceIntrfStopTx(dev);
 	return 0;
 }
 
@@ -188,51 +170,48 @@ int main()
 	for (unsigned i = 0; i < sizeof(s_Tx); ++i)
 		s_Tx[i] = i;
 
-	// Async TX is sent from the caller's buffer and completes through the
-	// actual dedicated vector.
-	assert(s_Spi.Tx(0, s_Tx, 64) == -1);
-	assert(!g_CsHigh && g_Regs[4].TXD.MAXCNT == 64);
-	assert(g_Regs[4].TXD.PTR == (uintptr_t)s_Tx);
-	Complete(); SPIM4_IRQHandler();
-	assert(s_Events == 1 && s_Count == 64 && s_Event == DEVINTRF_EVT_COMPLETED);
-	SPIM4_IRQHandler(); assert(s_Events == 1);
+	// An interrupt driven transfer is synchronous: it waits for the interrupt
+	// of the actual dedicated vector and returns its count, as a polled one.
+	// The model completes a block and runs the vector when it is started.
+	// The master reports no event.
+	assert(g_Regs[4].INTENSET == SPIM_INTENSET_END_Msk);
+	s_AutoIrq = true;
+	assert(s_Spi.Tx(0, s_Tx, 64) == 64);
+	assert(g_CsHigh && g_Regs[4].TXD.MAXCNT == 64);
+	assert(g_Regs[4].TXD.PTR == (uintptr_t)g_nRFxSPIDev[4].TxBuf);
 
 	// More than one 16-bit EasyDMA block; buffer address advances explicitly.
-	assert(s_Spi.Rx(0, s_Rx, sizeof(s_Rx)) == -1);
-	assert(g_Regs[4].RXD.MAXCNT == 65535 && g_Regs[4].RXD.LIST == 0);
-	Complete(); SPIM4_IRQHandler();
-	assert(s_Events == 1 && g_Regs[4].RXD.PTR == (uintptr_t)s_Rx + 65535);
+	s_Blocks = 0;
+	assert(s_Spi.Rx(0, s_Rx, sizeof(s_Rx)) == sizeof(s_Rx));
+	assert(s_Blocks == 2 && g_Regs[4].RXD.LIST == 0);
+	assert(g_Regs[4].RXD.PTR == (uintptr_t)s_Rx + 65535);
 	assert(g_Regs[4].RXD.MAXCNT == sizeof(s_Rx) - 65535);
-	Complete(); SPIM4_IRQHandler();
-	assert(s_Events == 2 && s_Buffer == s_Rx && s_Count == sizeof(s_Rx));
-	assert(s_Rx[0] == 0x5a && s_Rx[69999] == 0x5a);
+	assert(s_Rx[0] == 0x5a && s_Rx[69999] == 0x5a && g_CsHigh);
 
-	// Command-phase completion retains CS and the generic transaction lock.
+	// The command phase keeps CS and the generic transaction lock.
 	assert(s_Spi.StartTx(0)); intrf->bNoStop = true;
-	s_AutoIrq = true;
-	assert(s_Spi.TxData(s_Tx, 2) == -1);
-	s_AutoIrq = false;
-	assert(!g_CsHigh && intrf->bTxReady && s_Events == 2);
+	assert(s_Spi.TxData(s_Tx, 2) == 2);
+	assert(!g_CsHigh && intrf->bTxReady);
 	intrf->bNoStop = false;
 	assert(intrf->StartRx(intrf, 0));
-	assert(s_Spi.RxData(s_Rx, 3) == -1);
-	Complete(); SPIM4_IRQHandler(); assert(s_Events == 3);
+	assert(s_Spi.RxData(s_Rx, 3) == 3 && !g_CsHigh);
+	assert(!DeviceIntrfStartTx(intrf, 0));
+	s_Spi.StopRx();
+	assert(g_CsHigh);
 
-	s_AutoIrq = true;
-	int events = s_Events;
-	assert(s_Spi.Tx(0, s_Tx, sizeof(s_Tx)) == -1);
-	assert(s_Events == events + 1 && s_Count == sizeof(s_Tx));
+	// Long TX, staged block after block
+	s_Blocks = 0;
+	assert(s_Spi.Tx(0, s_Tx, sizeof(s_Tx)) == sizeof(s_Tx));
+	assert(s_Blocks == 4 && g_CsHigh);
+	assert(s_Events == 0);
+
+	// No interrupt: the transfer ends on its time limit, the DMA stopped,
+	// and the bus can be used again.
 	s_AutoIrq = false;
-
-	// Long async TX is sent from the caller's buffer, block after block.
-	events = s_Events;
-	assert(s_Spi.Tx(0, s_Tx, sizeof(s_Tx)) == -1);
-	assert(g_Regs[4].TXD.PTR == (uintptr_t)s_Tx && s_Events == events);
-	while (s_Events == events)
-	{
-		Complete(); SPIM4_IRQHandler();
-	}
-	assert(s_Count == sizeof(s_Tx) && g_CsHigh);
+	assert(s_Spi.Tx(0, s_Tx, 16) == 0 && g_CsHigh && g_Regs[4].EVENTS_STOPPED);
+	s_AutoIrq = true;
+	assert(s_Spi.Tx(0, s_Tx, 16) == 16 && g_CsHigh);
+	s_AutoIrq = false;
 
 	cfg = Config(false); assert(s_Spi.Init(cfg)); s_Poll = true;
 	s_Blocks = 0;
@@ -295,17 +274,6 @@ int main()
 	s_CameraOffset = 0;
 	assert(s_Camera.ReadFrameAsync(s_Rx, 976) == 700);
 	assert(g_CsHigh && s_Camera.ReadFrameComplete() == 0);
-	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
-	assert(s_Camera.Start() && s_Camera.UpdateData());
-	s_CameraOffset = 0;
-	s_DeferCameraRx = true;
-	assert(s_Camera.ReadFrameAsync(s_Rx, 976) == -1);
-	assert(!g_CsHigh && s_CameraOffset == 0);
-	assert(s_Camera.ReadFrameComplete() == -1);
-	s_DeferCameraRx = false;
-	Complete();
-	SPIM4_IRQHandler();
-	assert(g_CsHigh && s_Camera.ReadFrameComplete() == 700);
 	for (int i = 0; i < 700; i++) assert(s_Rx[i] == (uint8_t)i);
 	s_CameraMode = false;
 	s_AutoIrq = false;

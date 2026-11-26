@@ -5,20 +5,18 @@ and EasyDMA, built for each MCU register layout (nRF9160, nRF52832, nRF54L15 and
 nRF54LM20A by default, `--chip NRFxxxx_XXAA` to select). They run the production
 `spi_nrfx.cpp`, `i2c_nrfx.cpp`, `shared_intrf_nrfx.cpp` and `device_intrf.cpp`
 in an Arm emulator. Each START task is recorded; the test then raises the
-completion events and runs the shared interrupt handler. An I2C master
-transfer is synchronous and waits for its interrupt: each time the firmware
-has run for a while without returning, the test ends what the controller was
-doing and runs the handler when the event is enabled in INTEN.
+completion events and runs the shared interrupt handler. An I2C or SPI
+master transfer is synchronous and waits for its interrupt: each time the
+firmware has run for a while without returning, the test ends what the
+controller was doing and runs the handler when the event is enabled in INTEN.
 
 Checks cover:
 
-- SPI TX and RX return -1 and keep the bus until the last DMA block;
-- SPI TX and RX blocks advance through the caller's buffer with CS kept
-  asserted between blocks;
-- one `DEVINTRF_EVT_COMPLETED` with the byte count; `bTxReady` and one
-  `DEVINTRF_EVT_TX_READY` after a TX;
-- SPI command then read: the command phase keeps the bus and reports no
-  completion;
+- SPI master with `bIntEn` (SPIM, and SPI on nRF52832): transmit, receive,
+  register read and combined write return their byte count, the DMA blocks
+  advance through the caller's buffer, each block or byte ends on its
+  interrupt, the master reports no event, the bus is released on return; an
+  event whose interrupt is held off does not end the wait;
 - I2C master with `bIntEn` (TWIM, and TWI on nRF52832): transmit, receive,
   register read and combined write return their byte count, the blocks or
   bytes come from and go into the caller's buffer (the combined write from
@@ -29,8 +27,6 @@ Checks cover:
   limit and the bus is usable after; an address NACK is retried as in
   polling and returns 0; a refused byte on the TWI ends the transmit with
   the bytes sent before it;
-- SPI without EasyDMA (nRF52832): one byte per READY event, the receive
-  buffer in the completion, the command of a register read keeps the bus;
 - polled TWI after TWIM transfers (nRF52832): the TXDSENT and RXDREADY events
   a TWIM transfer leaves in the shared block are cleared before the start, a
   one byte receive stops through the BB shortcut, a refused byte ends the
@@ -54,17 +50,12 @@ latency, bus timing and errata are not modeled.
 
 ## Interrupt driven transfers
 
-A Nordic I2C master transfer is synchronous with or without `bIntEn`: it
-returns when the data has moved, with the byte count. With `bIntEn` its wait
-functions wait for the interrupt instead of reading the events in a loop; the
-handler masks the master interrupts and tells the wait, which reads the
-events as in polling mode. It must not be called from an interrupt handler of
-the same or a higher priority than the bus.
-
-Nordic SPI TX is sent from the caller's buffer, one DMA block after the other
-with CS kept asserted. The command phase of a register read keeps the bus and
-sets `bTxReady`; `DeviceIntrfRead()` waits for it. The driver has no transmit
-timeout of its own: an SPI master clocks the transfer itself.
+A Nordic I2C or SPI master transfer is synchronous with or without `bIntEn`:
+it returns when the data has moved, with the byte count. With `bIntEn` its
+wait functions wait for the interrupt instead of reading the events in a
+loop; the handler masks the master interrupts and tells the wait, which reads
+the events as in polling mode. It must not be called from an interrupt
+handler of the same or a higher priority than the bus.
 
 ## Host lifetime and timeout checks
 
