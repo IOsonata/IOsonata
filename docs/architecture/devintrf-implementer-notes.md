@@ -253,6 +253,28 @@ Do not add a target transfer limit to `DeviceIntrf`.
 
 Chunking is therefore not a generic `DeviceIntrf` capability field.
 
+## Device register read on an interrupt driven interface
+
+With `bIntEn` set, an I2C or SPI master interface is non-blocking: a transfer
+returns `-1` and its completion is reported to the event handler with the
+byte count. That is for the user of the interface who wants it so.
+
+A device driver is different. It reads a register because its next line uses
+the value, and the bus carries one transfer at a time, so the following
+transfer cannot be issued before this one is closed. `Device::Read()`
+therefore stays a blocking read on both kinds of interface: when the
+interface returns `-1`, it waits until the interface has released its busy
+flag, which the interrupt handler does when the transfer is closed, and the
+data is then in the caller's buffer.
+
+- `Device::Read()` returns the requested length after such a wait. The actual
+  byte count goes to the event handler of the interface.
+- The wait is served by the bus interrupt. A device read made from an
+  interrupt handler of the same or a higher priority than the bus cannot be
+  served and returns `-1` when the wait expires.
+- A device driver that calls the interface directly, without
+  `Device::Read()`, gets the `-1` of the interface.
+
 ## Device-operation locking
 
 `bBusy` protects one interface transfer. A device operation can span several transfers and may need its own operation state or lock.
