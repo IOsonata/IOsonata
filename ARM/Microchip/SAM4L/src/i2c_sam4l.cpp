@@ -8,11 +8,10 @@ one I2CDev_t API and selects the matching register block from I2CCfg_t::Mode.
 
 Master mode supports polling, interrupt-driven, and PDCA-backed transfers,
 7-bit and 10-bit addressing, transfer lengths beyond the 8-bit NBYTES field,
-and the write/repeated-start/read sequence used by DeviceIntrfRead(). An interrupt
-driven transfer keeps the caller's buffer and waits for the interrupt handler
-to end it, then returns the number of bytes moved, as in polling mode: the
-handler continues from the pointer and the remaining count at each interrupt.
-The register read of DeviceIntrfRead() is polled.
+and the write/repeated-start/read sequence used by DeviceIntrfRead(). Interrupt
+driven transfers use the caller's buffer, which must stay valid until the
+completion: the driver keeps the pointer and the remaining count and continues
+from them at each interrupt. The register read of DeviceIntrfRead() is polled.
 
 Slave mode is interrupt driven, with optional PDCA data movement. The TWIS
 address-match clock stretching is used so application callbacks can install the
@@ -692,40 +691,6 @@ static bool Sam4lI2CMasterStartRxDmaChunk(SAM4L_I2CDEV *dev)
 	return true;
 }
 
-// Wait for the interrupt handler to end the transfer started by TxData or
-// RxData and return the number of bytes moved. The handler brings the
-// remaining counts to zero at the end. The time limit is restarted each time
-// the transfer moves on. When it expires the TWIM is reset and the transfer
-// dropped.
-static int Sam4lI2CMasterIntWait(SAM4L_I2CDEV *pDev, bool bTx)
-{
-	// The handler changes these fields behind this loop
-	volatile SAM4L_I2CDEV *dev = pDev;
-	uint32_t timeout = SAM4L_I2C_WAIT_COUNT;
-	int last = -1;
-
-	while ((bTx ? dev->TxRemain : dev->RxRemain) > 0)
-	{
-		const int now = dev->TxRemain + dev->RxRemain + dev->ChunkRemain;
-
-		if (now != last)
-		{
-			last = now;
-			timeout = SAM4L_I2C_WAIT_COUNT;
-		}
-		else if (--timeout == 0U)
-		{
-			pDev->pMReg->TWIM_IDR = 0xFFFFFFFFU;
-			Sam4lI2CMasterRecover(pDev);
-			dev->TxRemain = 0;
-			dev->RxRemain = 0;
-			break;
-		}
-	}
-
-	return bTx ? dev->TxCount : dev->RxCount;
-}
-
 static int Sam4lI2CMasterTxDma(DevIntrf_t * const pDev,
 	const uint8_t *pData, int DataLen)
 {
@@ -734,7 +699,7 @@ static int Sam4lI2CMasterTxDma(DevIntrf_t * const pDev,
 	if (pDev->bIntEn && !pDev->bNoStop)
 	{
 		// The interrupt handler sends from the caller's buffer, block after
-		// block.
+		// block. It must stay valid until the completion.
 		dev->pTxData = pData;
 		dev->TxRemain = DataLen;
 		dev->RxRemain = 0;
@@ -747,7 +712,7 @@ static int Sam4lI2CMasterTxDma(DevIntrf_t * const pDev,
 		}
 
 		dev->pMReg->TWIM_IER = SAM4L_TWIM_DMA_IRQ_MASK;
-		return Sam4lI2CMasterIntWait(dev, true);
+		return -1;
 	}
 
 	// A transfer that keeps the bus for a following receive is synchronous.
@@ -781,7 +746,8 @@ static int Sam4lI2CMasterTxAsync(DevIntrf_t * const pDev,
 {
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
 
-	// The interrupt handler sends from the caller's buffer
+	// The interrupt handler sends from the caller's buffer, which must stay
+	// valid until the completion.
 	dev->pTxData = pData;
 	dev->TxRemain = DataLen;
 	dev->RxRemain = 0;
@@ -796,7 +762,7 @@ static int Sam4lI2CMasterTxAsync(DevIntrf_t * const pDev,
 	}
 
 	dev->pMReg->TWIM_IER = SAM4L_TWIM_TX_IRQ_MASK;
-	return Sam4lI2CMasterIntWait(dev, true);
+	return -1;
 }
 
 static int Sam4lI2CTxData(DevIntrf_t * const pDev,
@@ -1121,7 +1087,7 @@ static int Sam4lI2CMasterRxDma(DevIntrf_t * const pDev,
 			Sam4lI2CMasterStartRxDmaChunk(dev);
 		}
 		dev->pMReg->TWIM_IER = SAM4L_TWIM_DMA_IRQ_MASK;
-		return Sam4lI2CMasterIntWait(dev, false);
+		return -1;
 	}
 
 	if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
@@ -1177,7 +1143,7 @@ static int Sam4lI2CMasterRxAsync(DevIntrf_t * const pDev,
 	}
 
 	dev->pMReg->TWIM_IER = SAM4L_TWIM_RX_IRQ_MASK;
-	return Sam4lI2CMasterIntWait(dev, false);
+	return -1;
 }
 
 static int Sam4lI2CRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
@@ -1221,13 +1187,12 @@ static void Sam4lI2CStopRx(DevIntrf_t * const pDev)
 	Sam4lI2CStopTx(pDev);
 }
 
-// The interrupt driven master transfer ended. The remaining count of the
-// transmit or of the receive is not zero while a transfer runs, which also
-// gives its direction; both are cleared here, which is what TxData or RxData
-// waits for. Then report: DEVINTRF_EVT_TX_READY when everything given has
-// gone out, DEVINTRF_EVT_COMPLETED when the transfer is closed. A transmit
-// that keeps the bus (bNoStop) reports only the first. The busy flag is
-// released by the caller of TxData or RxData.
+// The interrupt driven master transfer ended. The transmit count or the
+// receive count is not zero while a transfer runs, which also gives its
+// direction; both are cleared here. Release the bus through the generic
+// helpers, then report: DEVINTRF_EVT_TX_READY when everything given has gone
+// out, DEVINTRF_EVT_COMPLETED when the transfer is closed. A transmit that
+// keeps the bus (bNoStop) reports only the first.
 static void Sam4lI2CMasterAsyncComplete(SAM4L_I2CDEV *dev, bool bTx)
 {
 	DevIntrf_t *intrf = &dev->pI2cDev->DevIntrf;
@@ -1240,18 +1205,23 @@ static void Sam4lI2CMasterAsyncComplete(SAM4L_I2CDEV *dev, bool bTx)
 
 	if (bTx)
 	{
-		intrf->bTxReady = true;
+		const bool keep = intrf->bNoStop;
+
+		// Sets bTxReady, and closes the transfer unless the bus is kept
+		DeviceIntrfTxComplete(intrf);
 
 		if (intrf->EvtCB)
 		{
 			intrf->EvtCB(intrf, DEVINTRF_EVT_TX_READY, nullptr, count);
-			if (!intrf->bNoStop)
+			if (!keep)
 				intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
 		}
 	}
-	else if (intrf->EvtCB)
+	else
 	{
-		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
+		DeviceIntrfStopRx(intrf);
+		if (intrf->EvtCB)
+			intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
 	}
 }
 
