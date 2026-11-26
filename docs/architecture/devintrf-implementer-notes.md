@@ -127,14 +127,60 @@ A positive UART return does not necessarily mean every byte is already on the wi
 
 An interface event reports transport activity or transport completion. A higher-level device operation may continue after the transfer completes. For example, NVM programming or erase completion is separate from the SPI/I2C transfer that issued the command.
 
+## Interrupt driven master transfers
+
+An interrupt driven master transfer (`bIntEn` set, I2C or SPI master) has the
+same form as an interrupt driven slave: the handler acts on what the
+controller reports, and the data stays in the buffer the caller provided.
+
+- `TxData` and `RxData` keep the caller's pointer and length, start the
+  transfer and return `-1`. The driver holds no transfer data of its own: no
+  private copy, no transfer size limit and no fallback to another mode for a
+  long transfer.
+- At each interrupt the driver continues from the remaining part of the
+  caller's buffer: the next byte, or the next DMA block up to the count the
+  controller accepts. The application does not split a transfer for a
+  controller limit and is not asked for anything in between.
+- The handler takes direction, byte count and errors from the controller's
+  events, status flags and count registers where it has them. A software copy
+  of what the controller already reports is not kept.
+- When everything given has gone out, the driver calls
+  `DeviceIntrfTxComplete()`, which sets `bTxReady` and closes the transfer
+  unless `bNoStop` is set, and reports `DEVINTRF_EVT_TX_READY`: the
+  transmitter is free for the next `TxData`.
+- `DEVINTRF_EVT_COMPLETED` is reported with the byte count once the transfer
+  is closed on the bus. A transfer ended by a bus error is closed the same
+  way and reports the bytes moved before the error.
+- The caller's buffer must stay valid until that completion. This is the same
+  rule as the buffers an application registers for a slave.
+
+Conversion status: this section is the design the drivers are being brought
+to. The I2C and SPI master drivers written in October 2026 still send an
+interrupt driven transmit from a private copy with a fixed size. They are
+converted one driver per commit, Nordic I2C first.
+
 ## Combined-write buffer lifetime
 
 `DeviceIntrfWrite()` concatenates command and data into a temporary stack
 buffer and calls `DeviceIntrfTx()`. Its return value excludes command bytes;
-a negative deferred result is converted to zero. A target used through this
-helper must consume or copy that buffer before returning. Do not retain its
-pointer for later DMA. Deferred callers need caller-owned storage and a
-transfer path whose completion and buffer lifetime are explicitly supported.
+a negative deferred result is converted to zero and the byte count is the one
+reported with `DEVINTRF_EVT_COMPLETED`.
+
+That stack buffer is the one buffer the caller does not keep. With no copy in
+the driver, `DeviceIntrfWrite()` has to wait for `bTxReady` on an I2C or SPI
+interface when `TxData` returns `-1`, as `DeviceIntrfRead()` does for its
+command phase, so the driver can send from the buffer it was given. A write
+that must not block goes through `DeviceIntrfTx()` with a buffer the
+application keeps.
+
+Other interface types use `-1` with their own meaning, for example a memory
+controller reporting that a program operation was started. `DeviceIntrfWrite()`
+must not wait for those.
+
+Status: the wait is not in `DeviceIntrfWrite()` yet. It goes in with the first
+converted driver, after the host tests of every port that runs a combined
+write in interrupt mode have been run again. Until then a target used through
+this helper must consume or copy the buffer before returning.
 
 `DeviceIntrfRead()` waits for a deferred command phase with an iteration
 budget. The current helper does not propagate that wait result or the raw
