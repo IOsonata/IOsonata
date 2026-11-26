@@ -260,7 +260,7 @@ returns `-1` and its completion is reported to the event handler with the
 byte count. That is for the user of the interface who wants it so.
 
 A device driver is different. It reads a register because its next line uses
-the value, and the bus takes one transfer at a time, so the following
+the value, and the bus carries one transfer at a time, so the following
 transfer cannot be issued before this one is closed. `Device::Read()`
 therefore stays a blocking read on both kinds of interface: when the
 interface returns `-1`, it waits until the interface has released its busy
