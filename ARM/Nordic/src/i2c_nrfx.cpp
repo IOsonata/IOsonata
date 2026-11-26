@@ -141,15 +141,8 @@ typedef struct {
 	int TxDatalen;
 	int TxIdx;
 	const uint8_t *pTxData;
-	volatile int Async;		// Interrupt driven master transfer, NRFX_I2C_ASYNC_xxx
-	volatile bool bAsyncErr;// The transfer met a bus error
-	volatile bool bStopped;	// The interrupt handler has already stopped the bus
 	bool bPeiPrepared;		// TWIM DMA and bBusy reserved for hardware PEI
 } nRFTwiDev_t;
-
-#define NRFX_I2C_ASYNC_IDLE		0
-#define NRFX_I2C_ASYNC_TX		1
-#define NRFX_I2C_ASYNC_RX		2
 
 typedef struct {
 	uint32_t Freq;
@@ -514,10 +507,11 @@ static void nRFxI2CDmaNextBlock(nRFTwiDev_t * const pDev)
 	NRF_TWIM_Type *reg = pDev->pDmaReg;
 
 	reg->EVENTS_ERROR = 0;
+	reg->ERRORSRC = reg->ERRORSRC;
 	reg->EVENTS_STOPPED = 0;
 	reg->EVENTS_SUSPENDED = 0;
 
-	if (pDev->Async == NRFX_I2C_ASYNC_RX)
+	if (pDev->RxBufflen > 0)
 	{
 		NRFX_TWI_RX(reg).PTR = (uint32_t)&pDev->pRxBuff[pDev->RxIdx];
 		NRFX_TWI_RX(reg).MAXCNT = min(pDev->RxBufflen, NRFX_I2C_DMA_MAXCNT);
@@ -577,9 +571,7 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		dev->RxIdx = 0;
 		dev->RxBufflen = BuffLen;
 		dev->TxDatalen = 0;
-		dev->bAsyncErr = false;
-		dev->bStopped = false;
-		dev->Async = NRFX_I2C_ASYNC_RX;
+		dev->TxIdx = 0;
 		nRFxI2CDmaNextBlock(dev);
 
 		return -1;
@@ -646,12 +638,11 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 		dev->RxIdx = 0;
 		dev->RxBufflen = Bufflen;
 		dev->TxDatalen = 0;
-		dev->bAsyncErr = false;
-		dev->bStopped = false;
-		dev->Async = NRFX_I2C_ASYNC_RX;
+		dev->TxIdx = 0;
 
 		dev->pReg->EVENTS_RXDREADY = 0;
 		dev->pReg->EVENTS_ERROR = 0;
+		dev->pReg->ERRORSRC = dev->pReg->ERRORSRC;
 		dev->pReg->EVENTS_STOPPED = 0;
 		dev->pReg->SHORTS = Bufflen > 1 ? TWI_SHORTS_BB_SUSPEND_Msk : TWI_SHORTS_BB_STOP_Msk;
 		dev->pReg->TASKS_STARTRX = 1;
@@ -696,18 +687,17 @@ void nRFxI2CStopRx(DevIntrf_t * const pDev)
 {
     nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
-	if (dev->bStopped)
-	{
-		// The interrupt handler ended the transfer with STOP
-		dev->bStopped = false;
-		return;
-	}
-
 #ifdef TWIM_PRESENT
 	NRF_TWIM_Type *reg = dev->pDmaReg;
 #else
 	NRF_TWI_Type *reg = dev->pReg;
 #endif
+
+	if (pDev->bIntEn && reg->EVENTS_STOPPED)
+	{
+		// The bus is stopped already, the interrupt handler ends the transfer
+		return;
+	}
 
 //	dev->pReg->SHORTS = TWI_SHORTS_BB_STOP_Msk;
 	reg->TASKS_RESUME = 1;
@@ -774,9 +764,7 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		dev->TxIdx = 0;
 		dev->TxDatalen = DataLen;
 		dev->RxBufflen = 0;
-		dev->bAsyncErr = false;
-		dev->bStopped = false;
-		dev->Async = NRFX_I2C_ASYNC_TX;
+		dev->RxIdx = 0;
 		nRFxI2CDmaNextBlock(dev);
 
 		return -1;
@@ -849,12 +837,11 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 		dev->TxIdx = 0;
 		dev->TxDatalen = Datalen;
 		dev->RxBufflen = 0;
-		dev->bAsyncErr = false;
-		dev->bStopped = false;
-		dev->Async = NRFX_I2C_ASYNC_TX;
+		dev->RxIdx = 0;
 
 		dev->pReg->EVENTS_TXDSENT = 0;
 		dev->pReg->EVENTS_ERROR = 0;
+		dev->pReg->ERRORSRC = dev->pReg->ERRORSRC;
 		dev->pReg->EVENTS_STOPPED = 0;
 		dev->pReg->SHORTS = 0;
 		dev->pReg->TASKS_STARTTX = 1;
@@ -898,16 +885,19 @@ void nRFxI2CStopTx(DevIntrf_t * const pDev)
 {
     nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
 
-	if (dev->bStopped)
+#ifdef TWIM_PRESENT
+	NRF_TWIM_Type *reg = dev->pDmaReg;
+#else
+	NRF_TWI_Type *reg = dev->pReg;
+#endif
+
+	if (pDev->bIntEn && reg->EVENTS_STOPPED)
 	{
-		// The interrupt handler ended the transfer with STOP
-		dev->bStopped = false;
+		// The bus is stopped already, the interrupt handler ends the transfer
 		return;
 	}
 
 #ifdef TWIM_PRESENT
-	NRF_TWIM_Type *reg = dev->pDmaReg;
-
 	if (dev->pI2cDev->DevIntrf.bDma)
     {
 		if (reg->EVENTS_LASTTX == 1)
@@ -915,8 +905,6 @@ void nRFxI2CStopTx(DevIntrf_t * const pDev)
 			reg->EVENTS_LASTTX = 0;
 		}
     }
-#else
-	NRF_TWI_Type *reg = dev->pReg;
 #endif
 
 	reg->EVENTS_SUSPENDED = 0;
@@ -993,34 +981,61 @@ void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pDa
 #endif
 }
 
+// An interrupt driven master transfer is running while its remaining count
+// or its index is not zero. Both are cleared when it ends.
+static inline bool nRFxI2CTxPending(const nRFTwiDev_t * const pDev)
+{
+	return (pDev->TxDatalen | pDev->TxIdx) != 0;
+}
+
+static inline bool nRFxI2CRxPending(const nRFTwiDev_t * const pDev)
+{
+	return (pDev->RxBufflen | pDev->RxIdx) != 0;
+}
+
 // The interrupt driven master transfer ended. The bus is stopped, unless a
 // transmit keeps it for a following receive (bNoStop). Release it through the
 // generic helpers, which own the busy flag, then report
 // DEVINTRF_EVT_COMPLETED with the number of bytes moved. A transmit that keeps
 // the bus only sets bTxReady, the receive that follows reports the completion.
+// bStopped : called on the STOPPED event. The event is still set while the
+// bus is released, StopRx and StopTx see by it that no STOP task is needed.
 static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev, bool bStopped)
 {
+	// TWI and TWIM are one block, these registers are at the same place
+#ifdef TWIM_PRESENT
+	NRF_TWIM_Type *reg = pDev->pDmaReg;
+#else
+	NRF_TWI_Type *reg = pDev->pReg;
+#endif
 	uint8_t *buff = NULL;
 	bool report = true;
 	int count;
 
-	if (pDev->Async == NRFX_I2C_ASYNC_RX)
+	// An error is kept in ERRORSRC until the end of the transfer
+	reg->ERRORSRC = reg->ERRORSRC;
+
+	if (nRFxI2CRxPending(pDev))
 	{
 		buff = pDev->pRxBuff;
 		count = pDev->RxIdx;
 		pDev->RxBufflen = 0;
-		pDev->Async = NRFX_I2C_ASYNC_IDLE;
-		pDev->bStopped = bStopped;
+		pDev->RxIdx = 0;
 		DeviceIntrfStopRx(pIntrf);
 	}
 	else
 	{
 		count = pDev->TxIdx;
 		pDev->TxDatalen = 0;
-		pDev->Async = NRFX_I2C_ASYNC_IDLE;
+		pDev->TxIdx = 0;
 		report = pIntrf->bNoStop == false;
-		pDev->bStopped = bStopped && report;
 		DeviceIntrfTxComplete(pIntrf);
+	}
+
+	if (bStopped)
+	{
+		// Before the callback, which can start the next transfer
+		reg->EVENTS_STOPPED = 0;
 	}
 
 	if (report && pIntrf->EvtCB)
@@ -1033,7 +1048,8 @@ static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev,
 // Master interrupt with EasyDMA.
 // A transmit block that suspends the bus ends with SUSPENDED, a block that
 // ends with STOP, or a transfer stopped after an error, ends with STOPPED.
-// AMOUNT is final at both events.
+// AMOUNT is final at both events. The direction is the one of the pending
+// count, an error is read from ERRORSRC.
 static void nRFxI2CTwimIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 {
 	NRF_TWIM_Type *reg = pDev->pDmaReg;
@@ -1041,15 +1057,17 @@ static void nRFxI2CTwimIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 	if (reg->EVENTS_ERROR)
 	{
 		reg->EVENTS_ERROR = 0;
-		reg->ERRORSRC = reg->ERRORSRC;
 
-		if (pDev->Async != NRFX_I2C_ASYNC_IDLE && pDev->bAsyncErr == false)
+		if (nRFxI2CTxPending(pDev) || nRFxI2CRxPending(pDev))
 		{
 			// Abort, the transfer ends on STOPPED
-			pDev->bAsyncErr = true;
 			reg->SHORTS = 0;
 			reg->TASKS_RESUME = 1;
 			reg->TASKS_STOP = 1;
+		}
+		else
+		{
+			reg->ERRORSRC = reg->ERRORSRC;
 		}
 	}
 
@@ -1057,7 +1075,7 @@ static void nRFxI2CTwimIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 	{
 		reg->EVENTS_SUSPENDED = 0;
 
-		if (pDev->Async == NRFX_I2C_ASYNC_TX && pDev->bAsyncErr == false)
+		if (nRFxI2CTxPending(pDev) && reg->ERRORSRC == 0)
 		{
 			int l = NRFX_TWI_TX(reg).AMOUNT;
 
@@ -1067,7 +1085,6 @@ static void nRFxI2CTwimIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 			if (l <= 0)
 			{
 				// Nothing moved, abort
-				pDev->bAsyncErr = true;
 				reg->SHORTS = 0;
 				reg->TASKS_RESUME = 1;
 				reg->TASKS_STOP = 1;
@@ -1086,19 +1103,19 @@ static void nRFxI2CTwimIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 
 	if (reg->EVENTS_STOPPED)
 	{
-		reg->EVENTS_STOPPED = 0;
 		NRFX_TWI_TXSTARTED(reg) = 0;
 		NRFX_TWI_RXSTARTED(reg) = 0;
 
-		if (pDev->Async == NRFX_I2C_ASYNC_RX)
+		if (nRFxI2CRxPending(pDev))
 		{
 			int l = NRFX_TWI_RX(reg).AMOUNT;
 
 			pDev->RxIdx += l;
 			pDev->RxBufflen -= l;
 
-			if (pDev->bAsyncErr == false && l > 0 && pDev->RxBufflen > 0)
+			if (reg->ERRORSRC == 0 && l > 0 && pDev->RxBufflen > 0)
 			{
+				// Clears STOPPED and starts the next block
 				nRFxI2CDmaNextBlock(pDev);
 			}
 			else
@@ -1106,7 +1123,7 @@ static void nRFxI2CTwimIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 				nRFxI2CAsyncEnd(pIntrf, pDev, true);
 			}
 		}
-		else if (pDev->Async == NRFX_I2C_ASYNC_TX)
+		else if (nRFxI2CTxPending(pDev))
 		{
 			// Last block ended with STOP, or the transfer was aborted. The
 			// blocks that suspended the bus were counted on SUSPENDED.
@@ -1118,6 +1135,10 @@ static void nRFxI2CTwimIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 				pDev->TxDatalen -= l;
 			}
 			nRFxI2CAsyncEnd(pIntrf, pDev, true);
+		}
+		else
+		{
+			reg->EVENTS_STOPPED = 0;
 		}
 	}
 }
@@ -1135,15 +1156,17 @@ static void nRFxI2CTwiIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 	if (reg->EVENTS_ERROR)
 	{
 		reg->EVENTS_ERROR = 0;
-		reg->ERRORSRC = reg->ERRORSRC;
 
-		if (pDev->Async != NRFX_I2C_ASYNC_IDLE && pDev->bAsyncErr == false)
+		if (nRFxI2CTxPending(pDev) || nRFxI2CRxPending(pDev))
 		{
 			// Abort, the transfer ends on STOPPED
-			pDev->bAsyncErr = true;
 			reg->SHORTS = 0;
 			reg->TASKS_RESUME = 1;
 			reg->TASKS_STOP = 1;
+		}
+		else
+		{
+			reg->ERRORSRC = reg->ERRORSRC;
 		}
 	}
 
@@ -1151,7 +1174,7 @@ static void nRFxI2CTwiIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 	{
 		reg->EVENTS_TXDSENT = 0;
 
-		if (pDev->Async == NRFX_I2C_ASYNC_TX && pDev->bAsyncErr == false)
+		if (pDev->TxDatalen > 0 && reg->ERRORSRC == 0)
 		{
 			pDev->TxIdx++;
 			pDev->TxDatalen--;
@@ -1178,7 +1201,7 @@ static void nRFxI2CTwiIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 
 		uint8_t d = reg->RXD;
 
-		if (pDev->Async == NRFX_I2C_ASYNC_RX && pDev->bAsyncErr == false && pDev->RxBufflen > 0)
+		if (pDev->RxBufflen > 0 && reg->ERRORSRC == 0)
 		{
 			pDev->pRxBuff[pDev->RxIdx] = d;
 			pDev->RxIdx++;
@@ -1198,11 +1221,13 @@ static void nRFxI2CTwiIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 
 	if (reg->EVENTS_STOPPED)
 	{
-		reg->EVENTS_STOPPED = 0;
-
-		if (pDev->Async != NRFX_I2C_ASYNC_IDLE)
+		if (nRFxI2CTxPending(pDev) || nRFxI2CRxPending(pDev))
 		{
 			nRFxI2CAsyncEnd(pIntrf, pDev, true);
+		}
+		else
+		{
+			reg->EVENTS_STOPPED = 0;
 		}
 	}
 }
@@ -1374,9 +1399,6 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	s_nRFxI2CDev[pCfgData->DevNo].TxDatalen = 0;
 	s_nRFxI2CDev[pCfgData->DevNo].TxIdx = 0;
 	s_nRFxI2CDev[pCfgData->DevNo].pTxData = NULL;
-	s_nRFxI2CDev[pCfgData->DevNo].Async = NRFX_I2C_ASYNC_IDLE;
-	s_nRFxI2CDev[pCfgData->DevNo].bAsyncErr = false;
-	s_nRFxI2CDev[pCfgData->DevNo].bStopped = false;
 	s_nRFxI2CDev[pCfgData->DevNo].bPeiPrepared = false;
 	//s_nRFxI2CDev[pCfgData->DevNo].bTxReady = true;
 	pDev->DevIntrf.EnCnt = 1;
@@ -1859,7 +1881,7 @@ bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 	}
 	dev = I2CPeiDevice(pDev);
 	if (dev == NULL || dev->bPeiPrepared ||
-		dev->Async != NRFX_I2C_ASYNC_IDLE)
+		nRFxI2CTxPending(dev) || nRFxI2CRxPending(dev))
 	{
 		return false;
 	}
@@ -1869,7 +1891,7 @@ bool I2CPreparePeiTransfer(I2CDev_t *pDev, uint8_t DevAddr,
 	}
 	// Check transfer state after acquiring the bus lock.
 	if (dev->bPeiPrepared ||
-		dev->Async != NRFX_I2C_ASYNC_IDLE)
+		nRFxI2CTxPending(dev) || nRFxI2CRxPending(dev))
 	{
 		atomic_flag_clear(&pDev->DevIntrf.bBusy);
 		return false;

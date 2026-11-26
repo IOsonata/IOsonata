@@ -103,6 +103,7 @@ def legacy_write(addr, value):
         sent.append(value & 0xFF)
         if legacy == 'twi_polled':
             if nack_at is not None and len(sent) - 1 == nack_at:
+                errorsrc[0] = 4
                 put(BASE[0] + T[8], 1) # ERROR, data NACK
             else:
                 put(BASE[0] + T[7], 1) # TXDSENT for the byte just written
@@ -124,8 +125,16 @@ def legacy_read(uc, access, addr, size, value, data):
         put(addr, 1)
 
 intenclr = []      # values written to INTENCLR of the SPI and TWI instance
+errorsrc = [0]     # ERRORSRC of the TWI instance: set with ERROR, cleared by writing ones
+
+def read(uc, access, addr, size, value, data):
+    if addr == BASE[0] + o[21]:
+        put(addr, errorsrc[0])
+    legacy_read(uc, access, addr, size, value, data)
 
 def write(uc, access, addr, size, value, data):
+    if addr == BASE[0] + o[21]:
+        errorsrc[0] &= ~value
     if addr in (BASE[1] + o[24], BASE[0] + o[25]):
         intenclr.append(value & 0xFFFFFFFF)
     if legacy in ('twi', 'twi_polled'):
@@ -174,7 +183,7 @@ def write(uc, access, addr, size, value, data):
             put(base + o[9], 1)
 
 u.hook_add(UC_HOOK_MEM_WRITE, write)
-u.hook_add(UC_HOOK_MEM_READ, legacy_read)
+u.hook_add(UC_HOOK_MEM_READ, read)
 
 def isr(bus):
     call('isr', bus, 0, sp=0x200F0000)
@@ -297,6 +306,7 @@ def twim_finish(amount=None, event=None, error=False):
     sh = shorts.pop(0)
     put(base + (o[12] if kind == 'rx' else o[13]) + 8, length if amount is None else amount)
     if error:
+        errorsrc[0] = 2     # address NACK
         put(base + o[18], 1)
         isr(0)
         return kind, sh
@@ -474,6 +484,7 @@ if T[0]:
     twi_init()
     check(call('tx', 0, 4) == -1)
     twi_event(7)
+    errorsrc[0] = 4     # data NACK
     twi_event(8)
     check(actions == ['starttx', 'resume', 'stop'], 'twi error stop', actions)
     twi_event(5)
