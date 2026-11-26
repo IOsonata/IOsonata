@@ -9,7 +9,7 @@ November 25, 2026.
 | Port | No run time source selection | Clock code reads no device or driver state | `SystemSleep` leaves the drivers alone | Wake source set through the device driver |
 | --- | --- | --- | --- | --- |
 | SAM D11, SAM D21 | Yes | Yes | Yes | Yes |
-| SAM4L | No | No | Yes, not run on hardware | No |
+| SAM4L | Yes, not run on hardware | Yes, not run on hardware | Yes, not run on hardware | No |
 | SAM4E | No | No | Not reviewed | No |
 | Nordic | No | No | Not reviewed | No |
 | ST | No | Not reviewed | Not reviewed | No |

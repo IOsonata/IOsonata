@@ -144,7 +144,6 @@ static void __WFI()
 	Advance(0, g_Sam4lTimerData[0].Trigger[0].Ticks);
 }
 int main() {
-	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0));
 	g_McuOsc.LowPwrOsc.Freq=32768;
 	// AST is only reset by POR (42023H table 10-12), not by debugger reset.
 	// Model a previous firmware's running timer with no live software owner.
@@ -204,17 +203,7 @@ int main() {
 	assert(ast.AST_WER == AST_WER_OVF);
 	assert(bpm.BPM_BKUPWEN & (1U << 1));
 	assert(pm.PM_PBADIVMASK==64 && (pm.PM_PBAMASK & (PM_PBAMASK_TC0|PM_PBAMASK_TC1)));
-	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0 | PM_PBAMASK_TC1));
 	for (int dev = 1; dev < 7; dev++) timers[dev].Disable(&timers[dev]);
-	assert(!Sam4lTimerClockBusy(PM_PBAMASK_TC0 | PM_PBAMASK_TC1));
-	// The ownership query must not clear pending rollover/compare flags.
-	tc[0].TC_CHANNEL[0].TC_SR.value = TC_SR_COVFS | TC_SR_CPAS;
-	assert(!Sam4lTimerClockBusy(PM_PBAMASK_TC0));
-	assert(tc[0].TC_CHANNEL[0].TC_SR.value == (TC_SR_COVFS | TC_SR_CPAS));
-	tc[0].TC_CHANNEL[0].TC_SR.value = 0;
-	g_Sam4lTimerData[1].Healthy = false;
-	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0));
-	g_Sam4lTimerData[1].Healthy = true;
 	for (int dev = 1; dev < 7; dev++) assert(timers[dev].Enable(&timers[dev]));
 	for(int dev=0;dev<7;++dev) {
 		auto &t=timers[dev];

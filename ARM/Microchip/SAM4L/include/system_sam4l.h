@@ -55,8 +55,6 @@ void SystemInit(void);
  */
 void SystemCoreClockUpdate(void);
 
-// Private timer-port query. Does not read clear-on-read TC status registers.
-bool Sam4lTimerClockBusy(uint32_t ClockMask);
 
 
 extern uint32_t SystemCoreClock; // System Clock Frequency (Core Clock) in Hz

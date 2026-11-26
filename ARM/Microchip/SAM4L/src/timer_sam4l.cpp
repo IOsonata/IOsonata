@@ -47,24 +47,6 @@ Sam4l_TimerData_t g_Sam4lTimerData[SAM4L_TIMER_MAXCNT] = {
 	{nullptr, &SAM4L_TC1->TC_CHANNEL[1], TC11_IRQn, PM_PBAMASK_TC1},
 	{nullptr, &SAM4L_TC1->TC_CHANNEL[2], TC12_IRQn, PM_PBAMASK_TC1},
 };
-bool Sam4lTimerClockBusy(uint32_t ClockMask)
-{
-	uint32_t owned = 0;
-
-	for (const auto &d : g_Sam4lTimerData)
-	{
-		if (d.TcReg && d.Timer && (ClockMask & d.ClockMask))
-		{
-			if (d.Running || !d.Healthy)
-			{
-				return true;
-			}
-			owned |= d.ClockMask;
-		}
-	}
-	// A TC block enabled outside the timer port must be stopped by its owner.
-	return (ClockMask & ~owned) != 0;
-}
 
 void Sam4lTimerPmWrite(volatile uint32_t *reg, uint32_t value)
 {
