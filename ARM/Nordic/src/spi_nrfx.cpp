@@ -9,19 +9,13 @@ not to use the same device number on an other device.
 For 3 wire support : Set both MISO & MOSI to the same pin.
 For QSPI support where available is the last device of the list.
 
-Master with EasyDMA and bIntEn : TxData and RxData start the first DMA block and
-return -1. The interrupt handler starts the following blocks, releases the bus
-and reports DEVINTRF_EVT_COMPLETED with the number of bytes moved (the receive
-buffer for a receive). A transmit that keeps the bus for a following receive
-(bNoStop) only sets bTxReady.
-
-Master without EasyDMA and bIntEn : the interrupt handler moves one byte per
-READY event and ends the transfer the same way.
-
-Interrupt driven transfers use the caller's buffer, which must stay valid
-until the completion. The driver keeps the pointer and the remaining count
-and continues from them at each interrupt, of any length. DeviceIntrfWrite
-waits for the end of the transmit of its own combined buffer.
+Master with bIntEn : TxData and RxData keep the caller's buffer, start the
+transfer and wait for the interrupt handler to end it, then return the number
+of bytes moved, as in polling mode. The handler continues from the remaining
+count at each interrupt, one DMA block or one byte, of any length, and
+reports DEVINTRF_EVT_TX_READY and DEVINTRF_EVT_COMPLETED. The chip select and
+the busy flag are released by the generic layer after the return, as in
+polling mode.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2016
@@ -207,6 +201,45 @@ static uint32_t nRFxSPIDmaTimeout(int Length, uint32_t Rate)
 {
 	uint64_t cycles = (uint64_t)SystemCoreClock * Length * 8 / Rate + NRFSPI_TIMEOUT;
 	return cycles > INT32_MAX ? INT32_MAX : (uint32_t)cycles;
+}
+
+// Wait for the interrupt handler to end the transfer started by TxData or
+// RxData and return the number of bytes moved. The handler brings the
+// remaining count to zero at the end. The time limit is restarted each time
+// the transfer moves on: Len is what the hardware moves between two
+// interrupts. When it expires the transfer is dropped.
+static int nRFxSPIIntWait(nRFSpiDev_t * const pDev, bool bTx, int Len)
+{
+	// The handler changes these fields behind this loop
+	volatile nRFSpiDev_t *dev = pDev;
+	uint32_t timeout = nRFxSPIDmaTimeout(Len, pDev->pSpiDev->Cfg.Rate);
+	uint32_t t = timeout;
+	int idx = 0;
+
+	while ((bTx ? dev->TxDatalen : dev->RxBufflen) > 0)
+	{
+		int i = bTx ? dev->TxIdx : dev->RxIdx;
+
+		if (i != idx)
+		{
+			idx = i;
+			t = timeout;
+		}
+		else if (--t == 0)
+		{
+#ifdef SPIM_PRESENT
+			if (pDev->pSpiDev->DevIntrf.bDma)
+			{
+				pDev->pDmaReg->TASKS_STOP = 1;
+			}
+#endif
+			dev->TxDatalen = 0;
+			dev->RxBufflen = 0;
+			break;
+		}
+	}
+
+	return bTx ? dev->TxIdx : dev->RxIdx;
 }
 
 #ifdef SPIM_PRESENT
@@ -519,15 +552,13 @@ int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 
 	if (pDev->bIntEn == true)
 	{
-		// The interrupt handler takes each byte, releases the bus and reports
+		// The interrupt handler takes each byte and reports
 		// DEVINTRF_EVT_COMPLETED.
 		dev->pRxBuff = pBuff;
 		dev->RxIdx = 0;
 		dev->RxBufflen = BuffLen;
-		dev->TxDatalen = 0;
-		dev->TxIdx = 0;
-		cnt = -1;
 		dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
+		cnt = nRFxSPIIntWait(dev, false, 1);
 	}
 	else
 	{
@@ -588,8 +619,8 @@ static void nRFxSPIDmaNextBlock(nRFSpiDev_t * const pDev)
 	pDev->pDmaReg->TASKS_START = 1;
 }
 
-// DMA block done in the master interrupt. Start the next block, or release
-// the bus and report DEVINTRF_EVT_COMPLETED with the number of bytes moved.
+// DMA block done in the master interrupt. Start the next block, or end the
+// transfer and report DEVINTRF_EVT_COMPLETED with the number of bytes moved.
 static void nRFxSPIDmaEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev)
 {
 	bool rx = pDev->RxBufflen > 0;
@@ -626,36 +657,31 @@ static void nRFxSPIDmaEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev)
 		return;
 	}
 
-	uint8_t *buff = NULL;
-	bool report = true;
-	int count;
-
-	// The generic stop helpers own the busy flag. Release it before the callback.
+	// The remaining count at zero is what TxData or RxData waits for. The
+	// chip select and the busy flag are released by their caller.
 	if (rx)
 	{
-		buff = pDev->pRxBuff;
-		count = pDev->RxIdx;
 		pDev->RxBufflen = 0;
-		DeviceIntrfStopRx(pIntrf);
+		if (pIntrf->EvtCB)
+		{
+			pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_COMPLETED, pDev->pRxBuff, pDev->RxIdx);
+		}
 	}
 	else
 	{
-		count = pDev->TxIdx;
 		pDev->TxDatalen = 0;
-		// A command phase that keeps the bus is not a completion, the
-		// data phase that follows reports it.
-		report = pIntrf->bNoStop == false;
-		DeviceIntrfTxComplete(pIntrf);
+		pIntrf->bTxReady = true;
 		if (pIntrf->EvtCB)
 		{
 			// Everything given has gone out, the transmitter is free
-			pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_TX_READY, NULL, count);
+			pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_TX_READY, NULL, pDev->TxIdx);
+			// A command phase that keeps the bus is not a completion, the
+			// data phase that follows reports it.
+			if (pIntrf->bNoStop == false)
+			{
+				pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_COMPLETED, NULL, pDev->TxIdx);
+			}
 		}
-	}
-
-	if (report && pIntrf->EvtCB)
-	{
-		pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_COMPLETED, buff, count);
 	}
 }
 #endif
@@ -723,15 +749,14 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 
 	if (pDev->bIntEn == true)
 	{
-		// The interrupt handler moves through the DMA blocks, releases the
-		// bus and reports DEVINTRF_EVT_COMPLETED.
+		// The interrupt handler moves through the DMA blocks and reports
+		// DEVINTRF_EVT_COMPLETED.
 		dev->pRxBuff = pBuff;
 		dev->RxIdx = 0;
-		dev->TxDatalen = 0;
 		dev->RxBufflen = BuffLen;
 		nRFxSPIDmaNextBlock(dev);
 
-		return -1;
+		return nRFxSPIIntWait(dev, false, min(BuffLen, NRFX_SPI_DMA_MAXCNT));
 	}
 
 	while (BuffLen > 0)
@@ -836,18 +861,13 @@ int nRFxSPITxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 
 	if (pDev->bIntEn)
 	{
-		// The interrupt handler writes each byte. At the end it sets
-		// bTxReady, then releases the bus and reports DEVINTRF_EVT_COMPLETED,
-		// or keeps the bus when bNoStop is set.
+		// The interrupt handler writes each byte, then sets bTxReady
 		dev->pTxData = pData;
 		dev->TxDatalen = DataLen;
 		dev->TxIdx = 0;
-		dev->RxBufflen = 0;
 		dev->pReg->EVENTS_READY = 0;
-		dev->pReg->TXD = dev->pTxData[0];
-		dev->TxIdx++;
-		dev->TxDatalen--;
-		return -1;
+		dev->pReg->TXD = pData[0];
+		return nRFxSPIIntWait(dev, true, 1);
 	}
     else
     {
@@ -896,15 +916,14 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 
 	if (pDev->bIntEn == true && DataLen > 0)
 	{
-		// The interrupt handler moves through the DMA blocks, releases the
-		// bus and reports DEVINTRF_EVT_COMPLETED.
+		// The interrupt handler moves through the DMA blocks, then sets
+		// bTxReady.
 		pDev->bTxReady = false;
 		dev->pTxData = pData;
 		dev->TxIdx = 0;
-		dev->RxBufflen = 0;
 		dev->TxDatalen = DataLen;
 		nRFxSPIDmaNextBlock(dev);
-		return -1;
+		return nRFxSPIIntWait(dev, true, min(DataLen, NRFX_SPI_DMA_MAXCNT));
 	}
 
 	while (DataLen > 0)
@@ -1078,42 +1097,34 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 					{
 						dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
 					}
-					else
+					else if (pDev->EvtCB)
 					{
-						// The generic stop helpers own the busy flag.
-						// Release it before the callback.
-						DeviceIntrfStopRx(pDev);
-						if (pDev->EvtCB)
-						{
-							pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, dev->pRxBuff, dev->RxIdx);
-						}
+						pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, dev->pRxBuff, dev->RxIdx);
 					}
 				}
-				else if (dev->TxIdx > 0)
+				else if (dev->TxDatalen > 0)
 				{
+					dev->TxIdx++;
+					dev->TxDatalen--;
+
 					if (dev->TxDatalen > 0)
 					{
 						dev->pReg->TXD = dev->pTxData[dev->TxIdx];
-						dev->TxIdx++;
-						dev->TxDatalen--;
 					}
 					else
 					{
-						int count = dev->TxIdx;
-						// A command phase that keeps the bus is not a
-						// completion, the data phase that follows reports it.
-						bool report = pDev->bNoStop == false;
-
-						dev->TxIdx = 0;
-						DeviceIntrfTxComplete(pDev);
+						pDev->bTxReady = true;
 
 						if (pDev->EvtCB)
 						{
 							// Everything given has gone out
-							pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, NULL, count);
-							if (report)
+							pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, NULL, dev->TxIdx);
+							// A command phase that keeps the bus is not a
+							// completion, the data phase that follows
+							// reports it.
+							if (pDev->bNoStop == false)
 							{
-								pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, NULL, count);
+								pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, NULL, dev->TxIdx);
 							}
 						}
 					}

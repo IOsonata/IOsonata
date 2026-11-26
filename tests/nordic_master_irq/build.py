@@ -20,7 +20,6 @@ with tempfile.TemporaryDirectory() as tmp:
     for chip in chips:
         cpu = 'cortex-m4' if chip.startswith('NRF52') else 'cortex-m33'
         flags = [a.cxx, '-std=gnu++17', '-mcpu='+cpu, '-mthumb', '-O1', '-g',
-                 '-fno-inline-functions-called-once',
                  '-fno-exceptions', '-fno-rtti', '-ffunction-sections', '-fdata-sections', '-D'+chip]
         if chip.startswith('NRF54'):
             flags += ['-DNRF_APPLICATION']

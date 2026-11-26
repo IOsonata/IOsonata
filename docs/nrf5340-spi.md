@@ -21,15 +21,16 @@ again after changing the CPU clock; do not change clocks or rates during a trans
 These limits follow Nordic's [nRF5340 product specification](https://docs.nordicsemi.com/r/bundle/ps_nrf5340/)
 and [pin assignments](https://docs.nordicsemi.com/r/bundle/ps_nrf5340/page/chapters/pin.html).
 
-Polling returns the transferred byte count. Interrupt-driven transfers return
-`-1` and complete through `DevIntrf_t::EvtCB`. The driver releases the generic
-transaction lock before reporting completion. A command phase with `bNoStop`
-retains chip select for the following read. Interrupt-driven transmits are
-sent from the caller's buffer, which must be in RAM and stay valid until the
-completion. Polling TX stages data in RAM so constants in flash are usable.
+A transfer returns the transferred byte count, with polling and with
+interrupt: an interrupt-driven transfer waits for its interrupt handler, which
+also reports through `DevIntrf_t::EvtCB`. Chip select and the generic
+transaction lock are released after the transfer has returned. A command phase
+with `bNoStop` retains chip select for the following read. Interrupt-driven
+transmits are sent from the caller's buffer, which must be in RAM. Polling TX
+stages data in RAM so constants in flash are usable.
 
 Transfers larger than the DMA counter are split into blocks with explicit
-buffer addresses. Polling waits include wire time at the selected rate. On a
+buffer addresses. The waits include wire time at the selected rate. On a
 timeout, STOP is requested before returning the caller's buffer; if STOP does
 not complete, the peripheral is disabled and must be reinitialized. The driver
 uses the documented ENABLE register on nRF5340, not the older Nordic undocumented
