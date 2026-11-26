@@ -102,11 +102,11 @@ def main():
             assert all(symbol not in symbols for symbol in absent), "Unselected output linked"
         assert "__Vectors" in symbols and "ResetEntry" in symbols, "Startup missing"
         if not (args.no_lto or args.syslog_only or args.dma or args.interrupt) and args.output == "display":
-            absent = ("SamdSpimInt", "SamdSpis", "SamdSpimDma", "SamdDmacOpen",
-                      "SamdDmacStart", "s_SamdSpiTxBuf")
+            absent = ("SamdSpimIrq", "SamdSpis", "SamdSpimDma", "SamdDmacOpen",
+                      "SamdDmacStart")
             assert all(symbol not in symbols for symbol in absent), "Unused SPI mode linked"
         if args.dma and not args.no_lto and args.output == "display":
-            absent = ("SamdSpimPolling", "SamdSpimStart", "SamdSpimIrq", "SamdSpis")
+            absent = ("SamdSpimPolling", "SamdSpis") + (() if args.interrupt else ("SamdSpimIrq",))
             assert all(symbol not in symbols for symbol in absent), "CPU SPI mode linked with DMA"
             assert "SamdSpiTxData(" not in demangled and "SamdSpiRxData(" not in demangled, "Register entry points linked with DMA"
         if args.syslog_only:

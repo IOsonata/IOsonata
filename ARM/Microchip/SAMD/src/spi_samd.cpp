@@ -10,12 +10,13 @@
 		Master: polling or interrupt, chip selects on GPIO pins from index
 		SPI_CS_IOPIN_IDX of the pin map, driven by the driver with
 		SPICSEL_AUTO. SCK is the main clock divided by 2 to 512, the closest
-		rate to the request, 1 MHz for 0. In interrupt mode TxData and RxData
-		return -1 and report the transfer with DEVINTRF_EVT_COMPLETED. The
-		command phase of a read (bNoStop) is sent by polling. Data to send is
-		copied to a buffer shared by the instances; data longer than the
-		buffer, or sent while another instance uses it, is sent by polling and
-		reported the same way.
+		rate to the request, 1 MHz for 0. The same transfer in both modes:
+		TxData and RxData return the count of bytes when the transfer is
+		done. In interrupt mode a wait for DRE or RXC, or for the end of a
+		DMA transfer, waits for the SERCOM or DMAC interrupt: the handler
+		masks it and tells the wait, which then reads the flags as in polling
+		mode. The application sets the interrupt priority: a transfer is not
+		called from an interrupt of the same or a higher priority.
 
 		Master with bDmaEn: two DMAC channels, on the SERCOM RX (RXC) and TX
 		(DRE) triggers, move the bytes in place of the CPU, taken at SPIInit
@@ -23,13 +24,12 @@
 		transfers return 0 until SPIInit is called again.
 		The receive channel is armed first, a direction without data of the
 		application runs from the DummyByte or into a sink byte. The transfer
-		ends when the receive channel has its last byte. Same modes as without
-		DMA: with bIntEn the DMAC interrupt reports the end, the cases sent by
-		polling above are sent by DMA with the CPU waiting, as all transfers
-		without bIntEn. A buffer overflow or a channel transfer error ends the
-		transfer with the count of bytes received. Blocks of at most 65535
-		bytes, a longer transfer is done with the CPU waiting. FirstRdData is
-		not updated by DMA transfers.
+		ends when the receive channel has its last byte. The CPU waits for it:
+		for the DMAC interrupt, or the SERCOM error interrupt, with bIntEn,
+		reading the channel state without. A buffer overflow or a channel
+		transfer error ends the transfer with the count of bytes received.
+		Blocks of at most 65535 bytes. FirstRdData is not updated by DMA
+		transfers.
 
 		Slave: interrupt, the hardware SS pad framing the transfer, the CS pin
 		of index SPI_CS_IOPIN_IDX. DEVINTRF_EVT_STATECHG before each frame,
@@ -90,35 +90,17 @@ SOFTWARE.
 
 #define SAMD_SPI_RATE_DEFAULT		1000000U
 
-// Interrupt transmit buffer, shared by the instances
-#if SAMD_SERCOM_CNT > 3
-#define SAMD_SPI_TXBUF_SIZE			256
-#else
-#define SAMD_SPI_TXBUF_SIZE			64
-#endif
-
-#define SAMD_SPIM_INTS				(SERCOM_SPIM_INTENSET_RXC_Msk | SERCOM_SPIM_INTENSET_ERROR_Msk)
 #define SAMD_SPIS_INTS				(SERCOM_SPIS_INTENSET_DRE_Msk | SERCOM_SPIS_INTENSET_TXC_Msk | \
 									 SERCOM_SPIS_INTENSET_RXC_Msk | SERCOM_SPIS_INTENSET_ERROR_Msk)
 #define SAMD_SPI_ALL_INTS			(SERCOM_SPIM_INTENCLR_DRE_Msk | SERCOM_SPIM_INTENCLR_TXC_Msk | \
 									 SERCOM_SPIM_INTENCLR_RXC_Msk | SERCOM_SPIM_INTENCLR_SSL_Msk | \
 									 SERCOM_SPIM_INTENCLR_ERROR_Msk)
 
-typedef enum : uint8_t {
-	SAMD_SPI_OP_NONE,
-	SAMD_SPI_OP_TX,
-	SAMD_SPI_OP_RX,
-} SAMD_SPI_OP;
-
 #pragma pack(push, 4)
 
 typedef struct SamdSpiDev SamdSpiDev_t;
 
 typedef struct {
-	int (*Sync)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
-	int (*Async)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
-	void (*Start)(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
-	int (*DmaEnd)(SamdSpiDev_t *);
 	void (*DmaRelease)(SamdSpiDev_t *);
 	void (*SlaveArm)(SamdSpiDev_t *);
 	IrqHandler_t Irq;
@@ -129,20 +111,15 @@ struct SamdSpiDev {
 	uint8_t Baud;					//!< Master BAUD
 	bool bSlaveSel;					//!< Slave SS went low in the frame
 	bool bDma;						//!< DmaRx and DmaTx taken
-	volatile bool bDmaRun;			//!< Master DMA transfer ended by the DMAC interrupt
+	volatile bool bIrq;				//!< Master interrupt mode: an interrupt came since the wait started
 	uint8_t Sink;					//!< Received bytes nobody wants
 	int8_t DmaRx;					//!< DMAC channels of the master
 	int8_t DmaTx;
-	volatile SAMD_SPI_OP Op;		//!< Master interrupt transfer
 	int DevNo;						//!< SERCOM number
 	sercom_spim_registers_t *pReg;
 	SPIDev_t *pSpiDev;				//!< Generic SPI device data
 	uint32_t CtrlA;					//!< CTRLA without ENABLE
 	int NbCs;						//!< Master chip select pins
-	const uint8_t *pTxData;
-	uint8_t *pRxData;
-	int Length;
-	int Count;
 	uint8_t *pSlaveRx;				//!< Slave buffers of the frame
 	int SlaveRxLen;
 	const uint8_t *pSlaveTx;
@@ -155,37 +132,27 @@ struct SamdSpiDev {
 
 static SamdSpiDev_t s_SamdSpiDev[SAMD_SERCOM_CNT];
 
-static uint8_t s_SamdSpiTxBuf[SAMD_SPI_TXBUF_SIZE];
-static SamdSpiDev_t *s_pSamdSpiTxOwner;
-
 // Only the selected mode supplies optional operations. Common lifecycle
 // functions do not link DMA or slave handling on their own.
-static int SamdSpimPolling(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
-static int SamdSpimDmaWait(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
-static int SamdSpimInt(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
-static void SamdSpimDmaStart(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
-static int SamdSpimDmaEnd(SamdSpiDev_t *);
 static void SamdSpiDmaGive(SamdSpiDev_t *);
 static void SamdSpisArm(SamdSpiDev_t *);
 static void SamdSpimIrq(int, DevIntrf_t * const);
-static void SamdSpimDmaIrq(int, DevIntrf_t * const);
-static void SamdSpimStart(SamdSpiDev_t *, const uint8_t *, uint8_t *, int);
 static void SamdSpisIrq(int, DevIntrf_t * const);
 
 static const SamdSpiOps_t s_SamdSpiPolling = {
-	SamdSpimPolling, NULL, NULL, NULL, NULL, NULL, NULL
+	NULL, NULL, NULL
 };
 static const SamdSpiOps_t s_SamdSpiInterrupt = {
-	SamdSpimPolling, SamdSpimInt, SamdSpimStart, NULL, NULL, NULL, SamdSpimIrq
+	NULL, NULL, SamdSpimIrq
 };
 static const SamdSpiOps_t s_SamdSpiDmaPolling = {
-	SamdSpimDmaWait, NULL, NULL, SamdSpimDmaEnd, SamdSpiDmaGive, NULL, NULL
+	SamdSpiDmaGive, NULL, NULL
 };
 static const SamdSpiOps_t s_SamdSpiDmaInterrupt = {
-	SamdSpimDmaWait, SamdSpimInt, SamdSpimDmaStart, SamdSpimDmaEnd, SamdSpiDmaGive, NULL, SamdSpimDmaIrq
+	SamdSpiDmaGive, NULL, SamdSpimIrq
 };
 static const SamdSpiOps_t s_SamdSpiSlave = {
-	NULL, NULL, NULL, NULL, NULL, SamdSpisArm, SamdSpisIrq
+	NULL, SamdSpisArm, SamdSpisIrq
 };
 
 static bool SamdSpiSync(sercom_spim_registers_t *pReg, uint32_t Mask)
@@ -201,13 +168,26 @@ static bool SamdSpiSync(sercom_spim_registers_t *pReg, uint32_t Mask)
 	return false;
 }
 
-static bool SamdSpiWaitFlag(sercom_spim_registers_t *pReg, uint8_t Flag)
+// Master flag, false on timeout. In interrupt mode the wait is for the
+// interrupt of the flag, the flag is read again after it.
+static bool SamdSpiWaitFlag(SamdSpiDev_t *pDev, uint8_t Flag)
 {
+	sercom_spim_registers_t *reg = pDev->pReg;
+	bool irq = pDev->pSpiDev->DevIntrf.bIntEn;
+
 	for (uint32_t i = 0; i < SAMD_SPI_WAIT_LIMIT; i++)
 	{
-		if ((pReg->SERCOM_INTFLAG & Flag) != 0U)
+		if ((reg->SERCOM_INTFLAG & Flag) != 0U)
 		{
 			return true;
+		}
+		if (irq)
+		{
+			pDev->bIrq = false;
+			reg->SERCOM_INTENSET = Flag;
+			while (!pDev->bIrq && ++i < SAMD_SPI_WAIT_LIMIT)
+			{
+			}
 		}
 	}
 
@@ -494,13 +474,13 @@ static int SamdSpimPolling(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx,
 
 	while (count < Length)
 	{
-		if (!SamdSpiWaitFlag(reg, SERCOM_SPIM_INTFLAG_DRE_Msk))
+		if (!SamdSpiWaitFlag(pDev, SERCOM_SPIM_INTFLAG_DRE_Msk))
 		{
 			break;
 		}
 		reg->SERCOM_DATA = pTx != NULL ? pTx[count] : spi->Cfg.DummyByte;
 
-		if (!SamdSpiWaitFlag(reg, SERCOM_SPIM_INTFLAG_RXC_Msk))
+		if (!SamdSpiWaitFlag(pDev, SERCOM_SPIM_INTFLAG_RXC_Msk))
 		{
 			break;
 		}
@@ -534,8 +514,8 @@ static int SamdSpimDmaEnd(SamdSpiDev_t *pDev)
 
 // Master DMA block: stale received bytes and overflow cleared, the receive
 // channel armed, then the transmit one. A direction without data runs from
-// the DummyByte or into Sink. An asynchronous DMA transfer enables the
-// SERCOM overflow interrupt.
+// the DummyByte or into Sink. In interrupt mode the SERCOM overflow
+// interrupt is enabled for the wait.
 static void SamdSpimDmaStart(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int Length)
 {
 	sercom_spim_registers_t *reg = pDev->pReg;
@@ -546,8 +526,9 @@ static void SamdSpimDmaStart(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pR
 	}
 	reg->SERCOM_STATUS = SERCOM_SPIM_STATUS_BUFOVF_Msk;
 	reg->SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_ERROR_Msk;
-	if (pDev->bDmaRun)
+	if (pDev->pSpiDev->DevIntrf.bIntEn)
 	{
+		pDev->bIrq = false;
 		reg->SERCOM_INTENSET = SERCOM_SPIM_INTENSET_ERROR_Msk;
 	}
 
@@ -558,11 +539,14 @@ static void SamdSpimDmaStart(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pR
 
 // Master DMA transfer, the CPU waiting, in blocks of at most
 // SAMD_DMAC_COUNT_MAX bytes. The wait of a block is bounded from the byte
-// time, 16 x (BAUD + 1) clocks, more than one loop pass each. Returns the
+// time, 16 x (BAUD + 1) clocks, more than one loop pass each. In interrupt
+// mode the wait is for the DMAC interrupt of a channel or the SERCOM error
+// interrupt, the channel and the flag are read again after it. Returns the
 // bytes received.
 static int SamdSpimDmaWait(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int Length)
 {
 	sercom_spim_registers_t *reg = pDev->pReg;
+	bool irq = pDev->pSpiDev->DevIntrf.bIntEn;
 	int count = 0;
 
 	while (count < Length)
@@ -578,6 +562,13 @@ static int SamdSpimDmaWait(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx,
 			{
 				break;
 			}
+			if (irq)
+			{
+				while (!pDev->bIrq && ++i < limit)
+				{
+				}
+				pDev->bIrq = false;
+			}
 		}
 
 		int left = SamdSpimDmaEnd(pDev);
@@ -592,208 +583,25 @@ static int SamdSpimDmaWait(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx,
 	return count;
 }
 
-// End of the master transfer taken by the first of the DMAC interrupt, the
-// SERCOM interrupt and the caller, interrupts disabled: SERCOM interrupts
-// off, a DMA transfer stopped with the count of bytes its receive channel
-// moved. Returns the operation, none when another path took it.
-static SAMD_SPI_OP SamdSpimTake(SamdSpiDev_t *pDev)
-{
-	SAMD_SPI_OP op = pDev->Op;
-
-	if (op != SAMD_SPI_OP_NONE)
-	{
-		pDev->pReg->SERCOM_INTENCLR = SAMD_SPI_ALL_INTS;
-		if (pDev->bDmaRun)
-		{
-			pDev->bDmaRun = false;
-			pDev->Count = pDev->Length - pDev->pOps->DmaEnd(pDev);
-		}
-		pDev->Op = SAMD_SPI_OP_NONE;
-		if (s_pSamdSpiTxOwner == pDev)
-		{
-			s_pSamdSpiTxOwner = NULL;
-		}
-	}
-
-	return op;
-}
-
-// Transfer reported, after SamdSpimTake
-static void SamdSpimFinish(SamdSpiDev_t *pDev, SAMD_SPI_OP Op, int Count)
-{
-	DevIntrf_t *intrf = &pDev->pSpiDev->DevIntrf;
-
-	if (Op == SAMD_SPI_OP_TX)
-	{
-		DeviceIntrfTxComplete(intrf);
-	}
-	else
-	{
-		DeviceIntrfStopRx(intrf);
-	}
-
-	if (intrf->EvtCB)
-	{
-		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, NULL, Count);
-	}
-}
-
-static void SamdSpimComplete(SamdSpiDev_t *pDev, bool bError)
-{
-	uint32_t state = DisableInterrupt();
-	sercom_spim_registers_t *reg = pDev->pReg;
-
-	if (bError)
-	{
-		if ((reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_ERROR_Msk) == 0U)
-		{
-			EnableInterrupt(state);
-
-			return;
-		}
-		reg->SERCOM_STATUS = SERCOM_SPIM_STATUS_BUFOVF_Msk;
-		reg->SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_ERROR_Msk;
-	}
-	SAMD_SPI_OP op = SamdSpimTake(pDev);
-	int count = pDev->Count;
-
-	EnableInterrupt(state);
-
-	if (op != SAMD_SPI_OP_NONE)
-	{
-		SamdSpimFinish(pDev, op, count);
-	}
-}
-
-// Start an asynchronous transfer, or complete synchronously if buffering is unavailable.
-static int SamdSpimInt(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int Length)
-{
-	DevIntrf_t *intrf = &pDev->pSpiDev->DevIntrf;
-	bool sync = pDev->bDma && Length > SAMD_DMAC_COUNT_MAX;
-
-	if (pTx != NULL)
-	{
-		uint32_t state = DisableInterrupt();
-		bool buff = s_pSamdSpiTxOwner == NULL && Length <= SAMD_SPI_TXBUF_SIZE;
-
-		if (buff)
-		{
-			s_pSamdSpiTxOwner = pDev;
-		}
-		EnableInterrupt(state);
-
-		intrf->bTxReady = false;
-
-		sync = !buff;
-		if (buff)
-		{
-			// The caller data does not outlive the call
-			memcpy(s_SamdSpiTxBuf, pTx, (size_t)Length);
-			pTx = s_SamdSpiTxBuf;
-		}
-	}
-	if (sync)
-	{
-		pDev->Count = pDev->pOps->Sync(pDev, pTx, pRx, Length);
-		pDev->Op = pTx != NULL ? SAMD_SPI_OP_TX : SAMD_SPI_OP_RX;
-		SamdSpimComplete(pDev, false);
-
-		return -1;
-	}
-
-	pDev->Length = Length;
-	pDev->Count = 0;
-	pDev->Op = pTx != NULL ? SAMD_SPI_OP_TX : SAMD_SPI_OP_RX;
-
-	pDev->bDmaRun = pDev->bDma;
-	pDev->pOps->Start(pDev, pTx, pRx, Length);
-
-	return -1;
-}
-
-// Byte interrupts only: DMA arms channels instead of feeding DATA here.
-static void SamdSpimStart(SamdSpiDev_t *pDev, const uint8_t *pTx, uint8_t *pRx, int Length)
-{
-	sercom_spim_registers_t *reg = pDev->pReg;
-
-	pDev->pTxData = pTx;
-	pDev->pRxData = pRx;
-	(void)Length;
-	while ((reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_RXC_Msk) != 0U)
-	{
-		(void)reg->SERCOM_DATA;
-	}
-	reg->SERCOM_DATA = pTx != NULL ? pTx[0] : pDev->pSpiDev->Cfg.DummyByte;
-	reg->SERCOM_INTENSET = SAMD_SPIM_INTS;
-}
-
-// DMA uses the SERCOM interrupt only for overflow, never for RX bytes.
-static void SamdSpimDmaIrq(int DevNo, DevIntrf_t * const pIntrf)
-{
-	(void)DevNo;
-	// Check ERROR and take completion under the same interrupt mask.
-	SamdSpimComplete((SamdSpiDev_t *)pIntrf->pDevData, true);
-}
-
+// Master: the interrupt is masked and the wait told, the flags are left to
+// the wait
 static void SamdSpimIrq(int DevNo, DevIntrf_t * const pIntrf)
 {
 	SamdSpiDev_t *pDev = (SamdSpiDev_t *)pIntrf->pDevData;
-	sercom_spim_registers_t *reg = pDev->pReg;
 
 	(void)DevNo;
 
-	if (pDev->Op == SAMD_SPI_OP_NONE)
-	{
-		reg->SERCOM_INTENCLR = SAMD_SPI_ALL_INTS;
-
-		return;
-	}
-
-	if ((reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_ERROR_Msk) != 0U)
-	{
-		SamdSpimDmaIrq(DevNo, pIntrf);
-
-		return;
-	}
-	if ((reg->SERCOM_INTFLAG & SERCOM_SPIM_INTFLAG_RXC_Msk) == 0U)
-	{
-		return;
-	}
-
-	uint8_t data = (uint8_t)reg->SERCOM_DATA;
-
-	if (pDev->pRxData != NULL)
-	{
-		pDev->pRxData[pDev->Count] = data;
-	}
-	else if (pDev->Count == 0)
-	{
-		pDev->pSpiDev->FirstRdData = data;
-	}
-	pDev->Count++;
-
-	if (pDev->Count < pDev->Length)
-	{
-		reg->SERCOM_DATA = pDev->pTxData != NULL ? pDev->pTxData[pDev->Count] : pDev->pSpiDev->Cfg.DummyByte;
-	}
-	else
-	{
-		SamdSpimComplete(pDev, false);
-	}
+	pDev->pReg->SERCOM_INTENCLR = SAMD_SPI_ALL_INTS;
+	pDev->bIrq = true;
 }
 
-// DMAC interrupt of a master channel: the end of the receive channel, or a
-// transfer error of either, ends a transfer started with the interrupt
+// DMAC interrupt of a master channel: the wait reads the channels again
 static void SamdSpimDmaHandler(int Chan, uint32_t Flags, void *pCtx)
 {
-	SamdSpiDev_t *dev = (SamdSpiDev_t *)pCtx;
+	(void)Chan;
+	(void)Flags;
 
-	if (!dev->bDmaRun || (Chan == dev->DmaTx && (Flags & DMAC_CHINTFLAG_TERR_Msk) == 0U))
-	{
-		return;
-	}
-
-	SamdSpimComplete(dev, false);
+	((SamdSpiDev_t *)pCtx)->bIrq = true;
 }
 
 // Master DMAC channels, both or none. The interrupt with bIntEn.
@@ -825,7 +633,6 @@ static void SamdSpiDmaGive(SamdSpiDev_t *pDev)
 	if (pDev->bDma)
 	{
 		pDev->bDma = false;
-		pDev->bDmaRun = false;
 		SamdDmacClose(pDev->DmaRx);
 		SamdDmacClose(pDev->DmaTx);
 		pDev->DmaRx = -1;
@@ -853,7 +660,7 @@ static uint32_t SamdSpiSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 	uint32_t rate = SamdSpiBaud(Rate, &baud);
 
-	if (rate == 0U || dev->Op != SAMD_SPI_OP_NONE)
+	if (rate == 0U)
 	{
 		return 0;
 	}
@@ -884,8 +691,7 @@ static bool SamdSpiStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	SamdSpiDev_t *dev = (SamdSpiDev_t *)pDev->pDevData;
 	SPIDev_t *spi = dev->pSpiDev;
 
-	if (spi->Cfg.Mode != SPIMODE_MASTER || dev->Op != SAMD_SPI_OP_NONE ||
-		(spi->Cfg.ChipSel == SPICSEL_AUTO && (int)DevAddr >= dev->NbCs))
+	if (spi->Cfg.Mode != SPIMODE_MASTER || (spi->Cfg.ChipSel == SPICSEL_AUTO && (int)DevAddr >= dev->NbCs))
 	{
 		return false;
 	}
@@ -911,11 +717,6 @@ static int SamdSpiTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 		return 0;
 	}
 
-	if (pDev->bIntEn && !pDev->bNoStop)
-	{
-		return dev->pOps->Async(dev, pData, NULL, DataLen);
-	}
-
 	return SamdSpimPolling(dev, pData, NULL, DataLen);
 }
 
@@ -926,11 +727,6 @@ static int SamdSpiRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	if (pBuff == NULL || BuffLen <= 0 || dev->pSpiDev->Cfg.Mode != SPIMODE_MASTER)
 	{
 		return 0;
-	}
-
-	if (pDev->bIntEn)
-	{
-		return dev->pOps->Async(dev, NULL, pBuff, BuffLen);
 	}
 
 	return SamdSpimPolling(dev, NULL, pBuff, BuffLen);
@@ -946,11 +742,6 @@ static int SamdSpiTxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int D
 		return 0;
 	}
 
-	if (pDev->bIntEn && !pDev->bNoStop)
-	{
-		return dev->pOps->Async(dev, pData, NULL, DataLen);
-	}
-
 	return SamdSpimDmaWait(dev, pData, NULL, DataLen);
 }
 
@@ -961,11 +752,6 @@ static int SamdSpiRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen
 	if (pBuff == NULL || BuffLen <= 0 || !dev->bDma)
 	{
 		return 0;
-	}
-
-	if (pDev->bIntEn)
-	{
-		return dev->pOps->Async(dev, NULL, pBuff, BuffLen);
 	}
 
 	return SamdSpimDmaWait(dev, NULL, pBuff, BuffLen);
@@ -991,18 +777,7 @@ static void SamdSpiDisable(DevIntrf_t * const pDev)
 	SamdSpiDev_t *dev = (SamdSpiDev_t *)pDev->pDevData;
 	sercom_spim_registers_t *reg = dev->pReg;
 
-	uint32_t state = DisableInterrupt();
-
 	reg->SERCOM_INTENCLR = SAMD_SPI_ALL_INTS;
-	if (dev->bDma)
-	{
-		// Channels stopped, a transfer started with the interrupt is not
-		// reported: Reset ends it
-		dev->bDmaRun = false;
-		(void)dev->pOps->DmaEnd(dev);
-	}
-	EnableInterrupt(state);
-
 	reg->SERCOM_CTRLA = dev->CtrlA;
 	(void)SamdSpiSync(reg, SERCOM_SPIM_SYNCBUSY_ENABLE_Msk);
 	SamdSercomClockDisable(dev->DevNo);
@@ -1037,16 +812,6 @@ static void SamdSpiReset(DevIntrf_t * const pDev)
 	uint32_t state = DisableInterrupt();
 
 	dev->pReg->SERCOM_INTENCLR = SAMD_SPI_ALL_INTS;
-	if (dev->bDma)
-	{
-		dev->bDmaRun = false;
-		(void)dev->pOps->DmaEnd(dev);
-	}
-	dev->Op = SAMD_SPI_OP_NONE;
-	if (s_pSamdSpiTxOwner == dev)
-	{
-		s_pSamdSpiTxOwner = NULL;
-	}
 
 	if (SamdSpiHwInit(dev) && dev->pOps->SlaveArm != NULL)
 	{
@@ -1119,11 +884,6 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 		EnableInterrupt(state);
 
 		return false;
-	}
-
-	if (s_pSamdSpiTxOwner == dev)
-	{
-		s_pSamdSpiTxOwner = NULL;
 	}
 
 	IRQn_Type irq = SamdSercomIrq(pCfgData->DevNo);

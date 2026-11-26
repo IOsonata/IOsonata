@@ -64,7 +64,6 @@ static int IOPinRead(int, int);
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE);
 void IOPinDisable(int, int);
 void SharedIntrfSetIrqHandler(int, DevIntrf_t *pIntrf, IrqHandler_t Handler);
-void DeviceIntrfTxComplete(DevIntrf_t * const pDev);
 static int SamdDmacOpen(int, SamdDmacHandler_t Handler, void *pCtx, int);
 static void SamdDmacClose(int Chan);
 static uint32_t SamdDmacStop(int Chan);
@@ -144,12 +143,6 @@ void SharedIntrfSetIrqHandler(int DevNo, DevIntrf_t *pIntrf, IrqHandler_t Handle
 	g_SharedIntrf[DevNo].Handler = Handler;
 	s_Intrf = pIntrf;
 	s_Handler = Handler;
-}
-void DeviceIntrfTxComplete(DevIntrf_t * const pDev)
-{
-	pDev->StopTx(pDev);
-	pDev->bTxReady = true;
-	atomic_flag_clear(&pDev->bBusy);
 }
 static int SamdDmacOpen(int, SamdDmacHandler_t Handler, void *pCtx, int)
 {
@@ -275,91 +268,57 @@ int main()
 		assert((s_Handler != nullptr) == cfg.bIntEn);
 		assert(s_IrqEnabled == cfg.bIntEn);
 		assert(s_Channels[0] == cfg.bDmaEn && s_Channels[1] == cfg.bDmaEn);
-		assert(spi.DevIntrf.StartTx(&spi.DevIntrf, 0));
-		reg.SERCOM_INTFLAG = cfg.bIntEn || cfg.bDmaEn ? 0 :
-			SERCOM_SPIM_INTFLAG_DRE_Msk | SERCOM_SPIM_INTFLAG_RXC_Msk;
+		// The same synchronous transfer in every mode: the wait reads the
+		// flag first, interrupt mode waits for the interrupt only when the
+		// flag is not set. The master reports no event.
+		SamdSpiDev_t *dev = (SamdSpiDev_t *)spi.DevIntrf.pDevData;
 		unsigned events = s_Events;
-		int result = spi.DevIntrf.TxData(&spi.DevIntrf, data, sizeof(data));
-		assert(result == (cfg.bIntEn ? -1 : 3));
-		if (cfg.bIntEn)
+		uint8_t flags = cfg.bDmaEn ? 0 : SERCOM_SPIM_INTFLAG_DRE_Msk | SERCOM_SPIM_INTFLAG_RXC_Msk;
+
+		reg.SERCOM_INTENSET = 0;
+		assert(spi.DevIntrf.StartTx(&spi.DevIntrf, 0));
+		reg.SERCOM_INTFLAG = flags;
+		assert(spi.DevIntrf.TxData(&spi.DevIntrf, data, sizeof(data)) == 3);
+		spi.DevIntrf.StopTx(&spi.DevIntrf);
+		// DMA in interrupt mode: the overflow interrupt is enabled for the wait
+		assert(reg.SERCOM_INTENSET == (cfg.bIntEn && cfg.bDmaEn ? SERCOM_SPIM_INTENSET_ERROR_Msk : 0));
+
+		if (cfg.bDmaEn)
 		{
-			if (cfg.bDmaEn)
-			{
-				s_DmaHandler[0](0, DMAC_CHINTFLAG_TCMPL_Msk, s_DmaCtx[0]);
-			}
-			else
-			{
-				for (int i = 0; i < 3; i++)
-				{
-					reg.SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_RXC_Msk;
-					s_Handler(0, &spi.DevIntrf);
-				}
-			}
-			assert(s_Events == events + 1 && s_EventLen == 3);
-		}
-		else
-		{
-			assert(s_Events == events);
-			spi.DevIntrf.StopTx(&spi.DevIntrf);
-		}
-		if (cfg.bIntEn && cfg.bDmaEn)
-		{
-			// DMA must ignore RXC; SERCOM handles only transfer errors.
-			reg.SERCOM_INTFLAG = 0;
-			assert(spi.DevIntrf.StartTx(&spi.DevIntrf, 0));
-			assert(spi.DevIntrf.TxData(&spi.DevIntrf, data, sizeof(data)) == -1);
-			events = s_Events;
-			reg.SERCOM_DATA = 0xa5;
-			reg.SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_RXC_Msk;
-			s_Handler(0, &spi.DevIntrf);
-			assert(s_Events == events && reg.SERCOM_DATA == 0xa5);
+			// A receive channel stopped short gives the bytes it moved
 			s_DmaLeft[0] = 1;
-			reg.SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_ERROR_Msk;
-			s_Handler(0, &spi.DevIntrf);
-			assert(s_Events == events + 1 && s_EventLen == 2);
-			assert(spi.DevIntrf.bTxReady);
-			// A late channel completion cannot report the same transfer twice.
-			s_DmaHandler[0](0, DMAC_CHINTFLAG_TCMPL_Msk, s_DmaCtx[0]);
-			s_Handler(0, &spi.DevIntrf);
-			assert(s_Events == events + 1);
+			assert(spi.DevIntrf.StartTx(&spi.DevIntrf, 0));
+			assert(spi.DevIntrf.TxData(&spi.DevIntrf, data, sizeof(data)) == 2);
+			spi.DevIntrf.StopTx(&spi.DevIntrf);
 			s_DmaLeft[0] = 0;
 		}
 
-		// A read's command phase remains synchronous even with interrupts.
+		// A read's command phase
 		spi.DevIntrf.bNoStop = true;
-		reg.SERCOM_INTFLAG = cfg.bDmaEn ? 0 :
-			SERCOM_SPIM_INTFLAG_DRE_Msk | SERCOM_SPIM_INTFLAG_RXC_Msk;
-		events = s_Events;
+		reg.SERCOM_INTFLAG = flags;
 		assert(spi.DevIntrf.TxData(&spi.DevIntrf, data, sizeof(data)) == 3);
-		assert(s_Events == events);
 		spi.DevIntrf.bNoStop = false;
 		uint8_t received[3] = {};
-		reg.SERCOM_INTFLAG = cfg.bIntEn || cfg.bDmaEn ? 0 :
-			SERCOM_SPIM_INTFLAG_DRE_Msk | SERCOM_SPIM_INTFLAG_RXC_Msk;
-		events = s_Events;
-		assert(spi.DevIntrf.RxData(&spi.DevIntrf, received, sizeof(received)) ==
-			(cfg.bIntEn ? -1 : 3));
+		reg.SERCOM_INTFLAG = flags;
+		assert(spi.DevIntrf.RxData(&spi.DevIntrf, received, sizeof(received)) == 3);
+		assert(s_Events == events);
+
 		if (cfg.bIntEn)
 		{
+			// The interrupt is masked and the wait told, the flags left as
+			// they are
+			reg.SERCOM_INTENCLR = 0;
+			reg.SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_RXC_Msk;
+			dev->bIrq = false;
+			s_Handler(0, &spi.DevIntrf);
+			assert(dev->bIrq && reg.SERCOM_INTENCLR == SAMD_SPI_ALL_INTS);
+			assert(reg.SERCOM_INTFLAG == SERCOM_SPIM_INTFLAG_RXC_Msk && s_Events == events);
 			if (cfg.bDmaEn)
 			{
+				dev->bIrq = false;
 				s_DmaHandler[0](0, DMAC_CHINTFLAG_TCMPL_Msk, s_DmaCtx[0]);
+				assert(dev->bIrq && s_Events == events);
 			}
-			else
-			{
-				for (int i = 0; i < 3; i++)
-				{
-					reg.SERCOM_DATA = data[i];
-					reg.SERCOM_INTFLAG = SERCOM_SPIM_INTFLAG_RXC_Msk;
-					s_Handler(0, &spi.DevIntrf);
-				}
-				assert(memcmp(received, data, sizeof(data)) == 0);
-			}
-			assert(s_Events == events + 1 && s_EventLen == 3);
-		}
-		else
-		{
-			assert(s_Events == events);
 		}
 
 		unsigned stops = s_Stops;
@@ -368,7 +327,8 @@ int main()
 		spi.DevIntrf.Enable(&spi.DevIntrf);
 		assert(s_Clock);
 		spi.DevIntrf.Reset(&spi.DevIntrf);
-		assert(s_Stops == stops + (cfg.bDmaEn ? 4 : 0));
+		// A transfer ends with its channels stopped
+		assert(s_Stops == stops);
 	}
 
 	// PowerOff releases both channels and rejects transfers until Init.
@@ -409,6 +369,6 @@ int main()
 	assert(s_Arms == 3);
 	spi.DevIntrf.PowerOff(&spi.DevIntrf);
 	assert(s_Opens == s_Closes);
-	assert(s_Starts == 14);
-	puts("SAMD SPI master modes, completion, lifecycle and slave arming: PASS");
+	assert(s_Starts == 16);
+	puts("SAMD SPI master modes, transfers, lifecycle and slave arming: PASS");
 }
