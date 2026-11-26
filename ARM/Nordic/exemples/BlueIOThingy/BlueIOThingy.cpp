@@ -265,7 +265,9 @@ static const SPICfg_t s_SpiCfg = {
     .ChipSel = SPICSEL_AUTO,
 	.bDmaEn = true,
 	.bIntEn = false,
-    .IntPrio = 6,//APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+    // With bIntEn, a transfer waits for this interrupt. The IMU data is read
+    // from the IMU pin interrupt (priority 6): this one must be above it.
+    .IntPrio = 5,
     .EvtCB = NULL
 };
 
