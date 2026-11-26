@@ -282,6 +282,11 @@ calibration timer at 250 kHz the delay loop cost matches the D11, 13.0 and
 three Standby wakes from the RTC and three from the button through its EIC
 edge interrupt.
 
+After the clock file was reduced to 2,114 bytes (the 32 kHz oscillator set to
+run in Standby at startup, no range check of `g_McuOsc`), D21
+`CorePowerTest` was run again and passed the same 30 checks. The D11 has not
+been rerun with that change.
+
 Not run on hardware: Standby current with the EIC on
 the low frequency clock, and the timer external trigger at the 32 kHz
 sampling.
