@@ -65,8 +65,9 @@ Device::Device()
 int Device::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 {
 	uint8_t cmd = *pCmdAddr;
+	DEVINTRF_TYPE type = vpIntrf->Type();
 
-	if (vpIntrf->Type() == DEVINTRF_TYPE_SPI)
+	if (type == DEVINTRF_TYPE_SPI)
 	{
 		// Most sensor that supports SPI have this for reading registers
 		// overload this function if different
@@ -74,6 +75,25 @@ int Device::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLen)
 	}
 
 	int cnt = vpIntrf->Read(vDevAddr, pCmdAddr, CmdAddrLen, pBuff, BuffLen);
+
+	if (cnt < 0 && (type == DEVINTRF_TYPE_SPI || type == DEVINTRF_TYPE_I2C))
+	{
+		// Interrupt driven interface: the read is deferred and the data is
+		// not in pBuff yet. The device needs it now, and the bus takes one
+		// transfer at a time. The interface releases its busy flag when the
+		// transfer is closed: wait for that. The byte count goes to the
+		// event handler of the interface, the requested length is returned.
+		DevIntrf_t * const intrf = *vpIntrf;
+		int timeout = 1000000 + BuffLen * 2000;
+
+		while (atomic_flag_test_and_set(&intrf->bBusy) && --timeout > 0);
+
+		if (timeout > 0)
+		{
+			atomic_flag_clear(&intrf->bBusy);
+			cnt = BuffLen;
+		}
+	}
 
 	*pCmdAddr = cmd;
 

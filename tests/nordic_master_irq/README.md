@@ -23,6 +23,10 @@ Checks cover:
   of its own buffer;
 - TWIM register read: the command phase suspends the bus, sets `bTxReady`
   and reports nothing, `DeviceIntrfRead()` waits for it, then the receive;
+- device register read through `Device::Read()` on SPIM and TWIM: the
+  interface returns -1, the device waits for the transfer to be closed and
+  returns the length, the event handler gets the byte count; unchanged when
+  polled;
 - TWIM bus error: the driver stops the bus, the completion reports the bytes
   moved, the bus can be used again; an address NACK on the command phase still
   ends the read;

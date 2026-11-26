@@ -40,6 +40,7 @@ SOFTWARE.
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
 #include "coredev/shared_intrf.h"
+#include "device.h"
 #include "iopinctrl.h"
 #include <stddef.h>
 #include "idelay.h"
@@ -106,6 +107,34 @@ extern "C" int read_command(unsigned bus, unsigned commandLength)
 extern "C" int write_data(unsigned bus, unsigned totalLength)
 {
 	return DeviceIntrfWrite(intrf(bus), bus ? 0 : 0x22, buffer, 1, buffer + 1, totalLength - 1);
+}
+
+// A device on the bus: its register read goes through Device::Read()
+extern "C" void __cxa_pure_virtual() { while (1); }
+void operator delete(void *, unsigned int) {}
+class TestIntrf : public DeviceIntrf {
+public:
+	DevIntrf_t *vpDev;
+	operator DevIntrf_t * () { return vpDev; }
+	uint32_t Rate(uint32_t DataRate) { return DataRate; }
+	uint32_t Rate(void) { return 0; }
+};
+class TestDevice : public Device {
+public:
+	bool Enable() { return true; }
+	void Disable() {}
+	void Reset() {}
+	void Attach(DeviceIntrf *pIntrf, uint32_t Addr) { Interface(pIntrf); DeviceAddress(Addr); }
+};
+extern "C" int dev_read(unsigned bus, unsigned length)
+{
+	TestIntrf wrap;
+	TestDevice dev;
+	uint8_t reg = 4;
+
+	wrap.vpDev = intrf(bus);
+	dev.Attach(&wrap, bus ? 0 : 0x22);
+	return dev.Read(&reg, 1, buffer, length);
 }
 extern "C" unsigned busy(unsigned bus)
 {
