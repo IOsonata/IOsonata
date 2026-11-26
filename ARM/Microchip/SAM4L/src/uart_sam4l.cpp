@@ -87,32 +87,20 @@ typedef struct _Sam_Uart_Dev {
 
 #pragma pack(pop)
 
-static SAM4L_UARTDEV s_Sam4lUartDev[] = {
-	{
-		.DevNo    = 0,
-		.PbaMask  = PM_PBAMASK_USART0,
-		.IrqNo    = USART0_IRQn,
-		.pReg     = SAM4L_USART0,
-	},
-	{
-		.DevNo    = 1,
-		.PbaMask  = PM_PBAMASK_USART1,
-		.IrqNo    = USART1_IRQn,
-		.pReg     = SAM4L_USART1,
-	},
-	{
-		.DevNo    = 2,
-		.PbaMask  = PM_PBAMASK_USART2,
-		.IrqNo    = USART2_IRQn,
-		.pReg     = SAM4L_USART2,
-	},
-	{
-		.DevNo    = 3,
-		.PbaMask  = PM_PBAMASK_USART3,
-		.IrqNo    = USART3_IRQn,
-		.pReg     = SAM4L_USART3,
-	},
+// Hardware of each DevNo, kept in flash. UARTInit copies it to the device
+// state, which is zero initialized and takes no flash.
+static const struct {
+	uint32_t PbaMask;
+	IRQn_Type IrqNo;
+	Usart *pReg;
+} s_Sam4lUartHw[] = {
+	{ PM_PBAMASK_USART0, USART0_IRQn, SAM4L_USART0 },
+	{ PM_PBAMASK_USART1, USART1_IRQn, SAM4L_USART1 },
+	{ PM_PBAMASK_USART2, USART2_IRQn, SAM4L_USART2 },
+	{ PM_PBAMASK_USART3, USART3_IRQn, SAM4L_USART3 },
 };
+
+static SAM4L_UARTDEV s_Sam4lUartDev[sizeof(s_Sam4lUartHw) / sizeof(s_Sam4lUartHw[0])];
 
 static const int s_NbSam4lUartDev = sizeof(s_Sam4lUartDev) / sizeof(SAM4L_UARTDEV);
 
@@ -882,6 +870,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCFG *pCfg)
 
 	int devno = pCfg->DevNo;
 	SAM4L_UARTDEV *dev = &s_Sam4lUartDev[devno];
+
+	dev->DevNo = devno;
+	dev->PbaMask = s_Sam4lUartHw[devno].PbaMask;
+	dev->IrqNo = s_Sam4lUartHw[devno].IrqNo;
+	dev->pReg = s_Sam4lUartHw[devno].pReg;
 
 	Sam4lUartClockEnable(dev);
 

@@ -90,10 +90,8 @@ typedef struct __Sam4l_Spi_Dev
 	uint16_t DmaRx[SAM4L_SPI_DMA_WORDS];
 } Sam4lSpiDev_t;
 
-static Sam4lSpiDev_t s_SpiDev = {
-	.pReg = SAM4L_SPI,
-	.pSpiDev = nullptr,
-};
+// Zero initialized, it takes no flash. SPIInit sets the register pointer.
+static Sam4lSpiDev_t s_SpiDev;
 
 static void Sam4lSpiCancel(Sam4lSpiDev_t *dev);
 static void Sam4lSpiSlaveArm(Sam4lSpiDev_t *dev);
@@ -883,6 +881,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	{
 		return false;
 	}
+
+	s_SpiDev.pReg = SAM4L_SPI;
 	// Slave wide words need their own external-clock validation.
 	if (pCfgData->Mode == SPIMODE_SLAVE &&
 		(pCfgData->DataSize != 8U ||

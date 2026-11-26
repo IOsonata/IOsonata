@@ -38,15 +38,23 @@ SOFTWARE.
 volatile uint32_t g_Sam4lTimerInitStage;
 static uint32_t s_TcClockMask;
 
-Sam4l_TimerData_t g_Sam4lTimerData[SAM4L_TIMER_MAXCNT] = {
-	{nullptr, nullptr, AST_ALARM_IRQn, PM_PBDMASK_AST},
-	{nullptr, &SAM4L_TC0->TC_CHANNEL[0], TC00_IRQn, PM_PBAMASK_TC0},
-	{nullptr, &SAM4L_TC0->TC_CHANNEL[1], TC01_IRQn, PM_PBAMASK_TC0},
-	{nullptr, &SAM4L_TC0->TC_CHANNEL[2], TC02_IRQn, PM_PBAMASK_TC0},
-	{nullptr, &SAM4L_TC1->TC_CHANNEL[0], TC10_IRQn, PM_PBAMASK_TC1},
-	{nullptr, &SAM4L_TC1->TC_CHANNEL[1], TC11_IRQn, PM_PBAMASK_TC1},
-	{nullptr, &SAM4L_TC1->TC_CHANNEL[2], TC12_IRQn, PM_PBAMASK_TC1},
+// Hardware of each DevNo, kept in flash. TimerInit copies it to the timer
+// data, which is zero initialized and takes no flash. A null TcReg is the AST.
+static const struct {
+	TcChannel *TcReg;
+	IRQn_Type Irq;
+	uint32_t ClockMask;
+} s_Sam4lTimerHw[SAM4L_TIMER_MAXCNT] = {
+	{nullptr, AST_ALARM_IRQn, PM_PBDMASK_AST},
+	{&SAM4L_TC0->TC_CHANNEL[0], TC00_IRQn, PM_PBAMASK_TC0},
+	{&SAM4L_TC0->TC_CHANNEL[1], TC01_IRQn, PM_PBAMASK_TC0},
+	{&SAM4L_TC0->TC_CHANNEL[2], TC02_IRQn, PM_PBAMASK_TC0},
+	{&SAM4L_TC1->TC_CHANNEL[0], TC10_IRQn, PM_PBAMASK_TC1},
+	{&SAM4L_TC1->TC_CHANNEL[1], TC11_IRQn, PM_PBAMASK_TC1},
+	{&SAM4L_TC1->TC_CHANNEL[2], TC12_IRQn, PM_PBAMASK_TC1},
 };
+
+Sam4l_TimerData_t g_Sam4lTimerData[SAM4L_TIMER_MAXCNT];
 
 void Sam4lTimerPmWrite(volatile uint32_t *reg, uint32_t value)
 {
@@ -367,6 +375,10 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 		cfg->IntPrio < 0 || cfg->IntPrio >= (1 << __NVIC_PRIO_BITS)) return false;
 	uint32_t state = DisableInterrupt();
 	auto &d = g_Sam4lTimerData[cfg->DevNo];
+
+	d.TcReg = s_Sam4lTimerHw[cfg->DevNo].TcReg;
+	d.Irq = s_Sam4lTimerHw[cfg->DevNo].Irq;
+	d.ClockMask = s_Sam4lTimerHw[cfg->DevNo].ClockMask;
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_OWNER;
 	for (const auto &entry : g_Sam4lTimerData)
 	{
