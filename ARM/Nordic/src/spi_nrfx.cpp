@@ -646,6 +646,11 @@ static void nRFxSPIDmaEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev)
 		// data phase that follows reports it.
 		report = pIntrf->bNoStop == false;
 		DeviceIntrfTxComplete(pIntrf);
+		if (pIntrf->EvtCB)
+		{
+			// Everything given has gone out, the transmitter is free
+			pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_TX_READY, NULL, count);
+		}
 	}
 
 	if (report && pIntrf->EvtCB)
@@ -1101,9 +1106,15 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 
 						dev->TxIdx = 0;
 						DeviceIntrfTxComplete(pDev);
-						if (report && pDev->EvtCB)
+
+						if (pDev->EvtCB)
 						{
-							pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, NULL, count);
+							// Everything given has gone out
+							pDev->EvtCB(pDev, DEVINTRF_EVT_TX_READY, NULL, count);
+							if (report)
+							{
+								pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, NULL, count);
+							}
 						}
 					}
 				}

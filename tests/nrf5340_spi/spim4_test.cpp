@@ -47,7 +47,7 @@ SharedIntrf_t g_SharedIntrf[4] = {};
 extern nRFSpiDev_t g_nRFxSPIDev[];
 extern "C" void SPIM4_IRQHandler(void);
 static bool s_Poll, s_Timeout, s_QspiCalled, s_AutoIrq, s_StopFail;
-static int s_Events, s_Count, s_Blocks;
+static int s_Events, s_Count, s_Blocks, s_TxReady;
 static DEVINTRF_EVT s_Event;
 static uint8_t *s_Buffer;
 static uint32_t s_LastPtr;
@@ -139,6 +139,12 @@ static int Event(DevIntrf_t *dev, DEVINTRF_EVT event, uint8_t *buffer, int count
 	if (s_CameraMode)
 	{
 		s_Camera.IntrfEvent(event, count);
+		return 0;
+	}
+	if (event == DEVINTRF_EVT_TX_READY)
+	{
+		// The transmitter is free. A command phase still keeps the bus.
+		++s_TxReady;
 		return 0;
 	}
 	++s_Events; s_Event = event; s_Buffer = buffer; s_Count = count;

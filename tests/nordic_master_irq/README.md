@@ -12,7 +12,8 @@ Checks cover:
 - SPI TX and RX return -1 and keep the bus until the last DMA block;
 - SPI TX and RX blocks advance through the caller's buffer with CS kept
   asserted between blocks;
-- one `DEVINTRF_EVT_COMPLETED` with the byte count, `bTxReady` after a TX;
+- one `DEVINTRF_EVT_COMPLETED` with the byte count; `bTxReady` and one
+  `DEVINTRF_EVT_TX_READY` after a TX;
 - SPI command then read: the command phase keeps the bus and reports no
   completion;
 - TWIM transmit and receive from the caller's buffer, over several DMA blocks.

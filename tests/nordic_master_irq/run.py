@@ -246,6 +246,7 @@ for kind, length in [('tx', 10), ('rx', 20), ('tx', min(2 * DMA_MAX + 5, 66000))
     check(call('busy', 1) == 0, 'bus not released')
     if kind == 'tx':
         check(call('tx_ready', 1) == 1, 'bTxReady')
+    check(call('events', 2) == (1 if kind == 'tx' else 0), 'spi TX_READY event', kind, call('events', 2))
 # Command then read: the command phase keeps the bus until the data arrives.
 pending.clear()
 call('init', 1, 0, 1, 1)
@@ -339,7 +340,7 @@ for kind, length in [('tx', 4), ('rx', 20), ('rx', TWIM_MAX + 7),
     check(call('busy', 0) == 0, 'i2c bus not released')
     if kind == 'tx':
         check(call('tx_ready', 0) == 1, 'i2c bTxReady')
-    check(call('events', 2) == 0, 'i2c TX_READY event')
+    check(call('events', 2) == (1 if kind == 'tx' else 0), 'i2c TX_READY event', kind, call('events', 2))
 
 # Register read: command with bNoStop keeps the bus suspended, then the receive.
 twim_reset()

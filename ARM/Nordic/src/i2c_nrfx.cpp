@@ -996,8 +996,9 @@ static inline bool nRFxI2CRxPending(const nRFTwiDev_t * const pDev)
 // The interrupt driven master transfer ended. The bus is stopped, unless a
 // transmit keeps it for a following receive (bNoStop). Release it through the
 // generic helpers, which own the busy flag, then report
-// DEVINTRF_EVT_COMPLETED with the number of bytes moved. A transmit that keeps
-// the bus only sets bTxReady, the receive that follows reports the completion.
+// DEVINTRF_EVT_COMPLETED with the number of bytes moved. A transmit reports
+// DEVINTRF_EVT_TX_READY first. A transmit that keeps the bus reports only
+// that, the receive that follows reports the completion.
 // bStopped : called on the STOPPED event. The event is still set while the
 // bus is released, StopRx and StopTx see by it that no STOP task is needed.
 static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev, bool bStopped)
@@ -1010,6 +1011,7 @@ static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev,
 #endif
 	uint8_t *buff = NULL;
 	bool report = true;
+	bool tx = false;
 	int count;
 
 	// An error is kept in ERRORSRC until the end of the transfer
@@ -1029,6 +1031,7 @@ static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev,
 		pDev->TxDatalen = 0;
 		pDev->TxIdx = 0;
 		report = pIntrf->bNoStop == false;
+		tx = true;
 		DeviceIntrfTxComplete(pIntrf);
 	}
 
@@ -1038,9 +1041,17 @@ static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev,
 		reg->EVENTS_STOPPED = 0;
 	}
 
-	if (report && pIntrf->EvtCB)
+	if (pIntrf->EvtCB)
 	{
-		pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_COMPLETED, buff, count);
+		if (tx)
+		{
+			// Everything given has gone out, the transmitter is free
+			pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_TX_READY, NULL, count);
+		}
+		if (report)
+		{
+			pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_COMPLETED, buff, count);
+		}
 	}
 }
 
