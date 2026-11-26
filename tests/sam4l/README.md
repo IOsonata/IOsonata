@@ -166,3 +166,20 @@ list and library defines come from the managed library project. The check
 compiles selected library sources, not the full library or IOcomposer projects.
 TaktOS is optional; without its path, UsbCdcLoopbackTaktOS is reported as
 skipped. These builds do not establish hardware validation.
+
+## I2C master interrupt check
+
+```sh
+python3 tests/sam4l/run_i2c_irq.py
+```
+
+`i2c_irq_test.cpp` compiles the production `i2c_sam4l.cpp` against register
+blocks in host memory and plays the TWIM: it sets the status flags, calls the
+interrupt handler and looks at the commands and bytes the driver wrote. It
+covers interrupt driven transmit and receive from the caller's buffer over one
+and several commands (up to 600 bytes), a 10-bit read with its address command,
+an address and a data NACK followed by a new transfer, the
+`DEVINTRF_EVT_TX_READY` and `DEVINTRF_EVT_COMPLETED` reports, and the polled
+register read taking its command bytes from the caller's pointer. It builds at
+`-O0` and `-O2` with ASan and UBSan. The PDCA paths and bus timing are not
+modelled; this is not hardware validation.

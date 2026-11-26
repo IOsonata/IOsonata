@@ -8,9 +8,10 @@ one I2CDev_t API and selects the matching register block from I2CCfg_t::Mode.
 
 Master mode supports polling, interrupt-driven, and PDCA-backed transfers,
 7-bit and 10-bit addressing, transfer lengths beyond the 8-bit NBYTES field,
-and the write/repeated-start/read sequence used by DeviceIntrfRead(). Interrupt TX
-copies the complete caller transfer into controller-owned static storage before
-returning so no caller buffer is retained by the ISR.
+and the write/repeated-start/read sequence used by DeviceIntrfRead(). Interrupt
+driven transfers use the caller's buffer, which must stay valid until the
+completion: the driver keeps the pointer and the remaining count and continues
+from them at each interrupt. The register read of DeviceIntrfRead() is polled.
 
 Slave mode is interrupt driven, with optional PDCA data movement. The TWIS
 address-match clock stretching is used so application callbacks can install the
@@ -63,7 +64,6 @@ SOFTWARE.
 #define SAM4L_I2C_MASTER_COUNT		4
 #define SAM4L_I2C_SLAVE_COUNT		2
 #define SAM4L_I2C_MAX_NBYTES		255
-#define SAM4L_I2C_INT_TX_BUFFER_SIZE	256
 #define SAM4L_I2C_WAIT_COUNT		1000000U
 
 // PDCA channels 0..3 are reserved by the SAM4L UART port for USART0..3 TX.
@@ -102,13 +102,6 @@ SOFTWARE.
 	(TWIS_IER_SAM | TWIS_IER_TCOMP | TWIS_IER_REP | \
 	 TWIS_IER_URUN | TWIS_IER_ORUN | TWIS_IER_SMBTOUT | TWIS_IER_SMBPECERR | TWIS_IER_BUSERR)
 
-typedef enum {
-	SAM4L_I2C_OP_NONE,
-	SAM4L_I2C_OP_MASTER_TX,
-	SAM4L_I2C_OP_MASTER_RX_PREAMBLE,
-	SAM4L_I2C_OP_MASTER_RX,
-} SAM4L_I2C_OP;
-
 typedef struct {
 	int DevNo;
 	uint32_t MasterPbaMask;
@@ -118,8 +111,6 @@ typedef struct {
 	Twim *pMReg;
 	Twis *pSReg;
 	I2CDev_t *pI2cDev;
-	uint8_t TxBuffer[SAM4L_I2C_INT_TX_BUFFER_SIZE];
-
 	uint16_t DevAddr;
 	const uint8_t *pTxData;
 	uint8_t *pRxData;
@@ -129,7 +120,6 @@ typedef struct {
 	int ChunkTotal;
 	int TxCount;
 	int RxCount;
-	SAM4L_I2C_OP Op;
 	bool NeedStart;
 	bool BusHeld;
 	bool LastError;
@@ -483,7 +473,6 @@ static void Sam4lI2CMasterRecover(SAM4L_I2CDEV *dev)
 	dev->BusHeld = false;
 	dev->NeedStart = true;
 	dev->TenBitReadReady = false;
-	dev->Op = SAM4L_I2C_OP_NONE;
 	Sam4lI2CMasterHwReset(dev);
 }
 
@@ -580,14 +569,20 @@ static bool Sam4lI2CMasterStartRxChunk(SAM4L_I2CDEV *dev)
 		dev->NeedStart, stop, ackLast, repSame);
 
 	dev->ChunkRemain = chunk;
+	dev->ChunkTotal = chunk;
 	dev->NeedStart = false;
 	Sam4lI2CMasterIssue(dev, cmd);
 	return true;
 }
 
+// Address command of a 10-bit read: a write direction command with no data.
+// A command with no data is how the interrupt handler knows it.
 static bool Sam4lI2CMasterStartRxPreamble(SAM4L_I2CDEV *dev)
 {
 	const uint32_t cmd = Sam4lI2CMasterCommand(dev, false, 0, true, false, false, false);
+
+	dev->ChunkRemain = 0;
+	dev->ChunkTotal = 0;
 	Sam4lI2CMasterIssue(dev, cmd);
 	return true;
 }
@@ -701,17 +696,15 @@ static int Sam4lI2CMasterTxDma(DevIntrf_t * const pDev,
 {
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
 
-	if (pDev->bIntEn && !pDev->bNoStop &&
-		DataLen <= SAM4L_I2C_INT_TX_BUFFER_SIZE)
+	if (pDev->bIntEn && !pDev->bNoStop)
 	{
-		// Async TX must own the source bytes after this call returns.
-		memcpy(dev->TxBuffer, pData, DataLen);
-		dev->pTxData = dev->TxBuffer;
+		// The interrupt handler sends from the caller's buffer, block after
+		// block. It must stay valid until the completion.
+		dev->pTxData = pData;
 		dev->TxRemain = DataLen;
+		dev->RxRemain = 0;
 		dev->TxCount = 0;
-		dev->Op = SAM4L_I2C_OP_MASTER_TX;
 		pDev->bTxReady = false;
-
 		if (!Sam4lI2CMasterStartTxDmaChunk(dev))
 		{
 			pDev->bTxReady = true;
@@ -722,8 +715,7 @@ static int Sam4lI2CMasterTxDma(DevIntrf_t * const pDev,
 		return -1;
 	}
 
-	// Oversized async transfers and no-stop transfers remain synchronous so
-	// the DMA engine never retains caller-owned TX memory after return.
+	// A transfer that keeps the bus for a following receive is synchronous.
 	dev->pTxData = pData;
 	dev->TxRemain = DataLen;
 	dev->TxCount = 0;
@@ -754,21 +746,17 @@ static int Sam4lI2CMasterTxAsync(DevIntrf_t * const pDev,
 {
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
 
-	// DeviceIntrf TX buffers are immediate-use. Interrupt mode must therefore
-	// take ownership of the bytes before returning. Larger transfers fall back
-	// to the synchronous path instead of retaining the caller's pointer.
-	if (DataLen > SAM4L_I2C_INT_TX_BUFFER_SIZE)
-		return Sam4lI2CMasterTxPolling(pDev, pData, DataLen);
-
-	memcpy(dev->TxBuffer, pData, DataLen);
-	dev->pTxData = dev->TxBuffer;
+	// The interrupt handler sends from the caller's buffer, which must stay
+	// valid until the completion.
+	dev->pTxData = pData;
 	dev->TxRemain = DataLen;
+	dev->RxRemain = 0;
 	dev->TxCount = 0;
-	dev->Op = SAM4L_I2C_OP_MASTER_TX;
 	pDev->bTxReady = false;
 
 	if (!Sam4lI2CMasterStartTxChunk(dev))
 	{
+		dev->TxRemain = 0;
 		pDev->bTxReady = true;
 		return 0;
 	}
@@ -801,8 +789,7 @@ static int Sam4lI2CTxSrData(DevIntrf_t * const pDev,
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
 
 	if (pData == nullptr || DataLen <= 0 ||
-		DataLen > SAM4L_I2C_MAX_NBYTES ||
-		DataLen > SAM4L_I2C_INT_TX_BUFFER_SIZE)
+		DataLen > SAM4L_I2C_MAX_NBYTES)
 	{
 		dev->CommandPhase = false;
 		dev->CombinedRead = false;
@@ -811,10 +798,11 @@ static int Sam4lI2CTxSrData(DevIntrf_t * const pDev,
 	}
 
 	// SAM4L combined write/read transfers must have the read command queued in
-	// NCMDR before the write command finishes. Stage the write/address bytes
+	// NCMDR before the write command finishes. Keep the write/address bytes
 	// here; RxData() knows the receive length and can then program CMDR+NCMDR
-	// as one connected transfer. No caller pointer is retained.
-	memcpy(dev->TxBuffer, pData, DataLen);
+	// as one connected transfer. The pointer belongs to DeviceIntrfRead(),
+	// which holds it until RxData() has returned.
+	dev->pTxData = pData;
 	dev->SrLen = DataLen;
 	dev->CommandPhase = true;
 	dev->CombinedRead = false;
@@ -889,7 +877,7 @@ static int Sam4lI2CMasterReadCombinedDma(DevIntrf_t * const pDev,
 	{
 		if (!Sam4lI2CMasterWait(dev, TWIM_SR_TXRDY))
 			goto done;
-		reg->TWIM_THR = dev->TxBuffer[i];
+		reg->TWIM_THR = dev->pTxData[i];
 	}
 
 	// The queued read is promoted immediately when the write command completes.
@@ -958,6 +946,7 @@ static int Sam4lI2CMasterReadCombinedPolling(DevIntrf_t * const pDev,
 	dev->pRxData = pBuff;
 	dev->RxRemain = BuffLen;
 	dev->RxCount = 0;
+	dev->TxRemain = 0;
 
 	// Polling owns the peripheral while the connected transfer is active.
 	reg->TWIM_IDR = 0xFFFFFFFFU;
@@ -981,7 +970,7 @@ static int Sam4lI2CMasterReadCombinedPolling(DevIntrf_t * const pDev,
 	{
 		if (!Sam4lI2CMasterWait(dev, TWIM_SR_TXRDY))
 			goto done;
-		reg->TWIM_THR = dev->TxBuffer[i];
+		reg->TWIM_THR = dev->pTxData[i];
 	}
 
 	// This completes the write command; hardware has already promoted NCMDR
@@ -1040,6 +1029,7 @@ static int Sam4lI2CMasterRxPolling(DevIntrf_t * const pDev,
 	dev->pRxData = pBuff;
 	dev->RxRemain = BuffLen;
 	dev->RxCount = 0;
+	dev->TxRemain = 0;
 
 	if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
 	{
@@ -1084,17 +1074,16 @@ static int Sam4lI2CMasterRxDma(DevIntrf_t * const pDev,
 	dev->pRxData = pBuff;
 	dev->RxRemain = BuffLen;
 	dev->RxCount = 0;
+	dev->TxRemain = 0;
 
 	if (pDev->bIntEn)
 	{
 		if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
 		{
-			dev->Op = SAM4L_I2C_OP_MASTER_RX_PREAMBLE;
 			Sam4lI2CMasterStartRxPreamble(dev);
 		}
 		else
 		{
-			dev->Op = SAM4L_I2C_OP_MASTER_RX;
 			Sam4lI2CMasterStartRxDmaChunk(dev);
 		}
 		dev->pMReg->TWIM_IER = SAM4L_TWIM_DMA_IRQ_MASK;
@@ -1142,15 +1131,14 @@ static int Sam4lI2CMasterRxAsync(DevIntrf_t * const pDev,
 	dev->pRxData = pBuff;
 	dev->RxRemain = BuffLen;
 	dev->RxCount = 0;
+	dev->TxRemain = 0;
 
 	if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
 	{
-		dev->Op = SAM4L_I2C_OP_MASTER_RX_PREAMBLE;
 		Sam4lI2CMasterStartRxPreamble(dev);
 	}
 	else
 	{
-		dev->Op = SAM4L_I2C_OP_MASTER_RX;
 		Sam4lI2CMasterStartRxChunk(dev);
 	}
 
@@ -1199,75 +1187,78 @@ static void Sam4lI2CStopRx(DevIntrf_t * const pDev)
 	Sam4lI2CStopTx(pDev);
 }
 
-static void Sam4lI2CMasterAsyncComplete(SAM4L_I2CDEV *dev)
+// The interrupt driven master transfer ended. The transmit count or the
+// receive count is not zero while a transfer runs, which also gives its
+// direction; both are cleared here. Release the bus through the generic
+// helpers, then report: DEVINTRF_EVT_TX_READY when everything given has gone
+// out, DEVINTRF_EVT_COMPLETED when the transfer is closed. A transmit that
+// keeps the bus (bNoStop) reports only the first.
+static void Sam4lI2CMasterAsyncComplete(SAM4L_I2CDEV *dev, bool bTx)
 {
 	DevIntrf_t *intrf = &dev->pI2cDev->DevIntrf;
+	const int count = bTx ? dev->TxCount : dev->RxCount;
+
 	dev->pMReg->TWIM_IDR = 0xFFFFFFFFU;
+	dev->TxRemain = 0;
+	dev->RxRemain = 0;
+	dev->BusHeld = intrf->bNoStop && !dev->LastError;
 
-	if (dev->Op == SAM4L_I2C_OP_MASTER_TX)
+	if (bTx)
 	{
-		const int count = dev->TxCount;
-		dev->BusHeld = intrf->bNoStop && !dev->LastError;
-		dev->Op = SAM4L_I2C_OP_NONE;
+		const bool keep = intrf->bNoStop;
 
-		if (intrf->bNoStop)
-		{
-			intrf->bTxReady = true;
-			return;
-		}
-
+		// Sets bTxReady, and closes the transfer unless the bus is kept
 		DeviceIntrfTxComplete(intrf);
+
 		if (intrf->EvtCB)
-			intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
+		{
+			intrf->EvtCB(intrf, DEVINTRF_EVT_TX_READY, nullptr, count);
+			if (!keep)
+				intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
+		}
 	}
 	else
 	{
-		const int count = dev->RxCount;
-		dev->BusHeld = intrf->bNoStop && !dev->LastError;
-		dev->Op = SAM4L_I2C_OP_NONE;
 		DeviceIntrfStopRx(intrf);
 		if (intrf->EvtCB)
 			intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
 	}
 }
 
+// Master interrupt. The TWIM interrupts are enabled only while an interrupt
+// driven transfer runs. The handler acts on the status flags: TXRDY and RXRDY
+// move one byte of the caller's buffer, CCOMP ends a command, the error flags
+// end the transfer. The remaining counts are reduced by a whole command when
+// it completes, so the count of the running direction stays above zero until
+// then.
 static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 {
 	Twim *reg = dev->pMReg;
 	const uint32_t sr = reg->TWIM_SR;
 	const uint32_t pending = sr & reg->TWIM_IMR;
+	const bool tx = dev->TxRemain > 0;
+	const bool dma = dev->pI2cDev->DevIntrf.bDma;
 
 	if ((sr & SAM4L_TWIM_ERROR_MASK) != 0U)
 	{
-		const SAM4L_I2C_OP op = dev->Op;
+		// Resets the TWIM and keeps the error for the following calls
 		Sam4lI2CMasterRecover(dev);
-		dev->Op = op;
-		if (op == SAM4L_I2C_OP_MASTER_TX && dev->pI2cDev->DevIntrf.bNoStop)
-		{
-			dev->pI2cDev->DevIntrf.bTxReady = true;
-			dev->Op = SAM4L_I2C_OP_NONE;
-			return;
-		}
-		Sam4lI2CMasterAsyncComplete(dev);
+		Sam4lI2CMasterAsyncComplete(dev, tx);
 		return;
 	}
 
-	if ((pending & TWIM_SR_TXRDY) != 0U &&
-		dev->Op == SAM4L_I2C_OP_MASTER_TX && dev->ChunkRemain > 0)
+	if ((pending & TWIM_SR_TXRDY) != 0U && tx && dev->ChunkRemain > 0)
 	{
 		reg->TWIM_THR = *dev->pTxData++;
 		--dev->ChunkRemain;
-		--dev->TxRemain;
 		if (dev->ChunkRemain == 0)
 			reg->TWIM_IDR = TWIM_IDR_TXRDY;
 	}
 
-	if ((pending & TWIM_SR_RXRDY) != 0U &&
-		dev->Op == SAM4L_I2C_OP_MASTER_RX && dev->ChunkRemain > 0)
+	if ((pending & TWIM_SR_RXRDY) != 0U && !tx && dev->ChunkRemain > 0)
 	{
 		*dev->pRxData++ = (uint8_t)reg->TWIM_RHR;
 		--dev->ChunkRemain;
-		--dev->RxRemain;
 		++dev->RxCount;
 	}
 
@@ -1276,39 +1267,26 @@ static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 
 	reg->TWIM_SCR = TWIM_SCR_CCOMP;
 
-	if (dev->Op == SAM4L_I2C_OP_MASTER_RX_PREAMBLE)
+	if (tx)
 	{
-		dev->BusHeld = true;
-		dev->NeedStart = true;
-		dev->TenBitReadReady = true;
-		dev->Op = SAM4L_I2C_OP_MASTER_RX;
-		if (dev->pI2cDev->DevIntrf.bDma)
-			Sam4lI2CMasterStartRxDmaChunk(dev);
-		else
-			Sam4lI2CMasterStartRxChunk(dev);
-		return;
-	}
-
-	if (dev->Op == SAM4L_I2C_OP_MASTER_TX)
-	{
-		if (dev->pI2cDev->DevIntrf.bDma)
+		if (dma)
 		{
 			PdcaChannel *chan = Sam4lI2CPdcaTxChannel(dev);
 			if (chan->PDCA_TCR != 0U)
 			{
 				Sam4lI2CMasterRecover(dev);
-				Sam4lI2CMasterAsyncComplete(dev);
+				Sam4lI2CMasterAsyncComplete(dev, true);
 				return;
 			}
 			chan->PDCA_CR = PDCA_CR_TDIS;
 			dev->pTxData += dev->ChunkTotal;
-			dev->TxRemain -= dev->ChunkTotal;
 		}
 
+		dev->TxRemain -= dev->ChunkTotal;
 		dev->TxCount += dev->ChunkTotal;
 		if (dev->TxRemain > 0)
 		{
-			if (dev->pI2cDev->DevIntrf.bDma)
+			if (dma)
 				Sam4lI2CMasterStartTxDmaChunk(dev);
 			else
 			{
@@ -1317,37 +1295,47 @@ static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 			}
 			return;
 		}
-		Sam4lI2CMasterAsyncComplete(dev);
+		Sam4lI2CMasterAsyncComplete(dev, true);
 		return;
 	}
 
-	if (dev->Op == SAM4L_I2C_OP_MASTER_RX)
+	if (dev->RxRemain <= 0)
+		return;
+
+	if (dev->ChunkTotal == 0)
 	{
-		if (dev->pI2cDev->DevIntrf.bDma)
+		// The address command of a 10-bit read is out, start the read
+		dev->BusHeld = true;
+		dev->NeedStart = true;
+		dev->TenBitReadReady = true;
+	}
+	else
+	{
+		if (dma)
 		{
 			PdcaChannel *chan = Sam4lI2CPdcaRxChannel(dev);
 			if (chan->PDCA_TCR != 0U)
 			{
 				Sam4lI2CMasterRecover(dev);
-				Sam4lI2CMasterAsyncComplete(dev);
+				Sam4lI2CMasterAsyncComplete(dev, false);
 				return;
 			}
 			chan->PDCA_CR = PDCA_CR_TDIS;
 			dev->pRxData += dev->ChunkTotal;
-			dev->RxRemain -= dev->ChunkTotal;
 			dev->RxCount += dev->ChunkTotal;
 		}
-
-		if (dev->RxRemain > 0)
-		{
-			if (dev->pI2cDev->DevIntrf.bDma)
-				Sam4lI2CMasterStartRxDmaChunk(dev);
-			else
-				Sam4lI2CMasterStartRxChunk(dev);
-			return;
-		}
-		Sam4lI2CMasterAsyncComplete(dev);
+		dev->RxRemain -= dev->ChunkTotal;
 	}
+
+	if (dev->RxRemain > 0)
+	{
+		if (dma)
+			Sam4lI2CMasterStartRxDmaChunk(dev);
+		else
+			Sam4lI2CMasterStartRxChunk(dev);
+		return;
+	}
+	Sam4lI2CMasterAsyncComplete(dev, false);
 }
 
 static int Sam4lI2CSlaveRxDmaCount(SAM4L_I2CDEV *dev)
@@ -1851,7 +1839,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	memset(pDev->TRBuffLen, 0, sizeof(pDev->TRBuffLen));
 
 	dev->pI2cDev = pDev;
-	dev->Op = SAM4L_I2C_OP_NONE;
+	dev->TxRemain = 0;
+	dev->RxRemain = 0;
 	dev->NeedStart = true;
 	dev->BusHeld = false;
 	dev->LastError = false;
