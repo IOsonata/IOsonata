@@ -76,8 +76,9 @@ with and without the delay calibration.
 
 SAM D21 Xplained Pro, same day: `CoreClockTest` passed with no failure. With
 the calibration timer at 250 kHz its delay loop cost matches the D11, 13.0 and
-3.0 CPU cycles per pass. `CorePowerTest` and the EIC edge wake of the D21
-have not been run on hardware.
+3.0 CPU cycles per pass. `CorePowerTest` passed 30 checks with no failure,
+three Standby wakes from the RTC and three from the button through its EIC
+edge interrupt, with the same checks after every wake as on the D11.
 The sleep instruction remains WFI as specified in the
 [SAMD11 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-42363-SAM-D11_Datasheet.pdf),
 section 15.6.2.8.2.
