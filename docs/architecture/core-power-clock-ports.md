@@ -274,9 +274,11 @@ calibration; the measured delay loop cost agreed at 48 MHz and 24 MHz within
 
 SAM D21 Xplained Pro: `CoreClockTest` passed with no failure. With the
 calibration timer at 250 kHz the delay loop cost matches the D11, 13.0 and
-3.0 CPU cycles per pass.
+3.0 CPU cycles per pass. `CorePowerTest` passed 30 checks with no failure,
+three Standby wakes from the RTC and three from the button through its EIC
+edge interrupt.
 
-Not run on hardware: D21 `CorePowerTest` and its EIC edge wake, Standby current with the EIC on
+Not run on hardware: Standby current with the EIC on
 the low frequency clock, and the timer external trigger at the 32 kHz
 sampling.
 
