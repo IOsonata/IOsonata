@@ -6,16 +6,14 @@
 Note: I2C device are shared with other device such as SPI therefore be careful
 not to use the same device number on an other device.
 
-Master with EasyDMA and bIntEn : TxData and RxData start the first DMA block and
-return -1. The interrupt handler starts the following blocks, stops the bus,
-releases it and reports DEVINTRF_EVT_COMPLETED with the number of bytes moved
-(the receive buffer for a receive). A transmit that keeps the bus for a
-following receive (bNoStop) leaves it suspended and only sets bTxReady. A bus
-error stops the transfer, the completion then reports the bytes moved so far.
-Interrupt driven transfers use the caller's buffer, which must stay valid
-until the completion. The driver keeps the pointer and the remaining count
-and continues from them at each interrupt, of any length. DeviceIntrfWrite
-waits for the end of the transmit of its own combined buffer.
+Master with bIntEn : TxData and RxData keep the caller's buffer, start the
+transfer and wait for the interrupt handler to end it, then return the number
+of bytes moved, as in polling mode. The handler continues from the remaining
+count at each interrupt, of any length, puts the STOP on the bus unless the
+bus is kept for a following receive (bNoStop), and reports
+DEVINTRF_EVT_TX_READY and DEVINTRF_EVT_COMPLETED. A bus error stops the
+transfer, the bytes moved so far are returned. The busy flag is released by
+the generic layer after the return, as in polling mode.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2016
@@ -541,6 +539,61 @@ static void nRFxI2CDmaNextBlock(nRFTwiDev_t * const pDev)
 }
 #endif
 
+// An interrupt driven master transfer is running while the driver holds its
+// buffer. The interrupt handler drops the pointer when the transfer ends and
+// leaves the number of bytes moved in the index.
+static inline bool nRFxI2CTxPending(const nRFTwiDev_t * const pDev)
+{
+	return pDev->pTxData != NULL;
+}
+
+static inline bool nRFxI2CRxPending(const nRFTwiDev_t * const pDev)
+{
+	return pDev->pRxBuff != NULL;
+}
+
+// Wait for the interrupt handler to end the transfer started by TxData or
+// RxData and return the number of bytes moved. The time limit is restarted
+// each time the transfer moves on: Len is what the hardware moves between two
+// interrupts. When it expires the bus is stopped and the transfer dropped.
+static int nRFxI2CIntWait(nRFTwiDev_t * const pDev, bool bTx, int Len)
+{
+	// The handler changes these fields behind this loop
+	volatile nRFTwiDev_t *dev = pDev;
+	uint32_t timeout = nRFxI2CDmaTimeout(Len, pDev->pI2cDev->Cfg.Rate);
+	uint32_t t = timeout;
+	int idx = 0;
+
+	while (bTx ? dev->pTxData != NULL : dev->pRxBuff != NULL)
+	{
+		int i = bTx ? dev->TxIdx : dev->RxIdx;
+
+		if (i != idx)
+		{
+			idx = i;
+			t = timeout;
+		}
+		else if (--t == 0)
+		{
+#ifdef TWIM_PRESENT
+			NRF_TWIM_Type *reg = pDev->pDmaReg;
+#else
+			NRF_TWI_Type *reg = pDev->pReg;
+#endif
+			reg->SHORTS = 0;
+			reg->TASKS_RESUME = 1;
+			reg->TASKS_STOP = 1;
+			dev->TxDatalen = 0;
+			dev->RxBufflen = 0;
+			dev->pTxData = NULL;
+			dev->pRxBuff = NULL;
+			break;
+		}
+	}
+
+	return bTx ? dev->TxIdx : dev->RxIdx;
+}
+
 // Receive Data only, no Start/Stop condition
 int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
@@ -565,16 +618,14 @@ int nRFxI2CRxDataDMA(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 			return 0;
 		}
 
-		// The interrupt handler moves through the DMA blocks, releases the
-		// bus and reports DEVINTRF_EVT_COMPLETED.
-		dev->pRxBuff = pBuff;
+		// The interrupt handler moves through the DMA blocks, each one ends
+		// with STOP, and reports DEVINTRF_EVT_COMPLETED.
 		dev->RxIdx = 0;
 		dev->RxBufflen = BuffLen;
-		dev->TxDatalen = 0;
-		dev->TxIdx = 0;
+		dev->pRxBuff = pBuff;
 		nRFxI2CDmaNextBlock(dev);
 
-		return -1;
+		return nRFxI2CIntWait(dev, false, min(BuffLen, NRFX_I2C_DMA_MAXCNT));
 	}
 
 	while (BuffLen > 0)
@@ -634,11 +685,9 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 		// The interrupt handler takes each byte. The bus is suspended after
 		// each byte until the handler resumes it, the last byte ends with
 		// STOP. The transfer ends on STOPPED.
-		dev->pRxBuff = pBuff;
 		dev->RxIdx = 0;
 		dev->RxBufflen = Bufflen;
-		dev->TxDatalen = 0;
-		dev->TxIdx = 0;
+		dev->pRxBuff = pBuff;
 
 		dev->pReg->EVENTS_RXDREADY = 0;
 		dev->pReg->EVENTS_ERROR = 0;
@@ -647,7 +696,7 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 		dev->pReg->SHORTS = Bufflen > 1 ? TWI_SHORTS_BB_SUSPEND_Msk : TWI_SHORTS_BB_STOP_Msk;
 		dev->pReg->TASKS_STARTRX = 1;
 
-		cnt = -1;
+		cnt = nRFxI2CIntWait(dev, false, 1);
 	}
 	else
 	{
@@ -693,9 +742,10 @@ void nRFxI2CStopRx(DevIntrf_t * const pDev)
 	NRF_TWI_Type *reg = dev->pReg;
 #endif
 
-	if (pDev->bIntEn && reg->EVENTS_STOPPED)
+	if (pDev->bIntEn && pDev->bNoStop == false)
 	{
-		// The bus is stopped already, the interrupt handler ends the transfer
+		// The interrupt handler has put the STOP on the bus. Only a transmit
+		// that kept the bus (bNoStop) still needs one.
 		return;
 	}
 
@@ -755,19 +805,16 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		{
 			return 0;
 		}
-		// The interrupt handler moves through the DMA blocks. At the end it
-		// sets bTxReady, then stops the bus and reports
-		// DEVINTRF_EVT_COMPLETED, or keeps the bus suspended when bNoStop is
-		// set, which is what DeviceIntrfRead() waits for before the receive.
+		// The interrupt handler moves through the DMA blocks. The last one
+		// ends with STOP, or leaves the bus suspended when bNoStop is set
+		// for the receive that follows. The handler then sets bTxReady.
 		pDev->bTxReady = false;
-		dev->pTxData = pData;
 		dev->TxIdx = 0;
 		dev->TxDatalen = DataLen;
-		dev->RxBufflen = 0;
-		dev->RxIdx = 0;
+		dev->pTxData = pData;
 		nRFxI2CDmaNextBlock(dev);
 
-		return -1;
+		return nRFxI2CIntWait(dev, true, min(DataLen, NRFX_I2C_DMA_MAXCNT));
 	}
 
 	while (DataLen > 0)
@@ -829,15 +876,12 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 #ifdef TWI_PRESENT
 	if (pDev->bIntEn == true)
 	{
-		// The interrupt handler writes each byte. At the end it sets
-		// bTxReady, then stops the bus and reports DEVINTRF_EVT_COMPLETED on
-		// STOPPED, or keeps the bus when bNoStop is set.
+		// The interrupt handler writes each byte, then stops the bus, or
+		// keeps it when bNoStop is set, and sets bTxReady.
 		pDev->bTxReady = false;
-		dev->pTxData = pData;
 		dev->TxIdx = 0;
 		dev->TxDatalen = Datalen;
-		dev->RxBufflen = 0;
-		dev->RxIdx = 0;
+		dev->pTxData = pData;
 
 		dev->pReg->EVENTS_TXDSENT = 0;
 		dev->pReg->EVENTS_ERROR = 0;
@@ -845,9 +889,9 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 		dev->pReg->EVENTS_STOPPED = 0;
 		dev->pReg->SHORTS = 0;
 		dev->pReg->TASKS_STARTTX = 1;
-		dev->pReg->TXD = dev->pTxData[0];
+		dev->pReg->TXD = pData[0];
 
-		return -1;
+		return nRFxI2CIntWait(dev, true, 1);
 	}
 	else
 	{
@@ -891,9 +935,10 @@ void nRFxI2CStopTx(DevIntrf_t * const pDev)
 	NRF_TWI_Type *reg = dev->pReg;
 #endif
 
-	if (pDev->bIntEn && reg->EVENTS_STOPPED)
+	if (pDev->bIntEn && pDev->bNoStop == false)
 	{
-		// The bus is stopped already, the interrupt handler ends the transfer
+		// The interrupt handler has put the STOP on the bus. Only a transmit
+		// that kept the bus (bNoStop) still needs one.
 		return;
 	}
 
@@ -981,26 +1026,13 @@ void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pDa
 #endif
 }
 
-// An interrupt driven master transfer is running while its remaining count
-// or its index is not zero. Both are cleared when it ends.
-static inline bool nRFxI2CTxPending(const nRFTwiDev_t * const pDev)
-{
-	return (pDev->TxDatalen | pDev->TxIdx) != 0;
-}
-
-static inline bool nRFxI2CRxPending(const nRFTwiDev_t * const pDev)
-{
-	return (pDev->RxBufflen | pDev->RxIdx) != 0;
-}
-
 // The interrupt driven master transfer ended. The bus is stopped, unless a
-// transmit keeps it for a following receive (bNoStop). Release it through the
-// generic helpers, which own the busy flag, then report
-// DEVINTRF_EVT_COMPLETED with the number of bytes moved. A transmit reports
-// DEVINTRF_EVT_TX_READY first. A transmit that keeps the bus reports only
-// that, the receive that follows reports the completion.
-// bStopped : called on the STOPPED event. The event is still set while the
-// bus is released, StopRx and StopTx see by it that no STOP task is needed.
+// transmit keeps it for a following receive (bNoStop). Leave the number of
+// bytes moved in the index and drop the buffer, which is what TxData or
+// RxData waits for, then report: a transmit reports DEVINTRF_EVT_TX_READY,
+// DEVINTRF_EVT_COMPLETED follows when the transfer is closed. The busy flag
+// is released by the caller of TxData or RxData.
+// bStopped : called on the STOPPED event
 static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev, bool bStopped)
 {
 	// TWI and TWIM are one block, these registers are at the same place
@@ -1009,36 +1041,28 @@ static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev,
 #else
 	NRF_TWI_Type *reg = pDev->pReg;
 #endif
-	uint8_t *buff = NULL;
-	bool report = true;
-	bool tx = false;
-	int count;
+	uint8_t *buff = pDev->pRxBuff;
+	bool tx = buff == NULL;
+	int count = tx ? pDev->TxIdx : pDev->RxIdx;
 
 	// An error is kept in ERRORSRC until the end of the transfer
 	reg->ERRORSRC = reg->ERRORSRC;
 
-	if (nRFxI2CRxPending(pDev))
+	if (bStopped)
 	{
-		buff = pDev->pRxBuff;
-		count = pDev->RxIdx;
-		pDev->RxBufflen = 0;
-		pDev->RxIdx = 0;
-		DeviceIntrfStopRx(pIntrf);
+		reg->EVENTS_STOPPED = 0;
+	}
+
+	if (tx)
+	{
+		pDev->TxDatalen = 0;
+		pDev->pTxData = NULL;
+		pIntrf->bTxReady = true;
 	}
 	else
 	{
-		count = pDev->TxIdx;
-		pDev->TxDatalen = 0;
-		pDev->TxIdx = 0;
-		report = pIntrf->bNoStop == false;
-		tx = true;
-		DeviceIntrfTxComplete(pIntrf);
-	}
-
-	if (bStopped)
-	{
-		// Before the callback, which can start the next transfer
-		reg->EVENTS_STOPPED = 0;
+		pDev->RxBufflen = 0;
+		pDev->pRxBuff = NULL;
 	}
 
 	if (pIntrf->EvtCB)
@@ -1048,7 +1072,7 @@ static void nRFxI2CAsyncEnd(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev,
 			// Everything given has gone out, the transmitter is free
 			pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_TX_READY, NULL, count);
 		}
-		if (report)
+		if (tx == false || pIntrf->bNoStop == false)
 		{
 			pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_COMPLETED, buff, count);
 		}
