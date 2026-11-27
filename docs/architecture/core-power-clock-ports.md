@@ -64,7 +64,8 @@ and HFCLK192MCTRL divider fields read back as 1, 0 and 2 respectively.
 CoreClockTest completed with zero failures.
 
 The nRF54LM20B library, CoreClockTest and CorePowerTest built in Debug and
-Release with zero errors and warnings. Hardware results are pending.
+Release with zero errors and warnings. The LM20B exists only as a build
+target in this validation matrix. LM20B silicon does not yet exist.
 
 During the SAM D refactor, `system_samd.c` went from 4,466 to
 2,366 bytes at `-Os`, and the SAM D11 `CoreClockTest` Release image from
