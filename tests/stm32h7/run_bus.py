@@ -222,7 +222,7 @@ def main():
                    'ARM/ST/STM32H7xx/include', 'ARM/CMSIS/Core/Include')]
             objs = []
             for src in ('tests/stm32h7/bus_fw.cpp', 'ARM/ST/src/spi_stm32.cpp',
-                        'ARM/ST/src/i2c_stm32.cpp', 'ARM/ST/src/dma_stm32.cpp', 'ARM/ST/src/quadspi_stm32.cpp',
+                        'ARM/ST/src/i2c_stm32v2.cpp', 'ARM/ST/src/dma_stm32.cpp', 'ARM/ST/src/quadspi_stm32.cpp',
                         'ARM/ST/src/iopincfg_stm32.cpp',
                         'src/coredev/spi.cpp', 'src/coredev/i2c.cpp', 'src/device_intrf.cpp'):
                 obj = tmp / (Path(src).stem + '.o')

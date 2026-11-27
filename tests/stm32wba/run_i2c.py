@@ -7,7 +7,7 @@ Needs arm-none-eabi-g++, and the python packages unicorn and pyelftools.
 Without them the test prints NOT RUN.
 
 i2c_fw.cpp is built for the Cortex-M33 with the generic STM32 I2C driver
-ARM/ST/src/i2c_stm32.cpp, the GPDMA channel manager, the generic I2C and
+ARM/ST/src/i2c_stm32v2.cpp, the GPDMA channel manager, the generic I2C and
 device interface sources and the STM32 GPIO driver, and run in unicorn. The
 I2C1 and I2C3 registers are a model of the I2C version 2 peripheral of the
 reference manual:
@@ -112,7 +112,7 @@ def build(tmp):
            '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/include')]
     objs = []
     cxx = ['arm-none-eabi-g++', *cpu, '-std=gnu++23', '-Wall', '-Werror', '-fno-exceptions', '-fno-rtti', *inc]
-    for src in (HERE / 'i2c_fw.cpp', ROOT / 'ARM/ST/src/i2c_stm32.cpp',
+    for src in (HERE / 'i2c_fw.cpp', ROOT / 'ARM/ST/src/i2c_stm32v2.cpp',
                 ROOT / 'ARM/ST/STM32WBAxx/src/gpdma_stm32wba.cpp',
                 ROOT / 'src/coredev/i2c.cpp', ROOT / 'src/device_intrf.cpp',
                 ROOT / 'ARM/ST/src/iopincfg_stm32.cpp'):
