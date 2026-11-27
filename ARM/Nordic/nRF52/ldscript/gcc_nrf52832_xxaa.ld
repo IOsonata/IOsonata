@@ -101,4 +101,9 @@ SECTIONS
 	} > FLASH
 } INSERT AFTER .text
 
+SECTIONS
+{
+	.noinit.retention (NOLOAD) : { *(.noinit.retention) } > RAM
+} INSERT AFTER .bss;
+
 INCLUDE "gcc_arm_flash.ld"

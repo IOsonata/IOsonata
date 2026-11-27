@@ -55,10 +55,18 @@ SOFTWARE.
 #error "HfxoTestBle requires SoftDevice or SDC"
 #endif
 
+#if defined(NRFXLIB_SDC)
+McuOsc_t g_McuOsc = {
+	.CoreOsc = { OSC_TYPE_XTAL, 32000000U, 20U },
+	.LowPwrOsc = { OSC_TYPE_RC, 32768U, 500U },
+};
+#endif
+
 #ifdef NDEBUG
 #include "coredev/uart.h"
 #include "syslog.h"
 #include "board.h"
+
 
 #define HFXO_PRINT(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
 
@@ -333,18 +341,6 @@ int main(void)
 
 	HfxoConsoleInit();
 	HFXO_PRINT("HfxoTestBle\r\n");
-#if defined(NRFXLIB_SDC)
-	// Test the LFRC selection while MPSL retains its own calibration.
-	// This belongs to the Nordic diagnostic, not the portable application.
-	if (!SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U))
-	{
-		HFXO_PRINT("Select LFRC: FAIL\r\n");
-		HfxoConsoleDrain();
-		return 1;
-	}
-	g_McuOsc.LowPwrOsc.Accuracy = 500U;
-	HFXO_PRINT("Select LFRC: PASS\r\n");
-#endif
 	preStackResult = HfxoPreStackTest();
 	HFXO_PRINT("Pre-stack test result: %s\r\n",
 		preStackResult == 0 ? "PASS" : "FAIL");

@@ -47,7 +47,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("return false;", hf)
         lf = function(self.clock, "bool SystemLowFreqClockCalibrate(",
                       "// The clock manager alone starts")
-        self.assertIn("nRFxLowOscSelected() == OSC_TYPE_RC", lf)
+        self.assertIn("g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC", lf)
         self.assertIn("s_nRFxLfclkReqCnt != 0U", lf)
         self.assertIn("__get_IPSR() != 0U", lf)
         self.assertIn("SystemLowFreqClockEnable()", lf)
@@ -129,10 +129,6 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("s_nRFxLfclkReqCnt = 1U", enable)
         self.assertIn("s_bNRFxLfclkOwned = true", enable)
         self.assertIn("return started;", enable)
-        select = function(self.clock, "bool SystemLowFreqClockSelect(",
-                          "uint32_t SystemPeriphClockGet(")
-        self.assertNotIn("nRFxLfclkStart(", select)
-        self.assertNotIn("TASKS_LFCLKSTART", select)
 
     def test_nrf5340_lfxo_pins_assigned_in_secure_startup(self):
         path = ROOT / "ARM/Nordic/nRF53/nRF5340_App/lib/src/system_nrf5340_application.c"
@@ -165,28 +161,13 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertFalse(
             (ROOT / "ARM/Nordic/include/system_clock_nrfx.h").exists())
 
-    def test_core_select_does_not_enable_hfxo(self):
-        select = function(self.clock, "bool SystemCoreClockSelect(",
-                          "bool SystemHighFreqClockEnable(")
-        self.assertIn("s_nRFxCoreOscSelected = ClkSrc", select)
-        self.assertNotIn("g_McuOsc.CoreOsc.Type = ClkSrc", select)
-        self.assertIn("ClkSrc != g_McuOsc.CoreOsc.Type", select)
-        self.assertIn("OscFreq != g_McuOsc.CoreOsc.Freq", select)
-        self.assertNotIn("ClkSrc == OSC_TYPE_RC && OscFreq != 0U", select)
-        self.assertIn("s_nRFxHfxoReqCnt != 0U", select)
-        self.assertNotIn("nRFxHfxoStart(", select)
-        self.assertNotIn("nRFxHfxoStop(", select)
-
-    def test_lf_select_only_configures_oscillator(self):
-        select = function(self.clock, "bool SystemLowFreqClockSelect(",
-                          "uint32_t SystemPeriphClockGet(")
-        self.assertIn("s_nRFxLowOscSelected = ClkSrc", select)
-        self.assertNotIn("g_McuOsc.LowPwrOsc.Type = ClkSrc", select)
-        self.assertIn("ClkSrc != g_McuOsc.LowPwrOsc.Type", select)
-        self.assertIn("s_nRFxLfclkReqCnt != 0U", select)
-        self.assertNotIn("nRFxLfclkStart(", select)
-        self.assertNotIn("TASKS_LFCLKSTART", select)
-        self.assertNotIn("TASKS_LFCLKSTOP", select)
+    def test_board_selects_sources_at_startup(self):
+        self.assertNotIn("SystemCoreClockSelect(", self.clock)
+        self.assertNotIn("SystemLowFreqClockSelect(", self.clock)
+        init = function(self.clock, "void nRFxClockInit(", "// The LFRC CAL task")
+        self.assertIn("g_McuOsc.LowPwrOsc.Type", init)
+        self.assertIn("NRF_CLOCK->NRFX_LFCLKSRC = src", init)
+        self.assertNotIn("TASKS_LFCLKSTART", init)
 
     def test_nordic_consumers_use_generic_clock_lifecycle(self):
         hf_timer = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(
@@ -370,9 +351,8 @@ class HfxoSourceChecks(unittest.TestCase):
     def test_sdc_vendor_diagnostic_uses_lfrc(self):
         diagnostic = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
             encoding="utf-8")
-        self.assertIn("SystemLowFreqClockSelect(OSC_TYPE_RC, 32768U)", diagnostic)
-        self.assertIn("g_McuOsc.LowPwrOsc.Accuracy = 500U", diagnostic)
-        self.assertIn("Select LFRC: PASS", diagnostic)
+        self.assertIn("OSC_TYPE_RC, 32768U, 500U", diagnostic)
+        self.assertNotIn("SystemLowFreqClockSelect(", diagnostic)
         self.assertIn("Pre-stack physical release", diagnostic)
         self.assertIn("stoppedSamples = 0U", diagnostic)
         self.assertIn("sample < 200U", diagnostic)
@@ -467,7 +447,7 @@ class HfxoSourceChecks(unittest.TestCase):
 
     def test_disable_uses_original_clock_owner(self):
         source = function(self.clock, "static bool nRFxHfxoStop(",
-                          "bool SystemCoreClockSelect(")
+                          "bool SystemHighFreqClockEnable(")
         self.assertIn("nRFxMpslHfxo(false) == 0", source)
         self.assertIn("sd_clock_hfclk_release() == NRF_SUCCESS", source)
         self.assertIn("if (nRFxClockSdEnabled())", source)
@@ -569,7 +549,7 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertIn("s_nRFxHfxoReqCnt = 0U", disable)
         handler = function(self.clock,
                            "static void nRFxClockSdhStateHandler(",
-                           "bool SystemCoreClockSelect(")
+                           "bool SystemHighFreqClockEnable(")
         self.assertIn("NRF_SDH_EVT_STATE_DISABLED", handler)
         self.assertIn("NRF_SDH_STATE_OBSERVER(", handler)
         self.assertIn("s_bNRFxSdDirectStopPending", handler)
@@ -592,7 +572,7 @@ class HfxoSourceChecks(unittest.TestCase):
         power = (ROOT / "ARM/Nordic/src/system_power_nrfx.cpp").read_text(
             encoding="utf-8")
         entry = function(power, "void SystemPowerOff(",
-                         "bool SystemWakePin(")
+                         "int SystemRetRegCount(")
         self.assertLess(entry.index("nRFxClockPrepareSystemOff()"),
                         entry.index("SYS_PWR_REGULATORS->SYSTEMOFF"))
 

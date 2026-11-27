@@ -19,31 +19,31 @@ class NordicClockOwnership(unittest.TestCase):
 		self.assertNotIn("NRF_CLOCK", source)
 		self.assertNotIn("TASKS_LFCLKSTART", source)
 		self.assertNotIn("TASKS_LFCLKSTOP", source)
-		self.assertIn("nRFxLfclkAcquire(s_RtcClockSource[pTimer->DevNo])", source)
-		self.assertIn("nRFxLfclkRelease();", source)
+		self.assertIn("SystemLowFreqClockEnable()", source)
+		self.assertIn("SystemLowFreqClockDisable();", source)
 
 	def test_clock_refuses_mismatched_rtc_source(self):
 		source = CLOCK.read_text(encoding="utf-8")
-		self.assertEqual(source.count("Source != NRFX_LFCLK_REQUEST_DEFAULT &&"), 2)
+		self.assertIn("NRF_CLOCK->NRFX_LFCLKSRCCOPY", source)
 		self.assertIn("s_nRFxLfclkReqCnt++", source)
-		self.assertIn("if (change && s_nRFxLfclkReqCnt != 0U)", source)
+		self.assertIn("effectiveSrc & NRFX_LFCLK_SRC_Msk", source)
 		self.assertIn("s_bNRFxLfclkStopPending = true;", source)
 
 	def test_hf_timer_balances_clock_request(self):
 		source = TIMER.read_text(encoding="utf-8")
 		self.assertNotIn("NRF_CLOCK->", source)
 		self.assertNotIn("TASKS_PLLSTART", source)
-		self.assertIn("s_nRfxHFClockSem == 0 && !s_bTimerHfxoHeld", source)
-		self.assertIn("if (SystemCoreClockSelect(OSC_TYPE_RC, 0))", source)
-		self.assertIn("s_bTimerHfxoHeld = false;", source)
+		self.assertIn("if (!SystemHighFreqClockEnable())", source)
+		self.assertIn("SystemHighFreqClockDisable();", source)
+		self.assertIn("s_bTimerEnabled[devno] = false;", source)
 
-	def test_usb_keeps_refused_clock_release(self):
+	def test_usb_releases_held_clock(self):
 		source = USB.read_text(encoding="utf-8")
 		start = source.index("static inline void UsbdXtalRelease(void)\n{")
 		end = source.index("\n}", start)
 		release = source[start:end]
-		self.assertIn("if (SystemCoreClockSelect(OSC_TYPE_RC, 0))", release)
-		self.assertLess(release.index("SystemCoreClockSelect("),
+		self.assertIn("SystemHighFreqClockDisable();", release)
+		self.assertLess(release.index("SystemHighFreqClockDisable("),
 			release.index("s_bUsbdXtalHeld = false;"))
 
 

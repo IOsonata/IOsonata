@@ -64,7 +64,6 @@ int main()
 	// SystemInit has configured the board-declared LFXO pins and caps.
 	// Keep the shared crystal enabled while the network core is running.
 	if (g_McuOsc.LowPwrOsc.Type != OSC_TYPE_XTAL ||
-		!SystemLowFreqClockSelect(OSC_TYPE_XTAL, g_McuOsc.LowPwrOsc.Freq) ||
 		!SystemLowFreqClockEnable())
 	{
 		// Do not release the network core without the required LFXO.

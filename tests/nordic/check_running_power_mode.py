@@ -38,7 +38,7 @@ class RunningPowerMode(unittest.TestCase):
 		start = self.app.index("bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)")
 		end = self.app.index("SYSTEM_POWER_MODE SystemPowerModeGet(void)", start)
 		body = self.app[start:end]
-		self.assertIn("NRF_APP_CLOCK->HFCLKCTRL = requested;", body)
+		self.assertIn("(NRF_APP_CLOCK->HFCLKCTRL & ~CLOCK_HFCLKCTRL_HCLK_Msk) | requested;", body)
 		self.assertIn("SystemCoreClockUpdate();", body)
 		self.assertIn("NRF_APP_HCLK_LOW_POWER", body)
 		self.assertIn("NRF_APP_HCLK_PERFORMANCE", body)

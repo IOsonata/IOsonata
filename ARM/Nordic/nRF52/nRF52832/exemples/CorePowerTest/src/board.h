@@ -61,4 +61,10 @@ SOFTWARE.
 #define WAKE_BUT_PINOP		BLYST_NANO_DK_BUT1_PINOP
 #define WAKE_BUT_SYSTEM_OFF	1
 
+// Sample preserved across the System OFF wake reset.
+#define POWER_DEMO_RAM_RET_TEST	1
+static uint32_t s_RetainedRam[4] __attribute__((section(".noinit.retention")));
+#define POWER_DEMO_RAM_RET_SIZE	sizeof(s_RetainedRam)
+#define POWER_DEMO_RAM_RET_ADDR	((uintptr_t)s_RetainedRam)
+
 #endif

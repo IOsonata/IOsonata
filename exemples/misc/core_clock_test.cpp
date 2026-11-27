@@ -589,6 +589,12 @@ int main(void)
 
 			if (bus == 0U)
 			{
+#if defined(CORE_CLOCK_TEST_REQUIRED_PCLK)
+				if (clockIdx == CORE_CLOCK_TEST_REQUIRED_PCLK)
+				{
+					CoreClockTestResult("Required PCLK present", false);
+				}
+#endif
 				continue;
 			}
 
