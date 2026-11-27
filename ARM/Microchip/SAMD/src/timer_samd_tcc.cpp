@@ -135,6 +135,7 @@ bool SamdTccRun(SamdTimerData_t *pData, bool bRun)
 {
 	tcc_registers_t *reg = SamdTccReg(pData);
 	uint32_t count;
+	bool stopping = !bRun && (reg->TCC_CTRLA & TCC_CTRLA_ENABLE_Msk) != 0U;
 
 	if (bRun)
 	{
@@ -143,21 +144,31 @@ bool SamdTccRun(SamdTimerData_t *pData, bool bRun)
 	else
 	{
 		reg->TCC_INTENCLR = TCC_INTENCLR_OVF_Msk;
-
-		// The count where it stops, read while the counter runs
-		if ((reg->TCC_CTRLA & TCC_CTRLA_ENABLE_Msk) != 0U && SamdTccRead(pData, &count))
-		{
-			pData->StopCount = count;
-		}
 	}
 
+	if (stopping && !SamdTccRead(pData, &count))
+	{
+		return false;
+	}
 	if (!SamdTccSync(reg, TCC_SYNCBUSY_ENABLE_Msk))
 	{
 		return false;
 	}
 	reg->TCC_CTRLA = SamdTccCtrla(pData, (reg->TCC_CTRLA & SamdTccCptMask(pData)) != 0U, bRun);
 
-	return SamdTccSync(reg, TCC_SYNCBUSY_ENABLE_Msk);
+	if (!SamdTccSync(reg, TCC_SYNCBUSY_ENABLE_Msk))
+	{
+		return false;
+	}
+	if (stopping)
+	{
+		// Preload COUNT while disabled so Enable resumes at the saved tick.
+		reg->TCC_COUNT = count;
+		pData->StopCount = count;
+		return SamdTccSync(reg, TCC_SYNCBUSY_COUNT_Msk);
+	}
+
+	return true;
 }
 
 bool SamdTccReset(SamdTimerData_t *pData)
