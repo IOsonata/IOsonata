@@ -145,3 +145,9 @@ bool SystemLowFreqClockCalibrate(void)
 {
 	return false;
 }
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}

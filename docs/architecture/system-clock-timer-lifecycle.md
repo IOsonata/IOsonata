@@ -244,6 +244,9 @@ void SystemHighFreqClockDisable(void);
 
 bool SystemLowFreqClockEnable(void);
 void SystemLowFreqClockDisable(void);
+
+uint32_t SystemHighFreqClockStartTime(void);
+uint32_t SystemLowFreqClockStartTime(void);
 ```
 
 These functions operate the MCU's shared high- and low-frequency
@@ -262,6 +265,11 @@ not Nordic-only. Each MCU port implements them according to its hardware:
   interrupt/peripheral activity; avoid waiting inside a critical section.
 - Where a clock is essential or cannot be gated independently, Disable must
   not stop CPU execution or another necessary clock.
+- StartTime gives the microseconds the last Enable waited for the
+  oscillator, measured by the clock code while it polls the start. It is 0
+  when Enable found the oscillator running, and always 0 on a port that
+  starts its oscillators once in SystemInit. `sDelay` subtracts it, so the
+  call lasts the requested time when it had to start the clock.
 
 HF and LF hardware behavior is not necessarily symmetric. In particular,
 on Nordic nRF52, HFCLK is available for the CPU from its internal source;

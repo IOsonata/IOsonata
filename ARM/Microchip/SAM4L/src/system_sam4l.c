@@ -1346,6 +1346,12 @@ bool SystemHighFreqClockCalibrate(void)
 	return false;
 }
 
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}
+
 bool SystemLowFreqClockEnable(void)
 {
 	uint32_t state;
@@ -1382,6 +1388,12 @@ void SystemLowFreqClockDisable(void)
 bool SystemLowFreqClockCalibrate(void)
 {
 	return false;
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
 }
 
 static bool Sam4lSetRunningMode(SYSTEM_POWER_MODE Mode)

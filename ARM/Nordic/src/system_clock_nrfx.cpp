@@ -77,6 +77,11 @@ SOFTWARE.
 // About 50 ms at 64 MHz, the crystal starts in a few ms
 #define NRFX_HFXO_WAIT_LOOPS		1000000
 
+// The HFXO start is polled in time, so the clock code knows how long the
+// start took, see SystemHighFreqClockStartTime
+#define NRFX_HFXO_START_TIMEOUT_US	50000U
+#define NRFX_HFXO_START_POLL_US		10U
+
 // Peripherals run from the fixed 16 MHz PCLK16M
 #define NRFX_PCLK_FREQ				16000000UL
 
@@ -149,6 +154,8 @@ typedef enum {
 } nRFxHfxoOwner_t;
 
 static uint32_t s_nRFxHfxoReqCnt = 0U;
+// Time the last HF Enable waited for HFXO, see SystemHighFreqClockStartTime
+static uint32_t s_nRFxHfxoStartWaitUs = 0U;
 static bool s_bNRFxHfxoTransition = false;
 static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
@@ -175,11 +182,8 @@ static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-// Time spent in calibrated LFCLK startup polling, for the next sDelay
-// request. This is internal to the Nordic clock/delay implementation.
-static uint32_t s_nRFxLfclkStartWaitUs;
-#endif
+// Time the last LF Enable waited for LFCLK, see SystemLowFreqClockStartTime
+static uint32_t s_nRFxLfclkStartWaitUs = 0U;
 #if defined(NRF52_SERIES) && defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 // A direct LFCLK owner may release while the SoftDevice controls CLOCK.
 // Its physical STOP is deferred until the SoftDevice has shut down.
@@ -245,6 +249,8 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 	int res;
 	int i;
 
+	// MPSL waits for the crystal itself, the wait is not counted in the start
+	// time. The crystal starts in well under a millisecond.
 	res = nRFxMpslHfxo(true);
 	if (res >= 0)
 	{
@@ -264,7 +270,7 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 		{
 			return false;
 		}
-		for (i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
+		for (i = 0; i < (int)(NRFX_HFXO_START_TIMEOUT_US / NRFX_HFXO_START_POLL_US); i++)
 		{
 			if (sd_clock_hfclk_is_running(&running) != NRF_SUCCESS)
 			{
@@ -276,6 +282,8 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 				*pOwner = NRFX_HFXO_OWNER_SOFTDEVICE;
 				return true;
 			}
+			usDelay(NRFX_HFXO_START_POLL_US);
+			s_nRFxHfxoStartWaitUs += NRFX_HFXO_START_POLL_US;
 		}
 		(void)sd_clock_hfclk_release();
 		return false;
@@ -295,7 +303,7 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 	NRF_CLOCK->NRFX_HFXO_STARTED = 0U;
 	NRF_CLOCK->NRFX_HFXO_START = 1U;
 
-	for (i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
+	for (i = 0; i < (int)(NRFX_HFXO_START_TIMEOUT_US / NRFX_HFXO_START_POLL_US); i++)
 	{
 		if (nRFxHfxoRunning())
 		{
@@ -303,6 +311,8 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 			*pOwner = NRFX_HFXO_OWNER_DIRECT;
 			return true;
 		}
+		usDelay(NRFX_HFXO_START_POLL_US);
+		s_nRFxHfxoStartWaitUs += NRFX_HFXO_START_POLL_US;
 	}
 
 	NRF_CLOCK->NRFX_HFXO_STOP = 1U;
@@ -438,6 +448,7 @@ bool SystemHighFreqClockEnable(void)
 	uint32_t state;
 	bool success;
 
+	s_nRFxHfxoStartWaitUs = 0U;
 	state = DisableInterrupt();
 	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt == UINT32_MAX)
 	{
@@ -671,6 +682,11 @@ static bool nRFxLfclkCalibrate(void)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
+		if (s_bNRFxLfclkTransition)
+		{
+			// Calibration as part of an Enable start
+			s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
+		}
 	}
 	if (NRF_CLOCK->EVENTS_DONE != 0U)
 	{
@@ -787,9 +803,7 @@ static bool nRFxLfclkFinishStart(uint32_t Src)
 			}
 			usDelay(NRFX_LFCLK_START_POLL_US);
 			elapsed += NRFX_LFCLK_START_POLL_US;
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 			s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
-#endif
 		}
 		return false;
 	}
@@ -832,15 +846,13 @@ static bool nRFxLfclkStart(uint32_t Src)
 {
 	uint32_t elapsed;
 
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-	s_nRFxLfclkStartWaitUs = 0U;
-#endif
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
 #if NRF52_ERRATA_132_ENABLE_WORKAROUND
 	if (nrf52_errata_132())
 	{
 		usDelay(NRFX_LFCLK_ERRATA132_DELAY_US);
+		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_ERRATA132_DELAY_US;
 	}
 #endif
 	NRF_CLOCK->TASKS_LFCLKSTART = 1U;
@@ -859,9 +871,7 @@ static bool nRFxLfclkStart(uint32_t Src)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
-#endif
 	}
 	if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
 	{
@@ -889,8 +899,19 @@ static bool nRFxLfclkWaitStopped(void)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
+		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
 	}
 	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U;
+}
+
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	return s_nRFxHfxoStartWaitUs;
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	return s_nRFxLfclkStartWaitUs;
 }
 
 // Snapshot actual LFCLK hardware state before sDelay requests an RTC.
@@ -980,6 +1001,7 @@ bool SystemLowFreqClockEnable(void)
 	bool stopped;
 	bool started;
 
+	s_nRFxLfclkStartWaitUs = 0U;
 	if (!nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src))
 	{
 		return false;

@@ -423,6 +423,12 @@ bool SystemHighFreqClockCalibrate(void)
 	return false;
 }
 
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}
+
 static bool Sam4eSetRunningMode(SYSTEM_POWER_MODE Mode)
 {
 	static uint32_t performance;
