@@ -84,7 +84,6 @@ SOFTWARE.
 
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
-#include "idelay.h"
 #include "coredev/timer.h"
 #include "clock_samd.h"
 #include "evsys_samd.h"
@@ -1548,11 +1547,4 @@ int TimerGetHighFreqDevCount(void)
 int TimerGetHighFreqDevNo(void)
 {
 	return SAMD_RTC_TIMER_MAXCNT;
-}
-
-#include "../../include/sam_sleep_delay.h"
-
-bool sDelay(uint32_t Seconds)
-{
-	return SamSleepDelay(Seconds, &s_SamdRtcData.pTimer);
 }

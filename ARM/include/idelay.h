@@ -51,17 +51,20 @@ extern uint32_t SystemMicroSecLoopCnt;
 extern uint32_t SystemnsDelayFactor;
 
 /**
- * @brief Sleep for a number of seconds using a temporary low-frequency timer.
+ * @brief Sleep for a number of seconds on a timer.
  *
- * The entire elapsed call (timer setup, sleeping, wake and release) is the
- * requested duration. No CPU busy-wait loop, DWT or SysTick is used.
- * Unsupported targets, interrupt context, masked interrupts or unavailable
- * timers return false. Zero seconds succeeds immediately.
+ * src/sdelay.cpp takes a free timer for the time of the call: a low power
+ * timer when one is free, a high frequency timer otherwise. The CPU waits in
+ * light sleep. The whole call, timer setup, clock start, sleep and release,
+ * lasts the requested time. TimerInit refuses a timer held by another Timer
+ * object, so the application timers are never taken.
  *
- * Declared with the other delay functions and implemented by each MCU
- * port. The port selects an available LF timer for this operation.
- * CoreClockTest can measure an MCU-specific overhead correction; normal
- * operation never performs calibration.
+ * Interrupt context, masked interrupts, a call during another sDelay or no
+ * free timer return false. Zero seconds succeeds immediately.
+ *
+ * @param	Seconds : Seconds to wait
+ *
+ * @return	true - The delay is done
  */
 bool sDelay(uint32_t Seconds);
 

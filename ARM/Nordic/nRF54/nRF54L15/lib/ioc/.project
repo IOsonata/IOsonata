@@ -486,6 +486,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sbuffer.c</locationURI>
 		</link>
 		<link>
+			<name>src/sdelay.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sdelay.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sdk-nrf-bm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>

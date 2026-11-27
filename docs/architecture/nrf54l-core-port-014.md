@@ -38,10 +38,12 @@ are unchanged and MCU-independent. UART default is 1,000,000 baud.
   no stale interrupt dispatch points to a handle whose DevNo has changed.
   Live timers or armed triggers cannot be rebound, and another Timer handle
   cannot take an occupied group.
-- `sDelay()` uses that generic TimerInit/EnableTrigger/DisableTrigger/Disable
-  sequence. GRTC runs at 1 MHz, independently of the nRF52/nRF53 LFCLK
-  startup-compensation logic; no unsupported fixed LFCLK compensation is
-  applied to this target.
+- `sDelay()` is the generic `src/sdelay.cpp` (November 27, 2026). It
+  requests the LF clock before the GRTC Init and subtracts the start time
+  the clock code measured, so a cold LFXO start is part of the delay. The
+  fixed cold-start compensation of the earlier Nordic sDelay, 434,775 ticks
+  on nRF54L15 and 433,611 on nRF54LM20A, is removed. While MPSL is
+  initialized, TimerInit refuses GRTC timer 3 and TIMER10.
 - The nRF54L System Core backend implements resumable `SystemSleep` using
   existing NVIC wake sources and advertises `SYSTEM_POWER_CAP_SLEEP` plus
   `SYSTEM_POWER_CAP_TIMER_WAKE`.

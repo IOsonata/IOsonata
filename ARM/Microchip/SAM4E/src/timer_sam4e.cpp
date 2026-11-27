@@ -17,7 +17,6 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include "sam4e.h"
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
-#include "idelay.h"
 #include "coredev/timer.h"
 
 #ifdef SAM4E_TC2
@@ -677,10 +676,4 @@ int TimerGetHighFreqDevCount(void)
 int TimerGetHighFreqDevNo(void)
 {
 	return 0;
-}
-
-// The Timer driver exposes TC channels only. A seconds delay requires an LF timer.
-bool sDelay(uint32_t Seconds)
-{
-	return Seconds == 0U;
 }

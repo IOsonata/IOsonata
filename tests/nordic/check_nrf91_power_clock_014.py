@@ -54,22 +54,6 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertIn("#if defined(NRF53_SERIES)\n\t\t\t(void)nRFxLfclkCalibrate();", section)
 		self.assertIn("#if defined(NRF91_SERIES)", section)
 
-	def test_nrf91_sdelay_uses_shared_lf_timer_and_measured_startup(self):
-		timer = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(encoding="utf-8")
-		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
-		self.assertIn("defined(NRF54L_SERIES) || defined(NRF91_SERIES)", timer)
-		self.assertIn('extern "C" bool nRFxSleepLfClockAccurate(void);', timer)
-		self.assertIn('extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);', timer)
-		self.assertIn('extern "C" bool nRFxSleepLfClockAccurate(void)\n{', clock)
-		self.assertIn("#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)", clock)
-		start = timer.index('extern "C" bool sDelay(uint32_t Seconds)')
-		delay = timer[start:]
-		for call in ("nRFxSleepLfClockAccurate()", "nRFxSleepLfClockStartupWaitUs()",
-					 "TimerInit(&s_SleepTimer", "TimerPowerOff(&s_SleepTimer)", "__WFE()"):
-			self.assertIn(call, delay)
-		self.assertNotIn("msDelay(", delay)
-		self.assertNotIn("DWT->", delay)
-
 	def test_example_is_generic(self):
 		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
 		self.assertNotIn("NRF91_SERIES", example)
@@ -300,6 +284,17 @@ class Nrf91PowerClock(unittest.TestCase):
 				self.assertIn(data + " = nullptr;", src)
 				self.assertIn("static bool " + owner + "(", src)
 				self.assertIn("!" + owner + "(pTimer)", src)
+
+	def test_nrf91_sdelay_is_generic(self):
+		timer = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(encoding="utf-8")
+		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
+		self.assertNotIn("sDelay", timer)
+		self.assertNotIn("nRFxSleepLfClock", clock)
+		self.assertIn("uint32_t SystemLowFreqClockStartTime(void)", clock)
+		for target in ("nRF9160", "nRF91x1"):
+			project = (ROOT / "ARM/Nordic/nRF91" / target / "lib/ioc/.project").read_text()
+			self.assertIn("PARENT-6-PROJECT_LOC/src/sdelay.cpp", project)
+
 
 if __name__ == "__main__":
 	unittest.main()

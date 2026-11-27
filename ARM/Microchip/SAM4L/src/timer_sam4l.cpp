@@ -32,7 +32,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "timer_sam4l.h"
-#include "idelay.h"
 #include "system_sam4l.h"
 
 volatile uint32_t g_Sam4lTimerInitStage;
@@ -476,10 +475,3 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 int TimerGetLowFreqDevCount(void) { return SAM4L_AST_TIMER_MAXCNT; }
 int TimerGetHighFreqDevCount(void) { return SAM4L_TC_TIMER_MAXCNT; }
 int TimerGetHighFreqDevNo(void) { return SAM4L_AST_TIMER_MAXCNT; }
-
-#include "../../include/sam_sleep_delay.h"
-
-bool sDelay(uint32_t Seconds)
-{
-	return SamSleepDelay(Seconds, &g_Sam4lTimerData[0].Timer);
-}

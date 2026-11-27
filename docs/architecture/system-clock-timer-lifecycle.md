@@ -74,8 +74,26 @@ uses, through `Enable/Disable`. It does not come from changing oscillator.
 
 `usDelay`, `msDelay`, `nsDelay` and `sDelay` are declared in `idelay.h` of
 the architecture, not in `system_core_clock.h`. `sDelay` sleeps for a number
-of seconds on a low frequency timer. Each MCU port implements it in its
-timer driver; a port without it does not define it.
+of seconds on a timer. It is generic, in `src/sdelay.cpp`, built in the
+library of a port whose `TimerInit` refuses a timer held by another
+`TimerDev_t` (rule 7 of the timer section):
+
+- It tries the low power timers from the last one down, as the application
+  timers usually start at DevNo 0, then the high frequency timers from the
+  first one, the lowest power one. The first `TimerInit` that succeeds gives
+  the timer. A port with no low power timer uses a high frequency one.
+- Before the Init, it requests the clock of those timers with
+  `SystemLowFreqClockEnable` or `SystemHighFreqClockEnable` and reads the
+  start time of that request. It releases its request after the Init, the
+  timer keeps its own. The programmed time is the delay less the start
+  time, so the call lasts the requested time when the clock was stopped.
+- It waits in light sleep, SLEEPDEEP cleared on Cortex-M, with WFI and the
+  interrupts masked so the timer interrupt cannot be lost between the check
+  and the wait. A delay over 60 s is done in 60 s parts.
+- It calls `TimerPowerOff` at the end, the timer is free again.
+- The setup left, timer Init and power off, was under a millisecond in the
+  earlier Nordic runs, against 20 ms for 2 percent of `sDelay(1)`. There is
+  no per-timer correction.
 
 ### RC oscillator calibration
 

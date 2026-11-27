@@ -86,20 +86,15 @@ extern "C" bool SystemHighFreqClockEnable() { ++s_TestHfUsers; return true; }
 extern "C" bool SystemLowFreqClockEnable() { ++s_TestLfUsers; return true; }
 extern "C" void SystemHighFreqClockDisable() { assert(s_TestHfUsers); --s_TestHfUsers; }
 extern "C" void SystemLowFreqClockDisable() { assert(s_TestLfUsers); --s_TestLfUsers; }
-static uint32_t s_TestScr;
-static struct { uint32_t &SCR; } s_Scb = {s_TestScr};
-#define SCB (&s_Scb)
-#define SCB_SCR_SLEEPDEEP_Msk 4U
-#define SCB_SCR_SLEEPONEXIT_Msk 2U
-static uint32_t __get_IPSR() { return 0U; }
-static uint32_t __get_PRIMASK() { return 0U; }
-static void __DSB() {}
-static void __ISB() {}
+static uint32_t s_TestStartUs;
+extern "C" uint32_t SystemHighFreqClockStartTime() { return s_TestStartUs; }
+extern "C" uint32_t SystemLowFreqClockStartTime() { return s_TestStartUs; }
+#define IRQ_PRIO_LOW 5
 static void __WFI();
-#include "../../ARM/Microchip/include/sam_sleep_delay.h"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l.cpp"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp"
+#include "../../src/sdelay.cpp"
 McuOsc_t g_McuOsc = {};
 extern "C" uint32_t SystemPeriphClockGet(int) { return s_TestPeripheralClock; }
 unsigned events[7][3]={},overflows[7]={},callbacks=0;
@@ -139,9 +134,10 @@ void Advance(int dev,uint32_t ticks,bool service=true) {
 		if(service)Service(dev);
 	}
 }
+// The sDelay timer reaches its trigger during the wait
 static void __WFI()
 {
-	Advance(0, g_Sam4lTimerData[0].Trigger[0].Ticks);
+	Advance(s_SDelayTimer.DevNo, g_Sam4lTimerData[s_SDelayTimer.DevNo].Trigger[0].Ticks);
 }
 int main() {
 	g_McuOsc.LowPwrOsc.Freq=32768;
@@ -178,7 +174,6 @@ int main() {
 	for(int dev=0;dev<7;++dev) {
 		cfg.DevNo=dev; timers[dev].pObj=&timers[dev];
 		assert(TimerInit(&timers[dev],&cfg));
-		assert(!sDelay(1));
 		if (dev == 0) {
 			assert(!s_AstBusyUntilClock);
 			assert(!(ast.AST_SR.value & AST_SR_BUSY));
@@ -187,6 +182,10 @@ int main() {
 		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OK);
 		assert(timers[dev].GetTickCount(&timers[dev])==0);
 		assert(timers[dev].pObj==&timers[dev]);
+		// Timers 0 to dev held, sDelay takes a free TC until there is none
+		assert(sDelay(1) == (dev < 6));
+		assert(s_SDelayTimer.DevNo == -1);
+		assert(timers[dev].GetTickCount(&timers[dev])==0);
 		assert(!TimerInit(&other,&cfg));
 		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OWNER);
 		assert(!TimerInit(&timers[dev],&cfg));

@@ -8,7 +8,8 @@ with tempfile.TemporaryDirectory(prefix='samd-timer-') as directory:
     out = Path(directory)
     for source, name in [('ARM/Microchip/SAMD/include/timer_samd.h', 'timer_private.h'),
                          ('ARM/Microchip/SAMD/include/evsys_samd.h', 'evsys_private.h'),
-                         ('ARM/Microchip/SAMD/src/timer_samd.cpp', 'timer_driver.h')]:
+                         ('ARM/Microchip/SAMD/src/timer_samd.cpp', 'timer_driver.h'),
+                         ('src/sdelay.cpp', 'sdelay_driver.h')]:
         (out / name).write_text('\n'.join(line for line in (ROOT / source).read_text().splitlines()
                                         if not line.startswith('#include')))
     for opt in ('-O0', '-Os'):

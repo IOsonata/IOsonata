@@ -88,18 +88,13 @@ extern "C" bool SystemHighFreqClockEnable() { ++s_TestHfUsers; return true; }
 extern "C" bool SystemLowFreqClockEnable() { ++s_TestLfUsers; return true; }
 extern "C" void SystemHighFreqClockDisable() { assert(s_TestHfUsers); --s_TestHfUsers; }
 extern "C" void SystemLowFreqClockDisable() { assert(s_TestLfUsers); --s_TestLfUsers; }
-static uint32_t s_TestScr;
-static struct { uint32_t &SCR; } s_Scb = {s_TestScr};
-#define SCB (&s_Scb)
-#define SCB_SCR_SLEEPDEEP_Msk 4U
-#define SCB_SCR_SLEEPONEXIT_Msk 2U
-static uint32_t __get_IPSR() { return 0U; }
-static uint32_t __get_PRIMASK() { return 0U; }
-static void __DSB() {}
-static void __ISB() {}
+static uint32_t s_TestStartUs;
+extern "C" uint32_t SystemHighFreqClockStartTime() { return s_TestStartUs; }
+extern "C" uint32_t SystemLowFreqClockStartTime() { return s_TestStartUs; }
+#define IRQ_PRIO_LOW 5
 static void __WFI();
-#include "../../ARM/Microchip/include/sam_sleep_delay.h"
 #include "timer_driver.h"
+#include "sdelay_driver.h"
 
 static void StopSysTick(TimerDev_t *)
 {
@@ -246,9 +241,14 @@ static void Advance(int DevNo, uint64_t Ticks)
 	s_Count[DevNo].Matched = (1U << d->NbTrig) - 1;
 	SamdTimerIrq(DevNo);
 }
+// The sDelay timer reaches its trigger during the wait
+static int s_WfiDevNo = -1;
+static uint64_t s_WfiTicks;
 static void __WFI()
 {
-	Advance(0, s_SamdTimerData[0]->pTrig[0].Ticks);
+	s_WfiDevNo = s_SDelayTimer.DevNo;
+	s_WfiTicks = s_SamdTimerData[s_SDelayTimer.DevNo]->pTrig[0].Ticks;
+	Advance(s_SDelayTimer.DevNo, s_WfiTicks);
 }
 int main()
 {
@@ -267,6 +267,26 @@ int main()
 	cfg.Freq = 0;
 	assert(sDelay(0));
 	assert(sDelay(1));
+	// The low power timer, the RTC, released at the end
+	assert(s_WfiDevNo == 0 && s_SamdTimerData[0] == nullptr);
+	assert(s_TestLfUsers == 0 && s_TestHfUsers == 0);
+	// The clock start time is part of the delay
+	uint64_t fullTicks = s_WfiTicks;
+	s_TestStartUs = 250000;
+	assert(sDelay(1));
+	assert(s_WfiTicks < fullTicks && s_WfiTicks * 4 > fullTicks * 3 - 4);
+	s_TestStartUs = 2000000;
+	s_WfiDevNo = -1;
+	assert(sDelay(1) && s_WfiDevNo == -1);
+	s_TestStartUs = 0;
+	// The RTC held by the application, sDelay takes a free TC and leaves the RTC
+	assert(TimerInit(&timer, &cfg));
+	TimerDisable(&timer);
+	assert(sDelay(1));
+	assert(s_WfiDevNo == TimerGetHighFreqDevNo());
+	assert(s_SamdTimerData[0] != nullptr && s_SamdTimerData[0]->pTimer == &timer);
+	assert(s_SamdTimerData[s_WfiDevNo] == nullptr);
+	assert(TimerPowerOff(&timer));
 	s_Events[0][0] = 0;
 	for (int dev = 0; dev < 4; dev++)
 	{

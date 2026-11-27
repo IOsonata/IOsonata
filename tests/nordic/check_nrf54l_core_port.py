@@ -154,15 +154,6 @@ class Nrf54lCorePort(unittest.TestCase):
                 self.assertIn("state = DisableInterrupt();", function)
                 self.assertIn("EnableInterrupt(state);", function)
 
-    def test_sdelay_uses_generic_timer_and_grtc(self):
-        source = self.timer
-        self.assertIn("defined(NRF54L_SERIES)", source)
-        self.assertIn("warmClock = nRFxGrtcSleepClockWarm();", source)
-        self.assertIn("cfg.DevNo = -1;", source)
-        self.assertIn("TimerInit(&s_SleepTimer, &cfg)", source)
-        self.assertIn("TimerDisableTrigger(&s_SleepTimer, 0);", source)
-        self.assertIn("TimerPowerOff(&s_SleepTimer)", source)
-
     def test_nrf54l_system_sleep_and_capabilities(self):
         source = self.power
         self.assertIn("defined(NRF54L_SERIES)", source)
@@ -216,17 +207,6 @@ class Nrf54lCorePort(unittest.TestCase):
         l15 = source[source.index("#if defined(NRF54L15_XXAA)"):
                      source.index("#elif defined(NRF54LM20A_XXAA)")]
         self.assertIn("8000400UL, 3000150UL", l15)
-
-    def test_lm20a_cold_sdelay_is_separate_from_l15(self):
-        timer = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text()
-        l15 = timer[timer.index("#elif defined(NRF54L15_XXAA)"):
-                    timer.index("#elif defined(NRF54LM20A_XXAA)")]
-        lm20a = timer[timer.index("#elif defined(NRF54LM20A_XXAA)"):
-                      timer.index("#elif defined(NRF52832_XXAA)")]
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 434775", l15)
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 433611", lm20a)
-        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", lm20a)
-        self.assertEqual((1433700 + 1433521) // 2 - 433611, 999999)
 
     def test_lm20_managed_projects_use_their_target_variant(self):
         # nRF54LM20A and nRF54LM20B are separate targets. Every managed
@@ -330,6 +310,16 @@ class Nrf54lCorePort(unittest.TestCase):
                              "system_clock_nrfx.cpp"):
                 with self.subTest(mcu=mcu, file=filename):
                     self.assertIn(filename, project)
+
+    def test_sdelay_is_generic(self):
+        self.assertNotIn("sDelay", self.timer)
+        for target in ("nRF54L15", "nRF54LM20A", "nRF54LM20B"):
+            project = (ROOT / "ARM/Nordic/nRF54" / target / "lib/ioc/.project").read_text()
+            self.assertIn("PARENT-6-PROJECT_LOC/src/sdelay.cpp", project)
+        # GRTC timer 3 and TIMER10 stay with the radio stack while it runs
+        self.assertIn("#define NRFX_TIMER_STACK_LF_DEVNO\t(TIMER_NRFX_RTC_MAX - 1)", self.timer)
+        self.assertIn("#define NRFX_TIMER_STACK_HF_DEVNO\t(TIMER_NRFX_RTC_MAX + 1)", self.timer)
+        self.assertIn("nRFxTimerStackHeld(pCfg->DevNo)", self.timer)
 
 
 if __name__ == "__main__":

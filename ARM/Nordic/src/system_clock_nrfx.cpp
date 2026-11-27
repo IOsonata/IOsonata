@@ -914,16 +914,6 @@ uint32_t SystemLowFreqClockStartTime(void)
 	return s_nRFxLfclkStartWaitUs;
 }
 
-// Snapshot actual LFCLK hardware state before sDelay requests an RTC.
-// A running oscillator avoids the cold LFXO startup penalty. No ownership
-// change or oscillator start takes place in this query.
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void)
-{
-	return s_nRFxLfclkStartWaitUs;
-}
-#endif
-
 #if defined(NRF91_SERIES)
 extern "C" bool nRFxLfclkRunningFromRc(void)
 {
@@ -952,20 +942,6 @@ extern "C" bool nRFxLfclkUsesRc(void)
 			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos);
 }
 #endif
-
-#if defined(NRF91_SERIES)
-// Do not calibrate LFRC by a CPU busy wait as part of sDelay's
-// low-power sleep setup. Use the already validated LFXO timebase.
-extern "C" bool nRFxSleepLfClockAccurate(void)
-{
-	return g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL;
-}
-#endif
-
-extern "C" bool nRFxSleepLfClockRunning(void)
-{
-	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
-}
 
 // A STOP issued here is settled once LFCLKSTAT reports the clock stopped,
 // or once a BLE stack that drives CLOCK itself runs LFCLK. Without this

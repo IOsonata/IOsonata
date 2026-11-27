@@ -106,137 +106,24 @@ class NordicSleepDelay(unittest.TestCase):
                 self.assertIn(assignment, off)
                 self.assertIn("pTimer->DevNo = -1;", off)
 
-    def test_sdelay_uses_only_lf_rtc_and_sleep(self):
-        src = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
-            encoding="utf-8")
-        start = src.index('extern "C" bool sDelay(uint32_t Seconds)')
-        delay = src[start:]
-        for term in ("TimerInit(&s_SleepTimer, &cfg)",
-            "nsTimerEnableTrigger(&s_SleepTimer, 0,",
-            "TIMER_TRIG_TYPE_SINGLE", "__WFE();",
-            "s_bSleepTimerDone", "SCB_SCR_SEVONPEND_Msk",
-            "TimerPowerOff(&s_SleepTimer)",
-            "NRF_SDELAY_COLD_OVERHEAD_TICKS",
-            "NRF_SDELAY_WARM_OVERHEAD_TICKS",
-            "warmClock = nRFxSleepLfClockRunning();"):
-            self.assertIn(term, delay)
-        for forbidden in ("msDelay(", "usDelay(", "nsDelay(", "DWT->",
-            "SysTick", "malloc(", "new "):
-            self.assertNotIn(forbidden, delay)
-        self.assertIn('extern "C" bool sDelay(uint32_t Seconds)', src)
-        self.assertIn("initialized = TimerInit(&s_SleepTimer, &cfg);", delay)
-        self.assertIn("if (initialized)", delay)
-        self.assertIn("TimerDisableTrigger(&s_SleepTimer, 0);", delay)
-        self.assertNotIn("nRFxRtcSleepClaim(", delay)
-        self.assertNotIn("nRFxRtcSleepRelease(", delay)
-
-    def test_nrf54l_grtc_distinguishes_cold_lfxo(self):
-        source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
-            encoding="utf-8")
-        section = source.split("static bool nRFxGrtcSleepClockWarm(void)", 1)[1]
-        section = section.split("static TimerDev_t s_SleepTimer;", 1)[0]
-        self.assertIn("NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk", section)
-        self.assertIn("GetLowFreqOscType() != OSC_TYPE_XTAL", section)
-        self.assertIn("NRF_CLOCK_S->LFCLK.STAT", section)
-        self.assertIn("CLOCK_LFCLK_STAT_STATE_Msk", section)
-        self.assertIn("CLOCK_LFCLK_STAT_SRC_Msk", section)
-        self.assertIn("CLOCK_LFCLK_SRC_SRC_LFXO", section)
-        self.assertNotIn("TASKS_START", section)
-        self.assertNotIn("TASKS_STOP", section)
-        self.assertIn("warmClock = nRFxGrtcSleepClockWarm();", source)
-        self.assertLess(source.index("static bool nRFxGrtcSleepClockWarm(void)"),
-                        source.index("int TimerEnablePeiTrigger("))
-
-    def test_nrf54l15_provisional_cold_compensation(self):
-        source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
-            encoding="utf-8")
-        self.assertIn("#elif defined(NRF54L15_XXAA)", source)
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 434775", source)
-        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", source)
-        # The one recorded 1,434,775-us cold call becomes 1 second
-        # after shortening only the cold GRTC compare. Warm calls must
-        # not receive this correction.
-        self.assertEqual(1000000, 1434775 - 434775)
-        self.assertEqual(1000047, 1000047 - 0)
-
-    def test_nrf54lm20a_cold_compensation(self):
-        source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
-            encoding="utf-8")
-        start = source.index("#elif defined(NRF54LM20A_XXAA)")
-        end = source.index("#elif defined(NRF52832_XXAA)", start)
-        section = source[start:end]
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 433611",
-                      section)
-        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0",
-                      section)
-        # GRTC counter is 1 MHz, so 433611 ticks compensate 433611 us.
-        for elapsed in (1433700, 1433521):
-            self.assertLessEqual(abs(elapsed - 433611 - 1000000), 1000)
-
-    def test_nrf5340_app_uses_measured_startup_for_sdelay(self):
+    def test_clock_start_time_counted_for_sdelay(self):
         clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(
             encoding="utf-8")
-        delay = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
+        timer = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
             encoding="utf-8")
-        self.assertIn("s_nRFxLfclkStartWaitUs", clock)
-        self.assertIn("s_nRFxLfclkStartWaitUs = 0U;", clock)
+        lf = clock.split("bool SystemLowFreqClockEnable(void)\n{", 1)[1]
+        lf = lf.split("\n}\n", 1)[0]
+        hf = clock.split("bool SystemHighFreqClockEnable(void)\n{", 1)[1]
+        hf = hf.split("\n}\n", 1)[0]
+        self.assertIn("s_nRFxLfclkStartWaitUs = 0U;", lf)
+        self.assertIn("s_nRFxHfxoStartWaitUs = 0U;", hf)
         self.assertIn("s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;", clock)
-        self.assertIn("nRFxSleepLfClockStartupWaitUs(void)", clock)
-        self.assertIn("startupWaitUs = initialized && !warmClock ?", delay)
-        self.assertIn("nRFxSleepLfClockStartupWaitUs() : 0U;", delay)
-        self.assertIn("if (!warmClock && Seconds == chunk)", delay)
-        self.assertIn("(uint64_t)startupWaitUs *", delay)
-        self.assertIn("NRF_SDELAY_WARM_OVERHEAD_TICKS;", delay)
-        # 260.5-ms startup uses nearly 8,539 ticks; immediate startup
-        # must not subtract 8,539 ticks from an otherwise warm call.
-        frequency = 32768
-        for start_us in (0, 200, 260500):
-            ticks = (start_us * frequency + 500000) // 1000000 - 11
-            self.assertLess(abs(ticks - (start_us * frequency // 1000000)), 12)
-
-    def test_nrf5340_per_core_signed_compensation(self):
-        source = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
-            encoding="utf-8")
-        clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(
-            encoding="utf-8")
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8539", source)
-        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS (-11)", source)
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8", source)
-        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS (-10)", source)
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 0", source)
-        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", source)
-        self.assertIn("int32_t compensation;", source)
-        self.assertIn("if (compensation > 0)", source)
-        self.assertIn("else if (compensation < 0)", source)
-        self.assertIn("ticks -= (uint32_t)compensation;", source)
-        self.assertIn("ticks += (uint32_t)(-(int64_t)compensation);", source)
-        self.assertIn('extern "C" bool nRFxSleepLfClockRunning(void)', clock)
-        self.assertIn("NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk", clock)
-
-    def test_signed_calibration_math(self):
-        for base, adjustment, expected in (
-            (32768, 8539, 24229),
-            (32768, -11, 32779),
-            (32768, 8, 32760),
-            (32768, -10, 32778),
-            (32768, 0, 32768),
-        ):
-            ticks = base
-            if adjustment > 0:
-                ticks = max(2, ticks - adjustment)
-            elif adjustment < 0:
-                ticks += -adjustment
-            self.assertEqual(ticks, expected)
-
-
-    def test_nrf52832_cold_calibration_and_ns_probe(self):
-        clock = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(
-            encoding="utf-8")
-        self.assertIn("defined(NRF52832_XXAA) || defined(NRF52832_XXAB)", clock)
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8604", clock)
-        self.assertIn("#elif defined(NRF52840_XXAA)", clock)
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 8208", clock)
-        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", clock)
+        self.assertIn("s_nRFxHfxoStartWaitUs += NRFX_HFXO_START_POLL_US;", clock)
+        self.assertIn("uint32_t SystemLowFreqClockStartTime(void)", clock)
+        self.assertIn("uint32_t SystemHighFreqClockStartTime(void)", clock)
+        # The generic src/sdelay.cpp is the only sDelay
+        self.assertNotIn("sDelay", timer)
+        self.assertNotIn("nRFxSleepLfClock", clock)
 
 
 if __name__ == "__main__":
