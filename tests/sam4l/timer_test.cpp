@@ -30,7 +30,10 @@ struct Command {
 	uint32_t *cv; Status *sr;
 	bool Started=false;
 	void operator=(uint32_t v) {
-		if(v&TC_CCR_CLKDIS) sr->value &= ~TC_SR_CLKSTA;
+		if(v&TC_CCR_CLKDIS) {
+			sr->value &= ~TC_SR_CLKSTA;
+			Started=false;
+		}
 		else if(v&TC_CCR_CLKEN) sr->value |= TC_SR_CLKSTA;
 		if(v&TC_CCR_SWTRG) {
 			*cv=0;
@@ -220,7 +223,8 @@ int main() {
 		Advance(dev,period);assert(t.GetTickCount(&t)==count);
 		assert(t.Enable(&t));
 		if (dev == 0) assert(ast.AST_WER == (AST_WER_OVF | AST_WER_ALARM0));
-		Advance(dev,period);assert(events[dev][0]==4);
+		Advance(dev,1);assert(t.GetTickCount(&t)==count+1);
+		Advance(dev,period-1);assert(events[dev][0]==4);
 		t.Disable(&t);t.Reset(&t);assert(t.GetTickCount(&t)==0);
 		Advance(dev,period);assert(t.GetTickCount(&t)==0);
 		assert(t.Enable(&t));

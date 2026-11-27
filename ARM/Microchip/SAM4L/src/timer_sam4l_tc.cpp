@@ -48,15 +48,30 @@ void Sam4lTcSetup(Sam4l_TimerData_t &d)
 }
 void Sam4lTcRun(Sam4l_TimerData_t &d, bool run)
 {
-	if (!run) {
+	if (!run)
+	{
 		d.TcReg->TC_CCR = TC_CCR_CLKDIS;
+		if (d.Running && !d.StartPending)
+		{
+			d.Timer->Rollover = Sam4lTcCount(d);
+			d.StartPending = true;
+		}
 		return;
 	}
-	// Enabling and starting are separate operations (30.6.1.4). A trigger
-	// issued while CLKDIS is set cannot start a newly configured counter.
-	// Start/reset on the first enable after Reset; ordinary resume keeps CV.
-	d.TcReg->TC_CCR = TC_CCR_CLKEN | (d.StartPending ? TC_CCR_SWTRG : 0);
-	d.StartPending = false;
+
+	if (d.StartPending)
+	{
+		// SWTRG restarts CV at zero. Compare registers use this new origin.
+		for (int i = 0; i < 3; i++)
+		{
+			if (d.Trigger[i].Active)
+			{
+				Sam4lTcArm(d, i, true);
+			}
+		}
+		d.TcReg->TC_CCR = TC_CCR_CLKEN | TC_CCR_SWTRG;
+		d.StartPending = false;
+	}
 }
 void Sam4lTcReset(Sam4l_TimerData_t &d)
 {
@@ -68,7 +83,7 @@ void Sam4lTcReset(Sam4l_TimerData_t &d)
 }
 uint64_t Sam4lTcCount(Sam4l_TimerData_t &d)
 {
-	if (d.StartPending) return 0;
+	if (d.StartPending) return d.Timer->Rollover;
 	// TC_SR is read-to-clear. Account for rollover here as well as in the
 	// ISR; absolute deadlines preserve compares consumed by foreground reads.
 	uint32_t before = d.TcReg->TC_SR;
@@ -87,7 +102,7 @@ void Sam4lTcArm(Sam4l_TimerData_t &d, int n, bool enable)
 	uint32_t bit = TC_IER_CPAS << n;
 	d.TcReg->TC_IDR = bit;
 	if (!enable) return;
-	uint32_t value = (uint32_t)d.Trigger[n].Deadline & 0xFFFF;
+	uint32_t value = (uint32_t)(d.Trigger[n].Deadline - d.Timer->Rollover) & 0xFFFF;
 	switch (n) {
 	case 0: d.TcReg->TC_RA = value; break;
 	case 1: d.TcReg->TC_RB = value; break;
