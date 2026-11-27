@@ -259,7 +259,12 @@ to 65 bytes, writes of 0 to 254 bytes, a refused address and a read after
 it). Against the slave in DMA mode each of the four master modes fails the
 same way: the first read is right, and each later read starts with one extra
 byte, the byte after the last one the previous read took, the data following
-it. Inferred: the slave transmit DMA loads the next byte into the TWIS
-transmit holding register before the master refuses the last byte, and that
-byte goes out first in the next read. The slave code is not changed by the
-synchronous master work.
+it. The slave transmit DMA loaded the next byte into the TWIS transmit holding
+register while the byte before was on the bus; when the master refused the
+last byte, that byte stayed there and went out first in the next read, and
+the completion count included it. The October I2CMasterSlave did one register
+read and one read continuing from it, where the two errors cancel. The slave
+now transmits from the interrupt in both modes and keeps the DMA for the
+bytes received; `run_i2c_slave.py` gives the failing bytes with the earlier
+code and passes with the new one. The slave in DMA mode is not run on
+hardware again yet.
