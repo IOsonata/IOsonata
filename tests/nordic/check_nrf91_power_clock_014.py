@@ -177,7 +177,8 @@ class Nrf91PowerClock(unittest.TestCase):
 	def test_nrf91_hf_timer_reinit(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
 		section = hf[hf.index("bool nRFxTimerInit("):]
-		self.assertNotIn("s_pnRFxTimerDev[devno] != pTimer", section)
+		# Another Timer object takes the TIMER only after its PowerOff
+		self.assertIn("s_pnRFxTimerDev[devno] != nullptr && s_pnRFxTimerDev[devno] != pTimer", section)
 		self.assertIn("pReg->MODE != TIMER_MODE_MODE_Timer", section)
 		self.assertIn("s_pnRFxTimerDev[devno] = nullptr;", section)
 
@@ -282,7 +283,7 @@ class Nrf91PowerClock(unittest.TestCase):
 	def test_nrf91_hf_timer_ownership(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text()
 		guard = hf[hf.index("bool nRFxTimerInit("):]
-		self.assertNotIn("s_pnRFxTimerDev[devno] != pTimer", guard)
+		self.assertIn("s_pnRFxTimerDev[devno] != nullptr && s_pnRFxTimerDev[devno] != pTimer", guard)
 		self.assertIn("s_bTimerEnabled[devno]", guard)
 		self.assertIn("s_pnRFxTimerDev[devno] = pTimer;", guard)
 

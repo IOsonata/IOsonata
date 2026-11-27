@@ -274,8 +274,14 @@ int main()
 		cfg.DevNo = dev;
 		assert(TimerInit(&timer, &cfg));
 		assert(!TimerInit(&timer, &cfg));
+		// A disabled timer stays with its Timer object until PowerOff
+		TimerDev_t other = {};
+		TimerDisable(&timer);
+		assert(!TimerInit(&other, &cfg));
 		assert(TimerPowerOff(&timer));
 		assert(!TimerEnable(&timer));
+		assert(TimerInit(&other, &cfg));
+		assert(TimerPowerOff(&other));
 		assert(TimerInit(&timer, &cfg));
 		assert(s_SamdTimerData[dev]->pOps == (dev == 0 ? &s_SamdRtcOps : dev < 3 ? &s_SamdTcOps : &s_SamdTccOps));
 		assert(s_SamdTimerData[dev]->pTickOps == nullptr);

@@ -191,6 +191,10 @@ int main() {
 		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OWNER);
 		assert(!TimerInit(&timers[dev],&cfg));
 		timers[dev].Disable(&timers[dev]);
+		// A disabled timer stays with its Timer object until PowerOff
+		assert(!TimerInit(&other, &cfg));
+		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OWNER);
+		assert(timers[dev].PowerOff(&timers[dev]));
 		assert(TimerInit(&other, &cfg));
 		assert(!timers[dev].Enable(&timers[dev]));
 		assert(other.PowerOff(&other));

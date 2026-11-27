@@ -1485,6 +1485,11 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	{
 		return false;
 	}
+	// A timer held by another Timer object stays with it until its PowerOff
+	if (pOldTimer != nullptr && pOldTimer != pTimer)
+	{
+		return false;
+	}
 
 	// Do not replace a Timer object with live PEI bindings.
 	if (pOldTimer != nullptr)

@@ -55,7 +55,24 @@ SOFTWARE.
 
 #include "timer_nrfx.h"
 #include "coredev/system_core_clock.h"
+#include "nrf_mpsl.h"
 #include "idelay.h"
+
+// Timers the radio stack, SoftDevice or MPSL, uses directly while it runs.
+// The stack does not take them with TimerInit.
+#if defined(NRF54L_SERIES)
+#define NRFX_TIMER_STACK_LF_DEVNO	(TIMER_NRFX_RTC_MAX - 1)	// GRTC timer 3
+#define NRFX_TIMER_STACK_HF_DEVNO	(TIMER_NRFX_RTC_MAX + 1)	// TIMER10
+#else
+#define NRFX_TIMER_STACK_LF_DEVNO	0							// RTC0
+#define NRFX_TIMER_STACK_HF_DEVNO	TIMER_NRFX_RTC_MAX			// TIMER0
+#endif
+
+// The SoftDevice handler is linked only by a SoftDevice application
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+extern "C" bool nrf_sdh_is_enabled(void);
+#pragma weak nrf_sdh_is_enabled
+#endif
 
 #if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
 	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
@@ -182,9 +199,27 @@ bool TimerDisablePeiEvent(TimerDev_t *pTimer, PeiDev_t *pPei,
 #endif
 }
 
+// The timer is used by the running radio stack
+static bool nRFxTimerStackHeld(int DevNo)
+{
+	if (DevNo != NRFX_TIMER_STACK_LF_DEVNO && DevNo != NRFX_TIMER_STACK_HF_DEVNO)
+	{
+		return false;
+	}
+	if (nRFxMpslActive())
+	{
+		return true;
+	}
+#if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
+	return nrf_sdh_is_enabled != nullptr && nrf_sdh_is_enabled();
+#else
+	return false;
+#endif
+}
+
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
-	if (pTimer == NULL || pCfg == NULL)
+	if (pTimer == NULL || pCfg == NULL || nRFxTimerStackHeld(pCfg->DevNo))
 	{
 		return false;
 	}

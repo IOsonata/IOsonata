@@ -611,7 +611,8 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 			return false;
 		}
 	}
-	if (pData->pTimer != NULL && !Sam4ePowerOff(pData->pTimer))
+	// A timer held by another Timer object stays with it until its PowerOff
+	if (pData->pTimer != NULL)
 	{
 		EnableInterrupt(state);
 		return false;

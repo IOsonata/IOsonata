@@ -389,6 +389,8 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 		}
 	}
 	if (d.Running) { EnableInterrupt(state); return false; }
+	// A timer held by another Timer object stays with it until its PowerOff
+	if (d.Timer != nullptr && d.Timer != t) { EnableInterrupt(state); return false; }
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_SOURCE;
 	if (d.TcReg) {
 		if (cfg->ClkSrc != TIMER_CLKSRC_DEFAULT) { EnableInterrupt(state); return false; }

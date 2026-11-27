@@ -128,7 +128,7 @@ by comparing the current count with each trigger's scheduled count.
 From the repository root:
 
 ```sh
-c++ -std=c++20 -O2 -IARM/Microchip/SAM4L/include -Iinclude \
+c++ -std=c++20 -O2 -IARM/Microchip/SAM4L/include -Iinclude -IARM/include \
   tests/sam4l/timer_test.cpp -o /tmp/sam4l_timer_test
 /tmp/sam4l_timer_test
 python3 tests/sam4l/timer_build_test.py --toolchain-prefix arm-none-eabi-

@@ -1276,6 +1276,12 @@ static bool SamdTimerReleaseBinding(TimerDev_t *pTimer, int DevNo)
 			return false;
 		}
 	}
+	// A timer held by another Timer object stays with it until its PowerOff
+	if (DevNo >= 0 && DevNo < SAMD_TIMER_MAXCNT && s_SamdTimerData[DevNo] != NULL &&
+		s_SamdTimerData[DevNo]->pTimer != pTimer)
+	{
+		return false;
+	}
 	for (int i = 0; i < SAMD_TIMER_MAXCNT; i++)
 	{
 		if (s_SamdTimerData[i] != NULL &&
@@ -1361,7 +1367,8 @@ static bool SamdTimerPowerOff(TimerDev_t * const pTimer)
 // Keep TimerInit small so LTO can discard the unused initializer at each call.
 static __attribute__((noinline)) bool SamdSysTickInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
-	if (SysTickTimerEnabled())
+	// A timer held by another Timer object stays with it until its PowerOff
+	if (SysTickTimerEnabled() || (s_SamdSysTickOwner != NULL && s_SamdSysTickOwner != pTimer))
 	{
 		return false;
 	}
