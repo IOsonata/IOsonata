@@ -6,13 +6,23 @@ Output uses the EDBG UART at 1,000,000 baud.
 The test checks HF and LF clock enable and disable, CPU running modes,
 and peripheral clock requests, readback and restoration. The RTC runs while
 the test enables and disables LF clock requests. Its counter must still
-advance after the test releases its last request.
+advance after the test releases its last request. TC1 at 250 kHz, with the
+interrupts off, times `usDelay`, `msDelay` and `nsDelay` of 100 ms at 48 and
+24 MHz, each within 2 percent.
 
 For delay calibration during porting, set `CORE_CLOCK_TEST_DELAY_CALIBRATION=1`
 in the application's C++ preprocessor symbols. The same clock tests run.
-SysTick measures the public delay loops at 48 and 24 MHz. Each
+TC1 times the public delay loops at 48 and 24 MHz, the measured factors are
+timed again within 2 percent before they are printed. Each
 `Delay divisors` line gives the CPU frequency and the microsecond and
 nanosecond divisors scaled by 1,000,000.
 
-With xPack Arm GCC 15.2.1 the flash images use 14,204 bytes with calibration
-off and 16,372 bytes with calibration on. The SAMD11D14AM has 16,384 bytes.
+With xPack Arm GCC 15.2.1 the flash images used 14,204 bytes with calibration
+off and 16,372 bytes with calibration on, before the delay checks came back
+on Nov. 27, 2026. The SAMD11D14AM has 16,384 bytes. Built with xPack Arm GCC
+14.2.1 and the same project options, the source with the delay checks is 640
+bytes larger with calibration off and 772 bytes larger with calibration on
+than the source before. Calibration off still fits. Calibration on no longer
+fits the SAMD11D14AM: system_samd.c uses the same loop constants for the D11
+and the D21, so calibrate on the SAMD21 CoreClockTest with
+`CORE_CLOCK_TEST_DELAY_CALIBRATION` set to 1 in its board.h.
