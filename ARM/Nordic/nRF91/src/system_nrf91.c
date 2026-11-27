@@ -26,7 +26,6 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include <stdint.h>
 #include <stdbool.h>
 #include "nrf.h"
-#include "clock_tree_nrfx.h"
 #include "nrf_peripherals.h"
 #include "system_nrf91.h"
 #include "nrf91_erratas.h"
@@ -307,7 +306,6 @@ void SystemInit(void)
         __DSB();
         __ISB();
     #endif
-	nRFxClockInit();
 }
 
 

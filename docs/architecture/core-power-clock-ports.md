@@ -26,13 +26,13 @@ the port documents describes code to be removed. On SAM D the
 pin driver requests the low frequency clock for the EIC, so an enabled pin
 interrupt wakes the MCU from Standby and `SystemSleep` calls no driver.
 
-Nordic startup takes the sources from the board oscillator descriptor. GPIO
-interrupt enable configures GPIOTE and pin SENSE. Interrupt disable releases
-the pin. System ON sleep uses the configured interrupt, and System OFF uses
-GPIO DETECT. The nRF5340 network core has no independent System OFF.
-The nRF5340 application core exposes the QSPI peripheral clock as clock 1.
-Radio stack clock ownership, modem shutdown checks, and network-core LFRC
-fallback still apply.
+The Nordic clock code takes the sources from the board oscillator descriptor
+when it starts an oscillator. The peripheral clock is the fixed 16 MHz
+PCLK16M, there is no clock tree to configure. GPIO interrupt enable configures
+GPIOTE and pin SENSE. Interrupt disable releases the pin. System ON sleep uses
+the configured interrupt, and System OFF uses GPIO DETECT. The nRF5340
+network core has no independent System OFF. Radio stack clock ownership,
+modem shutdown checks, and network-core LFRC fallback still apply.
 
 On the nRF52840 DK, CoreClockTest completed twice with zero failures.
 CorePowerTest passed 134 checks across four boots. All 12 RTC Standby wakes
@@ -48,20 +48,20 @@ preserved the 16-byte RAM test pattern.
 
 ### Nordic hardware runs on the refactored branch
 
+These runs used the Nordic port as merged in #150. After them, the startup
+write of the low frequency source and the QSPI clock as peripheral clock 1
+were removed: the source is written when LFCLK starts and the QSPI driver
+sets its HFCLK192M divider, as before #150. Those two paths were not run
+again on hardware.
+
 | Target | CoreClockTest | CorePowerTest |
 | --- | --- | --- |
-| nRF5340 Audio DK, application core | Passed at 128 MHz and 64 MHz. Clock 1 reported 48 MHz on all three cycles. | 38 checks passed after System OFF wake. The retained 32 KiB kept its pattern. None of the 8,192 words in the non-retained section kept theirs. |
+| nRF5340 Audio DK, application core | Passed at 128 MHz and 64 MHz. | 38 checks passed after System OFF wake. The retained 32 KiB kept its pattern. None of the 8,192 words in the non-retained section kept theirs. |
 | nRF5340 Audio DK, network core | Passed at 64 MHz. LF and HF timer requests returned their reference counts to the initial values. | 16 checks passed, including three timer wakes from Standby. The network core has no independent System OFF. |
 | IBK-NRF54L15 | Passed at 128 MHz. | 36 checks passed after a System OFF pin wake. Retention and non-retention passed for separate 32 KiB regions. Two earlier restarts reported a debug reset (0x20). |
 | nRF54LM20A DK | Passed at 128 MHz. | Three System OFF pin wakes reported 0x100. A complete post-wake summary showed 36 checks passed, including retention and non-retention. |
 | nRF9160 DK | Passed at 64 MHz. | 32 checks passed at startup and 34 after each of three System OFF pin wakes. The 8 KiB retained region kept its pattern each time. |
 | nRF9151 DK | Passed at 64 MHz with the DK pin map. | Three System OFF pin wakes reported 0x100. The post-wake run passed 34 checks including 8 KiB RAM retention. In a separate run following a software reset, the modem-power guard refused System OFF. |
-
-The nRF5340 application-core run requested 48, 24 and 12 MHz on the QSPI
-clock. Each request returned 48 MHz. A subsequent Audio DK diagnostic selected
-96 MHz, then 192 MHz, and restored 48 MHz. The API returned each requested rate
-and HFCLK192MCTRL divider fields read back as 1, 0 and 2 respectively.
-CoreClockTest completed with zero failures.
 
 The nRF54LM20B library, CoreClockTest and CorePowerTest built in Debug and
 Release with zero errors and warnings. The LM20A and LM20B share the same core. The LM20A DK runs cover the

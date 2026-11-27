@@ -161,13 +161,17 @@ class HfxoSourceChecks(unittest.TestCase):
         self.assertFalse(
             (ROOT / "ARM/Nordic/include/system_clock_nrfx.h").exists())
 
-    def test_board_selects_sources_at_startup(self):
+    def test_board_sources_written_when_started(self):
         self.assertNotIn("SystemCoreClockSelect(", self.clock)
         self.assertNotIn("SystemLowFreqClockSelect(", self.clock)
-        init = function(self.clock, "void nRFxClockInit(", "// The LFRC CAL task")
-        self.assertIn("g_McuOsc.LowPwrOsc.Type", init)
-        self.assertIn("NRF_CLOCK->NRFX_LFCLKSRC = src", init)
-        self.assertNotIn("TASKS_LFCLKSTART", init)
+        self.assertNotIn("nRFxClockInit", self.clock)
+        self.assertFalse(
+            (ROOT / "ARM/Nordic/include/clock_tree_nrfx.h").exists())
+        enable = function(self.clock, "bool SystemLowFreqClockEnable(",
+                          "void SystemLowFreqClockDisable(")
+        self.assertIn("nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src)", enable)
+        start = function(self.clock, "static bool nRFxLfclkStart(", "\n}\n")
+        self.assertIn("NRF_CLOCK->NRFX_LFCLKSRC = Src;", start)
 
     def test_nordic_consumers_use_generic_clock_lifecycle(self):
         hf_timer = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(

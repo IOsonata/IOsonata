@@ -40,8 +40,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "nrf.h"
 #ifdef NRF5340_XXAA_APPLICATION
 #include "nrf_erratas.h"
-#include "clock_tree_nrfx.h"
-#include "coredev/system_core_clock.h"
 #endif
 
 #include "istddef.h"
@@ -171,7 +169,9 @@ static uint32_t nRFxQSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 		return 0;
 	}
 #ifdef NRF5340_XXAA_APPLICATION
-	base = SystemPeriphClockGet(NRF_PCLK_192M) / 2U;
+	uint32_t div = (NRF_CLOCK_S->HFCLK192MCTRL & CLOCK_HFCLK192MCTRL_HCLK192M_Msk) >>
+				   CLOCK_HFCLK192MCTRL_HCLK192M_Pos;
+	base = 96000000U >> div;
 #endif
 	uint32_t divider = 1U + (base - 1U) / DataRate;
 	if (divider > 16)
@@ -480,11 +480,11 @@ bool nRFxQSPIInit(SPIDev_t * const pDev)
 	// Anomaly 159 requires HCLK64M and undivided HFCLK192M for QSPI.
 	if (nrf53_errata_159())
 	{
-		if (SystemCoreClockGet() != 64000000UL)
+		if ((NRF_CLOCK_S->HFCLKCTRL & CLOCK_HFCLKCTRL_HCLK_Msk) != CLOCK_HFCLKCTRL_HCLK_Div2)
 		{
 			return false;
 		}
-		(void)SystemPeriphClockSet(NRF_PCLK_192M, 192000000UL);
+		NRF_CLOCK_S->HFCLK192MCTRL = CLOCK_HFCLK192MCTRL_HCLK192M_Div1;
 	}
 	// Anomaly 43: activate with pins disconnected before writing IFCONFIG1.
 	if (nrf53_errata_43())

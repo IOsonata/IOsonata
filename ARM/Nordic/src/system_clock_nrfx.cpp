@@ -17,8 +17,8 @@ RC again after HFCLKSTOP. On the nRF54L the crystal is started and stopped
 with XOSTART and XOSTOP, its state is in XO.STAT. The PLL is not touched, the
 CPU clock started by SystemInit keeps running from it.
 
-Clock 0 is the fixed 16 MHz PCLK16M. On the nRF5340 application core,
-clock 1 supplies QSPI at 48, 96, or 192 MHz.
+The peripheral clock is the fixed 16 MHz PCLK16M, peripheral clock 0.
+SystemPeriphClockSet returns it, the only frequency there is.
 
 @author	Hoang Nguyen Hoan
 @date	Nov. 8, 2026
@@ -51,7 +51,6 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "nrf.h"
-#include "clock_tree_nrfx.h"
 #include "nrf_erratas.h"
 
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
@@ -69,8 +68,6 @@ SOFTWARE.
 // Non secure on nRF91, as POWER, which the Modem library uses there
 // (nrfx_config_nrf91.h)
 #define NRF_CLOCK					NRF_CLOCK_NS
-#elif defined(NRF5340_XXAA_APPLICATION) && defined(NRF_TRUSTZONE_NONSECURE)
-#define NRF_CLOCK NRF_CLOCK_NS
 #elif defined(NRF5340_XXAA_APPLICATION)
 #define NRF_CLOCK					NRF_CLOCK_S
 #elif defined(NRF5340_XXAA_NETWORK)
@@ -621,32 +618,6 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 	}
 }
 
-#if defined(NRF5340_XXAA_APPLICATION)
-// SystemInit reads the hardware divider before the C runtime clears .bss.
-static uint32_t s_Hclk192m = 192000000UL;
-#endif
-
-// SystemInit configures the source before the first LFCLK request.
-void nRFxClockInit(void)
-{
-#if !defined(NRF_SKIP_CLOCK_CONFIGURATION)
-	uint32_t src;
-#endif
-#if defined(NRF5340_XXAA_APPLICATION)
-	uint32_t div = (NRF_CLOCK->HFCLK192MCTRL & CLOCK_HFCLK192MCTRL_HCLK192M_Msk) >>
-		CLOCK_HFCLK192MCTRL_HCLK192M_Pos;
-	s_Hclk192m = 192000000UL >> div;
-#endif
-
-#if !defined(NRF_SKIP_CLOCK_CONFIGURATION)
-	if ((NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U &&
-		nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src))
-	{
-		NRF_CLOCK->NRFX_LFCLKSRC = src;
-	}
-#endif
-}
-
 #if defined(NRF53_SERIES) || defined(NRF52_SERIES)
 // The LFRC CAL task uses HFXO as a reference. nRF52 callers must
 // request HFXO explicitly; nRF53 CLOCK owns that calibration request.
@@ -864,11 +835,7 @@ static bool nRFxLfclkStart(uint32_t Src)
 #if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 	s_nRFxLfclkStartWaitUs = 0U;
 #endif
-	// A stack or the network core fallback may have changed the source.
-	if (NRF_CLOCK->NRFX_LFCLKSRC != Src)
-	{
-		NRF_CLOCK->NRFX_LFCLKSRC = Src;
-	}
+	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
 #if NRF52_ERRATA_132_ENABLE_WORKAROUND
 	if (nrf52_errata_132())
@@ -1162,39 +1129,13 @@ void SystemLowFreqClockDisable(void)
 
 uint32_t SystemPeriphClockGet(int Idx)
 {
-#if defined(NRF5340_XXAA_APPLICATION)
-	if (Idx == NRF_PCLK_192M)
-	{
-		return s_Hclk192m;
-	}
-#endif
-	return Idx == NRF_PCLK_16M ? NRFX_PCLK_FREQ : 0U;
+	return Idx == 0 ? NRFX_PCLK_FREQ : 0;
 }
 
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-#if defined(NRF5340_XXAA_APPLICATION)
-	if (Idx == NRF_PCLK_192M)
-	{
-		uint32_t div = CLOCK_HFCLK192MCTRL_HCLK192M_Div4;
-		uint32_t state;
-
-		if (Freq > 144000000UL)
-		{
-			div = CLOCK_HFCLK192MCTRL_HCLK192M_Div1;
-		}
-		else if (Freq > 72000000UL)
-		{
-			div = CLOCK_HFCLK192MCTRL_HCLK192M_Div2;
-		}
-		state = DisableInterrupt();
-		NRF_CLOCK->HFCLK192MCTRL = div << CLOCK_HFCLK192MCTRL_HCLK192M_Pos;
-		s_Hclk192m = 192000000UL >> div;
-		EnableInterrupt(state);
-	}
-#else
+	// Fixed, the closest frequency is the one there is
 	(void)Freq;
-#endif
 
 	return SystemPeriphClockGet(Idx);
 }

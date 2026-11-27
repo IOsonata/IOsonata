@@ -26,7 +26,6 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include <stdint.h>
 #include <stdbool.h>
 #include "nrf.h"
-#include "clock_tree_nrfx.h"
 #include "nrf_peripherals.h"
 #include "nrf52_erratas.h"
 #include "system_nrf52.h"
@@ -424,5 +423,4 @@ void SystemInit(void)
 						(POWER_DCDCEN0_DCDCEN_Disabled << POWER_DCDCEN0_DCDCEN_Pos);
 #endif
 
-	nRFxClockInit();
 }

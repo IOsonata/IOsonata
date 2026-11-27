@@ -26,7 +26,6 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include <stdint.h>
 #include <stdbool.h>
 #include "nrf.h"
-#include "clock_tree_nrfx.h"
 #include "nrf_peripherals.h"
 #include "system_nrf53.h"
 #include "nrf53_erratas.h"
@@ -474,7 +473,6 @@ void SystemInit(void)
 		NRF_OSCILLATORS_S->XOSC32KI.INTCAP = OSCILLATORS_XOSC32KI_INTCAP_INTCAP_C7PF;
 	}
 #endif
-	nRFxClockInit();
 }
 
 /* Workaround to allow NS code to access FICR. Override NRF_FICR_NS to move FICR_NS buffer. */

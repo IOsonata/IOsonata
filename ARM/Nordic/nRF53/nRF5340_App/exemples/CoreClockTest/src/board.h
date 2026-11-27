@@ -83,7 +83,4 @@ SOFTWARE.
 // UART interrupts are enabled by the shared test; this board uses EasyDMA.
 #define CORE_CLOCK_TEST_UART_DMA true
 
-// Clock 1 supplies QSPI.
-#define CORE_CLOCK_TEST_REQUIRED_PCLK 1
-
 #endif
