@@ -15,11 +15,11 @@
 		part does not have (SPI2 of the STM32L43x and L44x) fails SPIInit.
 		SPI1 is clocked from PCLK2, SPI2 and SPI3 from PCLK1, the rate is set
 		with the BR divider of CR1 (2 to 256). The peripheral has no transfer
-		size: a master transfer ends when its last item is received. With
-		bIntEn the receive interrupt moves the items, at most a FIFO of items
-		in flight. The master keeps SPE set between transfers so that SCK
-		stays at its idle level. The slave has no underrun value: its
-		transmit FIFO is kept filled, with the DummyByte after the data.
+		size: a master transfer ends when its last item is received. At most
+		a FIFO of items is in flight. The master keeps SPE set between
+		transfers so that SCK stays at its idle level. The slave has no
+		underrun value: its transmit FIFO is kept filled, with the DummyByte
+		after the data.
 		Clearing SPE leaves the FIFO content, so the slave is reset through
 		RCC before each frame. DevNo after the SPI instances selects QUADSPI or OCTOSPI
 		instances, SPIInit passes them to Stm32QospiInit (qospi_stm32.h,
@@ -56,21 +56,22 @@
 		during a transmit is discarded. AFCNTR keeps the pins driven by the
 		peripheral between two transfers, so SCK stays at its idle level.
 
-		Polling, interrupt and DMA run the same engine. Without bIntEn the
-		call waits for the end of the transfer. With bIntEn a receive, and a
-		transmit of up to SPI_STM32_TXBUF_SIZE bytes, return -1 at once and the
-		end is reported with DEVINTRF_EVT_COMPLETED and the byte count; the
-		transmit data is copied first. With bDmaEn the data is moved by two
-		DMA channels, one for each direction; a direction with no data of
-		the application runs on the dummy value or into a sink. DMA is
-		available on WBA, L4 and H753. H753 uses DMA1/2 for SPI1-5 and
-		BDMA for SPI6, with SRAM4 staging for DTCM caller buffers. H753
-		interrupt TX also refills long writes in the IRQ, keeping the source
-		alive until the last chunk is copied. The channels are taken at
-		SPIInit and kept until PowerOff.
+		Polling, interrupt and DMA run the same engine and the same
+		transfer: TxData and RxData return the number of bytes done when the
+		transfer has ended. With bIntEn each wait of the engine waits for the
+		interrupt: the handler masks the interrupts and tells the wait, which
+		then reads the flags as in polling mode. The application sets the
+		interrupt priority: a transfer is not called from an interrupt of the
+		same or a higher priority than the SPI and its DMA channels. With
+		bDmaEn the data is moved by two DMA channels, one for each direction;
+		a direction with no data of the application runs on the dummy value
+		or into a sink. DMA is available on WBA, L4 and H753. H753 uses
+		DMA1/2 for SPI1-5 and BDMA for SPI6, with SRAM4 staging for DTCM
+		caller buffers. The channels are taken at SPIInit and kept until
+		PowerOff.
 
 		An underrun, an overrun or a mode fault ends the transfer and returns
-		the number of bytes done. Waits are bounded in polling mode.
+		the number of bytes done. Waits are bounded.
 
 		Slave. Interrupt driven, with or without DMA. The pin map is SCK, MISO,
 		MOSI and the NSS pin at index SPI_CS_IOPIN_IDX, which the hardware
@@ -180,8 +181,6 @@ SOFTWARE.
 #ifdef STM32_SPI_LAYOUT_CFG
 #define STM32_SPI_TSIZE_MAX			0xFFFFU
 
-#define SPI_STM32_TXBUF_SIZE		256
-
 // Data bytes the transmit FIFO holds in flight. SPI3 has 8, SPI1 and SPI2 have
 // 16, the smaller value is used for all.
 #define STM32_SPI_FIFO_BYTES		8
@@ -204,11 +203,8 @@ typedef volatile uint16_t __attribute__((may_alias)) Stm32SpiReg16_t;
 									 SPI_IFCR_CRCEC | SPI_IFCR_TIFREC | SPI_IFCR_MODFC | SPI_IFCR_SUSPC)
 #define STM32_SPI_CFG1_DMA			(SPI_CFG1_TXDMAEN | SPI_CFG1_RXDMAEN)
 #define STM32_SPI_IER_MASTER		(SPI_IER_EOTIE | SPI_IER_UDRIE | SPI_IER_OVRIE | SPI_IER_MODFIE)
-#define STM32_SPI_IER_DATA			(SPI_IER_TXPIE | SPI_IER_RXPIE)
 #define STM32_SPI_IER_SLAVE			(SPI_IER_EOTIE | SPI_IER_OVRIE)
 #else
-#define SPI_STM32_TXBUF_SIZE		256
-
 // Data bytes in flight, the 32 bit FIFO
 #ifdef STM32F401xE
 #define STM32_SPI_FIFO_BYTES		1
@@ -289,14 +285,12 @@ typedef struct {
 	int NssLine;			//!< Slave: EXTI line of the NSS pin
 	// Master transfer
 	bool bRun;				//!< Transfer engine running
-	bool bAsync;			//!< Running transfer ends in the interrupt and reports with the event
+	volatile bool bIrq;		//!< Interrupt mode: an interrupt came since the wait started
 	bool bFail;				//!< Underrun, overrun or mode fault
-	bool bRx;				//!< Direction of an asynchronous transfer, for the completion call
 	bool bDma;				//!< Data moved by DMA
 	int DmaTx;				//!< GPDMA channel of the transmit, -1 none
 	int DmaRx;
 	const uint8_t *pTx;
-	std::atomic<uint32_t> *pTxStaged;
 	uint8_t *pRx;
 	uint32_t Items;			//!< Items of the transfer
 	uint32_t Done;			//!< Items of the chunks completed
@@ -317,7 +311,6 @@ typedef struct {
 	uint32_t Cr2;			//!< CR2 of the configuration, without the interrupt enables
 	int DmaPair;			//!< Choice of Dma[] the channels come from
 #endif
-	uint8_t TxBuf[SPI_STM32_TXBUF_SIZE];
 } Stm32SpiDev_t;
 
 #pragma pack(pop)
@@ -606,16 +599,13 @@ static void Stm32SpiDmaGive(Stm32SpiDev_t * const pDev)
 	}
 }
 
+// The channel flags are taken by the acknowledge, the engine reads them
 static void Stm32SpiDmaIrq(int Ch, void *pCtx)
 {
 	Stm32SpiDev_t *dev = (Stm32SpiDev_t *)pCtx;
 
 	STM32_SPI_DMA_ACK(Ch);
-	// A master transfer that the caller waits for is followed by its polling loop
-	if (dev->bAsync || dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
-	{
-		Stm32SpiService(dev);
-	}
+	Stm32SpiService(dev);
 }
 
 static void Stm32SpiDmaStop(Stm32SpiDev_t * const pDev)
@@ -634,36 +624,6 @@ static void Stm32SpiDmaStop(Stm32SpiDev_t * const pDev)
 // ---------------------------------------------------------------------------
 // Master engine
 // ---------------------------------------------------------------------------
-
-// Publish source lifetime only after the chunk owns a copy.
-#ifdef STM32_SPI_LAYOUT_CFG
-static void Stm32SpiStageDone(Stm32SpiDev_t * const pDev)
-{
-	if (pDev->pTxStaged)
-	{
-		std::atomic<uint32_t> *staged = pDev->pTxStaged;
-		uint32_t n = pDev->Done + pDev->Chunk;
-		if (n == pDev->Items)
-		{
-			pDev->pTx = NULL;
-			pDev->pTxStaged = NULL;
-		}
-		staged->store(n);
-	}
-}
-
-#endif
-
-static void Stm32SpiReleaseSource(Stm32SpiDev_t * const pDev)
-{
-	if (pDev->pTxStaged)
-	{
-		std::atomic<uint32_t> *staged = pDev->pTxStaged;
-		pDev->pTxStaged = NULL;
-		pDev->pTx = NULL;
-		staged->store(pDev->Items);
-	}
-}
 
 // Bytes done of a transfer that failed
 static int Stm32SpiMasterCount(Stm32SpiDev_t * const pDev)
@@ -722,7 +682,6 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 		Stm32SpiDmaStop(pDev);
 	}
 #endif
-	Stm32SpiReleaseSource(pDev);
 	pDev->bRun = false;
 }
 
@@ -742,15 +701,7 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 		max = 0xFFFFU / isz;
 	}
 #endif
-	if (pDev->pTxStaged && max > SPI_STM32_TXBUF_SIZE / (uint32_t)Stm32SpiItemSize(pDev))
-	{
-		max = SPI_STM32_TXBUF_SIZE / Stm32SpiItemSize(pDev);
-	}
 	pDev->Chunk = left > max ? max : left;
-	if (pDev->pTxStaged)
-	{
-		memcpy(pDev->TxBuf, pDev->pTx + pDev->Done * Stm32SpiItemSize(pDev), pDev->Chunk * Stm32SpiItemSize(pDev));
-	}
 	pDev->TxN = 0;
 	pDev->RxN = 0;
 
@@ -766,7 +717,7 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 		if (pDev->pTx)
 		{
 			STM32_SPI_DMA_MEMINC(pDev->DmaTx, true);
-			STM32_SPI_DMA_START(pDev->DmaTx, pDev->pTxStaged ? pDev->TxBuf : pDev->pTx + pDev->Done * isz, bytes);
+			STM32_SPI_DMA_START(pDev->DmaTx, pDev->pTx + pDev->Done * isz, bytes);
 		}
 		else
 		{
@@ -786,13 +737,8 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 		reg->CFG1 |= STM32_SPI_CFG1_DMA;
 	}
 #endif
-	if (pDev->bAsync)
-	{
-		reg->IER = STM32_SPI_IER_MASTER | (pDev->bDma ? 0U : STM32_SPI_IER_DATA);
-	}
 	reg->CR1 |= SPI_CR1_SPE;
 	reg->CR1 |= SPI_CR1_CSTART;
-	Stm32SpiStageDone(pDev);
 }
 
 // Move the items the flags allow
@@ -801,13 +747,12 @@ static void Stm32SpiMasterPump(Stm32SpiDev_t * const pDev, uint32_t Sr)
 	SPI_TypeDef *reg = pDev->pReg;
 	const bool b16 = pDev->pSpiDev->Cfg.DataSize > 8;
 	const uint32_t fifo = STM32_SPI_FIFO_BYTES / (b16 ? 2 : 1);
-	const bool stagedTx = pDev->bAsync && !pDev->bRx;
-	const uint8_t *tx = stagedTx ? pDev->TxBuf : pDev->pTx;
+	const uint8_t *tx = pDev->pTx;
 	const uint32_t first = pDev->Done;
 
 	if ((Sr & SPI_SR_TXP) && pDev->TxN < pDev->Chunk && (pDev->TxN - pDev->RxN) < fifo)
 	{
-		const uint32_t i = (stagedTx ? 0 : first) + pDev->TxN;
+		const uint32_t i = first + pDev->TxN;
 
 		if (b16)
 		{
@@ -850,8 +795,7 @@ static void Stm32SpiMasterPump(Stm32SpiDev_t * const pDev, uint32_t Sr)
 	}
 }
 
-// One step of the transfer from the flags. Called by the polling loop and by
-// the interrupt.
+// One step of the transfer from the flags. Called by the loop of the engine.
 static void Stm32SpiMasterService(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
@@ -935,7 +879,6 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 		(void)reg->SR;
 		reg->CR1 = pDev->Cr1 | SPI_CR1_SPE;
 	}
-	Stm32SpiReleaseSource(pDev);
 	pDev->bRun = false;
 }
 
@@ -998,10 +941,9 @@ static void Stm32SpiMasterPump(Stm32SpiDev_t * const pDev, uint32_t Sr)
 
 // Start the next chunk of the transfer. The peripheral has no transfer size:
 // a chunk ends when its last item is received. Without DMA the whole
-// transfer is one chunk; with the interrupt the first items are loaded here,
-// the receive interrupt then keeps the transfer going. With DMA a chunk is
-// at most the 65535 items of a channel count, the receive channel is enabled
-// before the transmit one as the reference manual asks.
+// transfer is one chunk. With DMA a chunk is at most the 65535 items of a
+// channel count, the receive channel is enabled before the transmit one as
+// the reference manual asks.
 static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
@@ -1048,20 +990,12 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 			Stm32DmaChMemInc(pDev->DmaTx, false);
 			Stm32DmaChStart(pDev->DmaTx, &pDev->Dummy, bytes);
 		}
-		reg->CR2 |= SPI_CR2_TXDMAEN | (pDev->bAsync ? SPI_CR2_ERRIE : 0U);
-
-		return;
+		reg->CR2 |= SPI_CR2_TXDMAEN;
 	}
 #endif
-	if (pDev->bAsync)
-	{
-		Stm32SpiMasterPump(pDev, reg->SR);
-		reg->CR2 |= SPI_CR2_RXNEIE | SPI_CR2_ERRIE;
-	}
 }
 
-// One step of the transfer from the flags. Called by the polling loop and by
-// the interrupt.
+// One step of the transfer from the flags. Called by the loop of the engine.
 static void Stm32SpiMasterService(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
@@ -1121,11 +1055,32 @@ static void Stm32SpiMasterService(Stm32SpiDev_t * const pDev)
 }
 #endif
 
-// Polling loop of the engine. The wait restarts whenever the transfer
-// progresses.
+// Interrupt mode: wait for the interrupt of what the engine waits for, up to
+// the wait bound left, kept at 1 or more: the step after the wait reads the
+// flags and the DMA counts, the transfer ends when nothing has moved. Each
+// item sent is received, the receive interrupt and the end or error
+// interrupts are enough.
+static void Stm32SpiMasterWaitIrq(Stm32SpiDev_t * const pDev, uint32_t *pLeft)
+{
+	pDev->bIrq = false;
+#ifdef STM32_SPI_LAYOUT_CFG
+	pDev->pReg->IER = STM32_SPI_IER_MASTER | (pDev->bDma ? 0U : SPI_IER_RXPIE);
+#else
+	pDev->pReg->CR2 |= SPI_CR2_ERRIE | (pDev->bDma ? 0U : SPI_CR2_RXNEIE);
+#endif
+	while (!pDev->bIrq && *pLeft > 1)
+	{
+		(*pLeft)--;
+	}
+}
+
+// Loop of the engine. The wait restarts whenever the transfer progresses. In
+// interrupt mode a step without progress is followed by a wait for the
+// interrupt, the flags are read again after it.
 static void Stm32SpiMasterRun(Stm32SpiDev_t * const pDev)
 {
 	const uint32_t budget = Stm32SpiTimeout(pDev);
+	const bool irq = pDev->pSpiDev->DevIntrf.bIntEn;
 	uint32_t left = budget;
 	uint32_t last = 0xFFFFFFFFU;
 
@@ -1151,37 +1106,19 @@ static void Stm32SpiMasterRun(Stm32SpiDev_t * const pDev)
 			pDev->bFail = true;
 			Stm32SpiMasterEnd(pDev, true);
 		}
-	}
-}
-
-// An interrupt driven transfer ended
-static void Stm32SpiAsyncDone(Stm32SpiDev_t * const pDev)
-{
-	DevIntrf_t *intrf = &pDev->pSpiDev->DevIntrf;
-	const int count = pDev->Result;
-
-	pDev->bAsync = false;
-	if (pDev->bRx)
-	{
-		DeviceIntrfStopRx(intrf);
-	}
-	else
-	{
-		DeviceIntrfTxComplete(intrf);
-	}
-	if (intrf->EvtCB != NULL)
-	{
-		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, NULL, count);
+		else if (irq && pDev->bRun)
+		{
+			Stm32SpiMasterWaitIrq(pDev, &left);
+		}
 	}
 }
 
 // Run a transfer of Len bytes. pTx is the data to send, or NULL to send the
 // dummy value. pRx is the buffer for the data received, or NULL to discard
-// it. Return the bytes done, or -1 when the end is reported by the event.
-static int Stm32SpiTransfer(Stm32SpiDev_t * const pDev, const uint8_t *pTx, uint8_t *pRx, int Len, bool bAsync, std::atomic<uint32_t> *pStaged = NULL)
+// it. Return the bytes done.
+static int Stm32SpiTransfer(Stm32SpiDev_t * const pDev, const uint8_t *pTx, uint8_t *pRx, int Len)
 {
 	const int isz = Stm32SpiItemSize(pDev);
-	DevIntrf_t *intrf = &pDev->pSpiDev->DevIntrf;
 
 	if (pDev->bRun || Len < isz)
 	{
@@ -1189,34 +1126,19 @@ static int Stm32SpiTransfer(Stm32SpiDev_t * const pDev, const uint8_t *pTx, uint
 	}
 
 	pDev->pTx = pTx;
-	pDev->pTxStaged = pStaged;
 	pDev->pRx = pRx;
 	pDev->Items = (uint32_t)Len / isz;
 	pDev->Done = 0;
 	pDev->bFail = false;
-	pDev->bAsync = bAsync;
-	pDev->bRx = pTx == NULL;
 	pDev->bRun = true;
 	pDev->Result = 0;
 #ifdef STM32_SPI_DMA
-	pDev->bDma = intrf->bDma && pDev->DmaTx >= 0 && pDev->DmaRx >= 0;
+	pDev->bDma = pDev->pSpiDev->DevIntrf.bDma && pDev->DmaTx >= 0 && pDev->DmaRx >= 0;
 #else
 	pDev->bDma = false;
 #endif
-	if (bAsync)
-	{
-		atomic_store(&intrf->bTxReady, false);
-	}
 
-	uint32_t pm = __get_PRIMASK();
-	__disable_irq();
 	Stm32SpiMasterChunk(pDev);
-	__set_PRIMASK(pm);
-	if (bAsync)
-	{
-		return -1;
-	}
-
 	Stm32SpiMasterRun(pDev);
 
 	return pDev->Result;
@@ -1776,6 +1698,9 @@ static void Stm32SpiNssEvt(int IntNo, void *pCtx)
 // Interrupts
 // ---------------------------------------------------------------------------
 
+// Interrupt of the instance or of its DMA channels. The slave is served here.
+// Master: the interrupts are masked and the wait told, the flags are left to
+// the wait.
 static void Stm32SpiService(Stm32SpiDev_t * const pDev)
 {
 	if (pDev->pSpiDev == NULL)
@@ -1790,16 +1715,12 @@ static void Stm32SpiService(Stm32SpiDev_t * const pDev)
 		return;
 	}
 
-	if (pDev->bRun == false)
-	{
-		return;
-	}
-
-	Stm32SpiMasterService(pDev);
-	if (pDev->bRun == false && pDev->bAsync)
-	{
-		Stm32SpiAsyncDone(pDev);
-	}
+#ifdef STM32_SPI_LAYOUT_CFG
+	pDev->pReg->IER = 0;
+#else
+	pDev->pReg->CR2 &= ~STM32_SPI_CR2_INT;
+#endif
+	pDev->bIrq = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1927,7 +1848,6 @@ static void Stm32SpiReset(DevIntrf_t * const pIntrf)
 	Stm32SpiDmaStop(dev);
 #endif
 	dev->bRun = false;
-	dev->bAsync = false;
 	atomic_store(&pIntrf->bTxReady, true);
 	if (dev->bSlave)
 	{
@@ -2054,44 +1974,7 @@ static int Stm32SpiTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int D
 		return 0;
 	}
 
-#ifdef STM32H753xx
-	if (pIntrf->bIntEn && !dev->bRun)
-	{
-		std::atomic<uint32_t> staged(0);
-		int ret = Stm32SpiTransfer(dev, pData, NULL, DataLen, true, &staged);
-		if (ret != -1) { return ret; }
-		uint64_t wait = Stm32SpiTimeout(dev) + (uint64_t)SystemCoreClock * SPI_STM32_TXBUF_SIZE * 8U /
-			(dev->pSpiDev->Cfg.Rate ? dev->pSpiDev->Cfg.Rate : 1U);
-		uint32_t budget = wait > UINT32_MAX ? UINT32_MAX : (uint32_t)wait;
-		uint32_t left = budget, prior = UINT32_MAX;
-		const uint32_t items = DataLen / Stm32SpiItemSize(dev);
-		while (staged.load() < items)
-		{
-			uint32_t n = staged.load();
-			if (n != prior) { prior = n; left = budget; }
-			else if (--left == 0)
-			{
-				uint32_t pm = __get_PRIMASK();
-				__disable_irq();
-				bool abort = dev->pTxStaged == &staged;
-				if (abort) { dev->bFail = true; Stm32SpiMasterEnd(dev, true); dev->bAsync = false; }
-				__set_PRIMASK(pm);
-				if (abort) { Stm32SpiAsyncDone(dev); }
-				break;
-			}
-		}
-		return -1;
-	}
-#else
-	if (pIntrf->bIntEn && DataLen <= SPI_STM32_TXBUF_SIZE && dev->bRun == false)
-	{
-		memcpy(dev->TxBuf, pData, DataLen);
-
-		return Stm32SpiTransfer(dev, dev->TxBuf, NULL, DataLen, true);
-	}
-
-#endif
-	return Stm32SpiTransfer(dev, pData, NULL, DataLen, false);
+	return Stm32SpiTransfer(dev, pData, NULL, DataLen);
 }
 
 static int Stm32SpiRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
@@ -2103,7 +1986,7 @@ static int Stm32SpiRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen
 		return 0;
 	}
 
-	return Stm32SpiTransfer(dev, NULL, pBuff, BuffLen, pIntrf->bIntEn);
+	return Stm32SpiTransfer(dev, NULL, pBuff, BuffLen);
 }
 
 bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
@@ -2191,7 +2074,6 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	dev->bCsDrive = slave == false && pCfgData->ChipSel != SPICSEL_MAN && pCfgData->NbIOPins > SPI_CS_IOPIN_IDX;
 	dev->bCsLow = false;
 	dev->bRun = false;
-	dev->bAsync = false;
 	dev->bBad = false;
 	if (dev->bCsDrive)
 	{
