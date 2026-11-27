@@ -14,7 +14,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		main = s[s.index("int main(void)"):]
 		self.assertIn("caps = SystemPowerCapabilitiesGet();", main)
 		self.assertLess(main.index("CorePowerTestSleep(caps)"), main.index("SystemPowerOff();"))
-		self.assertIn("CorePowerTestRetention(marker)", main)
+		self.assertIn("CorePowerTestRetention(caps, reason, marker)", main)
 		self.assertIn("pinWake && (caps & SYSTEM_POWER_CAP_SLEEP) != 0U", main)
 		self.assertNotIn("POWER_DEMO_RESUME_WAKE", s)
 		for name in ("CorePowerTestResult", "CorePowerTestSummary",

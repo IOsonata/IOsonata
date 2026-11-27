@@ -14,7 +14,7 @@ class CorePowerTest(unittest.TestCase):
 		main = s[s.index("int main(void)"):]
 		for name in ("CorePowerTestResult", "CorePowerTestSummary",
 			"SystemSleep();", "SystemPowerOff();",
-			"CorePowerTestRetention(marker)", "CorePowerTestRunningMode(caps)",
+			"CorePowerTestRetention(caps, reason, marker)", "CorePowerTestRunningMode(caps)",
 			"CorePowerTestSleep(caps)", "CorePowerTestWakePin(caps)",
 			"SystemPowerCapabilitiesGet()"):
 			self.assertIn(name, s)
