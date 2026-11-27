@@ -612,7 +612,10 @@ command and read, a receive overflow in a DMA block. In interrupt mode, a
 flag or a block end whose interrupt is held off does not end the wait, and
 the handler leaves the interrupt masked. Each of 12 changes to the waits and
 handlers makes the check fail. `tests/samd/run_spi.py` checks the SPI mode
-selection and lifecycle on the host. Not run on hardware yet.
+selection and lifecycle on the host. Hardware (maintainer, SAM D11 with
+OLED1, Nov. 26, 2026): LCDConsoleDisplayDemo works with SPI interrupt and
+DMA off, and with both on; ClockDisplayDemo also ran. Not run on hardware:
+SPI interrupt only, SPI DMA only, the I2C master, SAM D21.
 
 Separate timer tests on the SAM D21 model, the RTC compared with a TC: the
 count read after single triggers and after disabling a trigger, single

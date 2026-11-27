@@ -77,7 +77,7 @@ byte count means text was passed to that API, not verified on the panel.
   the target's real linker script, a separate library archive, GCC 15.2.1,
   `-Os` and LTO. Checks that unused SPI transfer modes are absent.
 - `python3 tests/samd/run_spi.py`: host tests of all SPI master modes,
-  completion, read-command synchronization, reinitialization, failed channel
+  transfer counts, read-command synchronization, reinitialization, failed channel
   acquisition, reset timeout, power-off cleanup and slave arming.
 - `python3 tests/samd/build_spi.py`: after the display build, links a C program
   with runtime mode selection against the archive, with and without LTO.
@@ -86,6 +86,9 @@ byte count means text was passed to that API, not verified on the panel.
 - Maintainer reports polling, interrupt-only and DMA-only OLED output works
   on D11 + OLED1, including combined DMA/interrupt in a later run. Current
   clock-arithmetic changes have not been rerun on the board.
+- Synchronous SPI master transfers (Nov. 26, 2026): the maintainer reports the
+  display output works on D11 + OLED1 with interrupt and DMA off, and with
+  both on. Interrupt only and DMA only were not rerun.
 
 Hardware references:
 - [OLED1 extension header](https://onlinedocs.microchip.com/oxy/GUID-26DC66D4-2EF7-4C54-8D2D-2A29BED57CAB-en-US-2/GUID-4AEF0FF0-9E97-4FCB-8565-668D17B30006.html)
