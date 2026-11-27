@@ -327,6 +327,11 @@ prescaler for `Freq`:
    timer and disables its clock requirement.
 6. Reconfiguration or `TimerSetFrequency()` must respect other running
    users of shared clocks. Do not change their clock source unexpectedly.
+7. `TimerInit()` refuses a `DevNo` held by another `TimerDev_t`, running
+   or disabled, until that one calls `TimerPowerOff()`. The same
+   `TimerDev_t` can call Init again after Disable. A port also refuses a
+   timer that a running radio stack uses directly. `sDelay` relies on this
+   to take only a free timer.
 
 An explicit `ClkSrc` remains available for users who require a
 particular supported timer clock. Unsupported explicit selections fail
