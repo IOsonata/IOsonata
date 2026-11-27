@@ -46,6 +46,23 @@ Standby wakes and six button Standby wakes passed the clock, UART rate and
 RAM checks. The System OFF wake reported reset reason 0x00000100 and
 preserved the 16-byte RAM test pattern.
 
+### Nordic hardware runs on the refactored branch
+
+| Target | CoreClockTest | CorePowerTest |
+| --- | --- | --- |
+| nRF5340 Audio DK, application core | Passed at 128 MHz and 64 MHz. Clock 1 reported 48 MHz on all three cycles. | 38 checks passed after System OFF wake. The retained 32 KiB kept its pattern. None of the 8,192 words in the non-retained section kept theirs. |
+| nRF5340 Audio DK, network core | Passed at 64 MHz. LF and HF timer requests returned their reference counts to the initial values. | 16 checks passed, including three timer wakes from Standby. The network core has no independent System OFF. |
+| IBK-NRF54L15 | Passed at 128 MHz. | 36 checks passed after a System OFF pin wake. Retention and non-retention passed for separate 32 KiB regions. Two earlier restarts reported a debug reset (0x20). |
+| nRF54LM20A DK | Passed at 128 MHz. | Three System OFF pin wakes reported 0x100. A complete post-wake summary showed 36 checks passed, including retention and non-retention. |
+| nRF9160 DK | Passed at 64 MHz. | 32 checks passed at startup and 34 after each of three System OFF pin wakes. The 8 KiB retained region kept its pattern each time. |
+| nRF9151 DK | Passed at 64 MHz with the DK pin map. | Three System OFF pin wakes reported 0x100. The post-wake run passed 34 checks including 8 KiB RAM retention. In a separate run following a software reset, the modem-power guard refused System OFF. |
+
+The nRF5340 application-core run requested 48, 24 and 12 MHz on the QSPI
+clock. Each request returned 48 MHz. Hardware verification of the 96 and
+192 MHz selections remains open.
+The nRF54LM20B library, CoreClockTest and CorePowerTest built in Debug and
+Release with zero errors and warnings. Hardware results are pending.
+
 During the SAM D refactor, `system_samd.c` went from 4,466 to
 2,366 bytes at `-Os`, and the SAM D11 `CoreClockTest` Release image from
 14,960 to 11,684 bytes of flash on a 16 KB part. The removed code was the
