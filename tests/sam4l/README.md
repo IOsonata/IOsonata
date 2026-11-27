@@ -226,4 +226,17 @@ the synchronous masters, on SAM4L8 Xplained Pro (SAM4LC8C), 2026-11-26:
 ClockDisplayDemo with OLED1 on EXT2 works with the SPI master in interrupt and
 DMA mode (`DISPLAY_SPI_INT_ENABLE` and `DISPLAY_SPI_DMA_ENABLE` set), as
 reported by the maintainer. Not run on hardware yet: the SPI master in
-polling, interrupt only and DMA only mode, SPILoopback, and the I2C master.
+polling, interrupt only and DMA only mode, and SPILoopback.
+
+I2CMasterSlave, TWIM3 master to TWIS1 slave on EXT4, 100 kHz, 2026-11-26,
+as reported by the maintainer: the master in polling, interrupt, DMA and DMA
+with interrupt mode passes against the slave in interrupt mode (register
+write and reads of 1, 2 and 8 bytes, receives without a command, reads of 15
+to 65 bytes, writes of 0 to 254 bytes, a refused address and a read after
+it). Against the slave in DMA mode each of the four master modes fails the
+same way: the first read is right, and each later read starts with one extra
+byte, the byte after the last one the previous read took, the data following
+it. Inferred: the slave transmit DMA loads the next byte into the TWIS
+transmit holding register before the master refuses the last byte, and that
+byte goes out first in the next read. The slave code is not changed by the
+synchronous master work.
