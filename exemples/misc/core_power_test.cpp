@@ -254,19 +254,13 @@ static void CorePowerTestTimerWake(TimerDev_t *pTimer, int Trigger, void *pConte
 }
 #endif
 
-static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
+static void CorePowerTestRetention(bool Marker)
 {
 #if defined(POWER_DEMO_RAM_RET_TEST) && POWER_DEMO_RAM_RET_TEST
 	uint32_t i;
 	uint32_t count;
 	uint32_t unchanged;
 	bool valid;
-
-	if ((Caps & SYSTEM_POWER_CAP_RAM_RETENTION) == 0U)
-	{
-		CorePowerTestUnsupported("RAM retention");
-		return;
-	}
 
 	count = POWER_DEMO_RAM_RET_SIZE / sizeof(uint32_t);
 	if (Marker)
@@ -296,7 +290,6 @@ static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
 		CorePowerTestResult("RAM non-retention after System OFF", valid);
 #endif
 	}
-	(void)Reason;
 	CorePowerTestResult("RAM retention invalid range",
 		!SystemRamRetain(0U, POWER_DEMO_RAM_RET_SIZE, true) &&
 		!SystemRamRetain(POWER_DEMO_RAM_RET_ADDR, 0U, true));
@@ -317,10 +310,8 @@ static void CorePowerTestRetention(uint32_t Caps, uint32_t Reason, bool Marker)
 		s_RetRam[i] = CorePowerTestRamPattern(i);
 	}
 #else
-	(void)Caps;
-	(void)Reason;
 	(void)Marker;
-	CorePowerTestUnsupported("RAM retention (no reserved board region)");
+	CorePowerTestResult("RAM retention test region configured", false);
 #endif
 }
 
@@ -634,7 +625,14 @@ int main(void)
 		CorePowerTestResult("System OFF reset-on-wake",
 			(reason & (SYSTEM_RESET_WAKE_PIN | SYSTEM_RESET_WAKE_TIMER)) != 0U);
 	}
-	CorePowerTestRetention(caps, reason, marker);
+	if ((caps & SYSTEM_POWER_CAP_RAM_RETENTION) != 0U)
+	{
+		CorePowerTestRetention(marker);
+	}
+	else
+	{
+		CorePowerTestUnsupported("System OFF RAM retention");
+	}
 	CorePowerTestRunningMode(caps);
 #if CORE_POWER_TEST_WAKE_MS == 0
 	pinWake = CorePowerTestWakePin(caps);

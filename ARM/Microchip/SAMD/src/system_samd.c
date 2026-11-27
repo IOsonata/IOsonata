@@ -693,6 +693,17 @@ void SystemCoreClockUpdate(void)
 
 	SystemCoreClock = freq >> ((PM_REGS->PM_CPUSEL & PM_CPUSEL_CPUDIV_Msk) >> PM_CPUSEL_CPUDIV_Pos);
 
+#if defined(__SAMD21J18A__)
+	// TC3 measurements at the two calibrated CPU speeds, in loops per second.
+	if (SystemCoreClock >= 24000000UL && SystemCoreClock <= 48000000UL)
+	{
+		SystemMicroSecLoopCnt = CalcDelayFactor(SystemCoreClock,
+			24000000UL, 1844769UL, 48000000UL, 3690941UL);
+		SystemnsDelayFactor = CalcDelayFactor(SystemCoreClock,
+			24000000UL, 7995282UL, 48000000UL, 15994881UL);
+		return;
+	}
+#endif
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		13ULL * 1000000ULL, (uint64_t)SAMD_NSDELAY_LOOP_CLK * 1000000ULL);
 }
