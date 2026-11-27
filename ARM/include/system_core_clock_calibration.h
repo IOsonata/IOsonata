@@ -95,69 +95,6 @@ static inline bool ArmDelayClockInit(ArmDelayCalibration_t *pCal,
 	return ArmDelayClockUpdate(pCal, CpuHz);
 }
 
-// A port with two measured CPU speeds can interpolate both delay factors.
-// Factors are loop iterations per second measured at actual CPU frequencies, not the
-// oscillator's input frequency. Clamp to an endpoint outside the measured
-// range: extrapolation is not supported. No runtime measurement is done.
-typedef struct {
-	uint32_t CpuHz;
-	uint32_t UsLoopsPerSecond;
-	uint32_t NsLoopsPerSecond;
-} ArmDelayPoint_t;
-
-static inline bool ArmDelayClockInterpolate(uint32_t CpuHz,
-	const ArmDelayPoint_t *pLow, const ArmDelayPoint_t *pHigh)
-{
-	uint32_t span;
-	uint32_t lowWeight;
-	uint32_t highWeight;
-	uint64_t us;
-	uint64_t ns;
-
-	if (pLow == NULL || pHigh == NULL || CpuHz == 0U ||
-		pLow->CpuHz == 0U || pHigh->CpuHz <= pLow->CpuHz ||
-		pLow->UsLoopsPerSecond == 0U || pLow->NsLoopsPerSecond == 0U ||
-		pHigh->UsLoopsPerSecond == 0U || pHigh->NsLoopsPerSecond == 0U)
-	{
-		return false;
-	}
-
-	if (CpuHz <= pLow->CpuHz)
-	{
-		SystemMicroSecLoopCnt = pLow->UsLoopsPerSecond;
-		SystemnsDelayFactor = pLow->NsLoopsPerSecond;
-
-		return true;
-	}
-
-	if (CpuHz >= pHigh->CpuHz)
-	{
-		SystemMicroSecLoopCnt = pHigh->UsLoopsPerSecond;
-		SystemnsDelayFactor = pHigh->NsLoopsPerSecond;
-
-		return true;
-	}
-
-	span = pHigh->CpuHz - pLow->CpuHz;
-	lowWeight = pHigh->CpuHz - CpuHz;
-	highWeight = CpuHz - pLow->CpuHz;
-
-	us = ((uint64_t)pLow->UsLoopsPerSecond * lowWeight +
-		(uint64_t)pHigh->UsLoopsPerSecond * highWeight + span / 2U) / span;
-	ns = ((uint64_t)pLow->NsLoopsPerSecond * lowWeight +
-		(uint64_t)pHigh->NsLoopsPerSecond * highWeight + span / 2U) / span;
-
-	if (us == 0U || ns == 0U || us > UINT32_MAX || ns > UINT32_MAX)
-	{
-		return false;
-	}
-
-	SystemMicroSecLoopCnt = (uint32_t)us;
-	SystemnsDelayFactor = (uint32_t)ns;
-
-	return true;
-}
-
 // Generic factor calculation using a target's existing loop divisors in
 // cycles-per-iteration * 1000000. Preserve their previous calibration
 // constants exactly, and call after every successful CPU frequency change.

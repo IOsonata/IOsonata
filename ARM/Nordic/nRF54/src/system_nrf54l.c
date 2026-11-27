@@ -129,14 +129,10 @@ void SystemCoreClockUpdate(void)
 	// 64 MHz: 7,998,400 us and 21,331,413 ns loops/s.
 	// 128 MHz: 15,999,360 us and 42,664,533 ns loops/s.
 	// System Core owns runtime factors; the test only measures endpoints.
-	static const ArmDelayPoint_t s_DelayLow = {
-		64000000UL, 7998400UL, 21331413UL
-	};
-	static const ArmDelayPoint_t s_DelayHigh = {
-		128000000UL, 15999360UL, 42664533UL
-	};
-	(void)ArmDelayClockInterpolate(SystemCoreClock,
-		&s_DelayLow, &s_DelayHigh);
+	SystemMicroSecLoopCnt = CalcDelayFactor(SystemCoreClock,
+		64000000UL, 7998400UL, 128000000UL, 15999360UL);
+	SystemnsDelayFactor = CalcDelayFactor(SystemCoreClock,
+		64000000UL, 21331413UL, 128000000UL, 42664533UL);
 #elif defined(NRF54LM20B_XXAA)
 	// LM20B still awaits separate hardware calibration.
 	if (SystemCoreClock == 128000000UL)

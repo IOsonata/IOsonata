@@ -43,7 +43,10 @@ class GenericDelayCalibration(unittest.TestCase):
 		riscv = RISCV.read_text(encoding="utf-8")
 		self.assertNotIn("DelayCalibrationInterpolate(", source)
 		self.assertNotIn("ArmDelayClockInterpolate(", source)
-		self.assertIn("ArmDelayClockInterpolate(", cal)
+		# The two-point interpolation is the generic CalcDelayFactor
+		self.assertNotIn("ArmDelayClockInterpolate(", cal)
+		self.assertNotIn("ArmDelayPoint_t", cal)
+		self.assertIn("static inline uint32_t CalcDelayFactor(", (ROOT / "include/coredev/system_core_clock.h").read_text(encoding="utf-8"))
 		self.assertIn("CoreClockTestDelayDivisors(pSample);", source)
 		self.assertEqual(source.count("CoreClockTestDelayCalibrationRecord();"), 2)
 		self.assertNotIn("DelayCalibrationInterpolate(", arm)

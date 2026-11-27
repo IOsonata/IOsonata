@@ -174,9 +174,10 @@ class Nrf54lCorePort(unittest.TestCase):
         start = source.index("#elif defined(NRF54LM20A_XXAA)")
         end = source.index("#elif defined(NRF54LM20B_XXAA)", start)
         lm20a = source[start:end]
-        self.assertIn("64000000UL, 7998400UL, 21331413UL", lm20a)
-        self.assertIn("128000000UL, 15999360UL, 42664533UL", lm20a)
-        self.assertIn("ArmDelayClockInterpolate(SystemCoreClock,", lm20a)
+        self.assertIn("64000000UL, 7998400UL, 128000000UL, 15999360UL", lm20a)
+        self.assertIn("64000000UL, 21331413UL, 128000000UL, 42664533UL", lm20a)
+        self.assertIn("SystemMicroSecLoopCnt = CalcDelayFactor(SystemCoreClock,", lm20a)
+        self.assertIn("SystemnsDelayFactor = CalcDelayFactor(SystemCoreClock,", lm20a)
         self.assertNotIn("16000000UL, 3000000UL", lm20a)
         self.assertEqual(64000000 * 1000000 // 8001600, 7998400)
         self.assertEqual(128000000 * 1000000 // 8000320, 15999360)
