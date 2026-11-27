@@ -570,6 +570,8 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 	uint8_t expected[I2C_BUFF_SIZE];
 	char label[32];
 	bool pass = true;
+	DevIntrf_t *mIntrf;
+	DevIntrf_t *sIntrf;
 	int c;
 	int i;
 
@@ -594,6 +596,11 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 
 	printf("I2C configured rate: master %lu Hz, slave %lu Hz\r\n",
 		(unsigned long)g_I2CMaster.Rate(), (unsigned long)g_I2CSlave.Rate());
+	// The modes the drivers run with, after init
+	mIntrf = static_cast<DevIntrf_t *>(g_I2CMaster);
+	sIntrf = static_cast<DevIntrf_t *>(g_I2CSlave);
+	printf("I2C master DMA=%d INT=%d, slave DMA=%d INT=%d\r\n",
+		mIntrf->bDma, mIntrf->bIntEn, sIntrf->bDma, sIntrf->bIntEn);
 
 	for (i = 0; i < I2C_BUFF_SIZE; ++i)
 		s_ReadRqstData[i] = (uint8_t)i;
