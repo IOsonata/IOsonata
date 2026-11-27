@@ -69,22 +69,32 @@ class DemoDriverOwnership(unittest.TestCase):
 
 	def test_core_clock_uses_existing_delay_calibration(self):
 		source = CLOCK.read_text(encoding="utf-8")
-		start = source.index("static bool CoreClockTestDelaySample(")
-		end = source.index("static void CoreClockTestDelayCalibrationRecord(", start)
+		start = source.index("static uint32_t CoreClockTestDelayTime(int Function)")
+		end = source.index("static void CoreClockTestDelayFactors(void)", start)
 		section = source[start:end]
 
-		self.assertIn("if (DelayCalibrationMeasure(pSample))", section)
-		self.assertIn("DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,", section)
-		self.assertIn("CoreClockTestDelayDivisors(pSample);", section)
+		# The HF timer times each delay with the interrupts off
+		self.assertIn("state = DisableInterrupt();", section)
+		self.assertIn("TimerGetMicrosecond(&s_Timer)", section)
+		self.assertIn("usDelay(CORE_CLOCK_TEST_DELAY_US);", section)
+		self.assertIn("msDelay(CORE_CLOCK_TEST_DELAY_US / 1000U);", section)
+		self.assertIn("nsDelay(100000000U);", section)
 		self.assertIn("TimerGetHighFreqDevCount()", section)
 		self.assertIn("CoreClockTestInitHighTimer()", section)
 		self.assertIn("cfg.DevNo = TimerGetHighFreqDevNo();", source)
+		self.assertIn("#define CORE_CLOCK_TEST_DELAY_MIN_US\t98000U", source)
+		self.assertIn("#define CORE_CLOCK_TEST_DELAY_MAX_US\t102000U", source)
+		# Calibration: DWT first, the HF timer times otherwise, then the
+		# measured factors are timed before they are printed
+		self.assertIn("DelayCalibrationMeasure(pSample)", section)
+		self.assertIn("DelayCalibrationFromTimer(SystemCoreClockGet(), UsElapsed, NsElapsed, pSample)", section)
 		self.assertLess(section.index("DelayCalibrationMeasure(pSample)"),
-			section.index("TimerGetHighFreqDevCount()"))
-		self.assertIn("TimerGetMicrosecond(&s_Timer)", section)
-		self.assertIn("msDelay(100);", section)
-		self.assertIn("nsDelay(100000000U);", section)
-		self.assertIn("CoreClockTestDelayCalibrationRecord();", source)
+			section.index("DelayCalibrationFromTimer("))
+		self.assertIn("DelayCalibrationApply(pSample, &code)", section)
+		self.assertIn("(void)DelayCalibrationApply(&code, nullptr);", section)
+		self.assertLess(section.index('CoreClockTestDelayCheck("Measured delay factors"'),
+			section.index("CoreClockTestDelayDivisors(pSample);"))
+		self.assertIn("CalcDelayFactor", source)
 		self.assertNotIn("DelayCalibrationInterpolate(", source)
 
 	def test_core_clock_peripheral_clock_interface(self):

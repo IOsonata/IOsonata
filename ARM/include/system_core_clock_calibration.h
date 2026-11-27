@@ -300,5 +300,29 @@ static inline bool DelayCalibrationFromTimer(uint32_t CpuHz,
 	return true;
 }
 
+// Set the delay factors of a point, to time the delays with them. The
+// factors in use are saved in pOld first when it is not NULL, a later call
+// with them puts them back.
+static inline bool DelayCalibrationApply(const DelayCalibrationPoint_t *pPoint,
+	DelayCalibrationPoint_t *pOld)
+{
+	if (pPoint == NULL || pPoint->UsLoopsPerSecond == 0U ||
+		pPoint->NsLoopsPerSecond == 0U)
+	{
+		return false;
+	}
+	if (pOld != NULL)
+	{
+		pOld->CpuHz = SystemCoreClockGet();
+		pOld->UsLoopsPerSecond = SystemMicroSecLoopCnt;
+		pOld->NsLoopsPerSecond = SystemnsDelayFactor;
+		pOld->Measured = false;
+	}
+	SystemMicroSecLoopCnt = pPoint->UsLoopsPerSecond;
+	SystemnsDelayFactor = pPoint->NsLoopsPerSecond;
+
+	return true;
+}
+
 
 #endif // __ARM_SYSTEM_CORE_CLOCK_CALIBRATION_H__

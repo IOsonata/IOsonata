@@ -48,7 +48,11 @@ class GenericDelayCalibration(unittest.TestCase):
 		self.assertNotIn("ArmDelayPoint_t", cal)
 		self.assertIn("static inline uint32_t CalcDelayFactor(", (ROOT / "include/coredev/system_core_clock.h").read_text(encoding="utf-8"))
 		self.assertIn("CoreClockTestDelayDivisors(pSample);", source)
-		self.assertEqual(source.count("CoreClockTestDelayCalibrationRecord();"), 2)
+		self.assertIn("CoreClockTestDelay(&s_DelayHigh);", source)
+		self.assertIn("CoreClockTestDelay(&s_DelayLow);", source)
+		self.assertIn('CoreClockTestPrint("CalcDelayFactor us:', source)
+		self.assertIn("static inline bool DelayCalibrationApply(", cal)
+		self.assertIn("static inline bool DelayCalibrationApply(", riscv)
 		self.assertNotIn("DelayCalibrationInterpolate(", arm)
 		self.assertNotIn("DelayCalibrationInterpolate(", riscv)
 

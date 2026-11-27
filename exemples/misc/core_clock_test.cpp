@@ -7,7 +7,10 @@ Uses the generic clock, UART and Timer interfaces. Oscillator selections
 come from the System Core configuration, not from board-specific test lists.
 Both build configurations log to UART without a debugger.
 One LF timer and one HF timer check counting after clock requests are
-released. Delay calibration can reuse the HF timer at each CPU speed.
+released. The HF timer, with the interrupts off, times usDelay, msDelay and
+nsDelay at the highest and lowest CPU frequency, within 2 percent. With
+CORE_CLOCK_TEST_DELAY_CALIBRATION, the delay factors are measured at both
+frequencies, timed again with the measured values, and printed for the port.
 
 @license
 
@@ -34,6 +37,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/timer.h"
 #include "coredev/uart.h"
@@ -62,6 +66,11 @@ SOFTWARE.
 #endif
 
 #define CLOCK_TEST_CYCLES	3U
+
+// Time of each delay timed, and the 2 percent window around it
+#define CORE_CLOCK_TEST_DELAY_US	100000U
+#define CORE_CLOCK_TEST_DELAY_MIN_US	98000U
+#define CORE_CLOCK_TEST_DELAY_MAX_US	102000U
 
 // The generic API is declared for every target. A weak reference lets the
 // diagnostic report a missing MCU implementation instead of failing at link
@@ -104,8 +113,11 @@ static UARTDev_t s_Uart;
 static TimerDev_t s_Timer;
 static unsigned s_Failures;
 static volatile bool s_UartTxEmpty = true;
+// Delay factors measured at the highest and lowest CPU frequency
+static DelayCalibrationPoint_t s_DelayHigh;
+static DelayCalibrationPoint_t s_DelayLow;
 
-static void CoreClockTestDelayCalibrationRecord(void);
+static void CoreClockTestDelay(DelayCalibrationPoint_t *pSample);
 static void CoreClockTestFlush(void);
 
 static const TimerCfg_t s_TimerCfg = {
@@ -332,17 +344,20 @@ static void CoreClockTestPowerMode(void)
 	if (SystemPowerModeSet == nullptr || SystemPowerModeGet == nullptr)
 	{
 		CoreClockTestPrint("CPU low power: UNSUPPORTED\r\n");
+		CoreClockTestDelay(&s_DelayHigh);
 		return;
 	}
 
 	if (!SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE))
 	{
 		CoreClockTestResult("CPU performance", false);
+		CoreClockTestDelay(&s_DelayHigh);
 		return;
 	}
 	fastest = SystemCoreClockGet();
 	CoreClockTestResult("CPU performance",
 		SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+	CoreClockTestDelay(&s_DelayHigh);
 
 	CoreClockTestFlush();
 	changed = SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER);
@@ -359,8 +374,8 @@ static void CoreClockTestPowerMode(void)
 		SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER &&
 		reduced != 0U && reduced < fastest);
 
-	// Measure the low-frequency endpoint before restoring performance mode.
-	CoreClockTestDelayCalibrationRecord();
+	// The lowest frequency, before performance mode is restored
+	CoreClockTestDelay(&s_DelayLow);
 	CoreClockTestFlush();
 	restoredOk = SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);
 	restored = SystemCoreClockGet();
@@ -431,88 +446,133 @@ static void CoreClockTestDelayDivisors(const DelayCalibrationPoint_t *pSample)
 		(unsigned)pSample->CpuHz, (unsigned)usDivisor, (unsigned)nsDivisor);
 }
 
-static bool CoreClockTestDelaySample(DelayCalibrationPoint_t *pSample)
+// Time one delay function with the HF timer, the interrupts off, so no
+// interrupt handler adds to the delay. The timer counts with them off.
+static uint32_t CoreClockTestDelayTime(int Function)
 {
-	uint32_t cpuHz;
 	uint32_t start;
-	uint32_t irqState;
-	uint32_t usElapsed;
-	uint32_t nsPublicElapsed;
+	uint32_t elapsed;
+	uint32_t state;
+
+	state = DisableInterrupt();
+	start = TimerGetMicrosecond(&s_Timer);
+	if (Function == 0)
+	{
+		usDelay(CORE_CLOCK_TEST_DELAY_US);
+	}
+	else if (Function == 1)
+	{
+		msDelay(CORE_CLOCK_TEST_DELAY_US / 1000U);
+	}
+	else
+	{
+		nsDelay(100000000U);
+	}
+	elapsed = TimerGetMicrosecond(&s_Timer) - start;
+	EnableInterrupt(state);
+
+	return elapsed;
+}
+
+// Time usDelay, msDelay and nsDelay of 100 ms, the result Name passes when
+// each is within 2 percent. pUs and pNs return the usDelay and nsDelay times.
+static bool CoreClockTestDelayCheck(const char *pName, uint32_t *pUs, uint32_t *pNs)
+{
+	uint32_t elapsed[3];
+	bool passed;
+	int i;
+
+	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0 ||
+		!CoreClockTestInitHighTimer())
+	{
+		CoreClockTestResult("Delay timer", false);
+		return false;
+	}
+	passed = true;
+	for (i = 0; i < 3; i++)
+	{
+		elapsed[i] = CoreClockTestDelayTime(i);
+		passed = passed && elapsed[i] >= CORE_CLOCK_TEST_DELAY_MIN_US &&
+			elapsed[i] <= CORE_CLOCK_TEST_DELAY_MAX_US;
+	}
+	CoreClockTestReleaseTimer();
+
+	*pUs = elapsed[0];
+	*pNs = elapsed[2];
+	CoreClockTestPrint("CPU %u Hz, 100 ms: usDelay %u us, msDelay %u us, nsDelay %u us\r\n",
+		(unsigned)SystemCoreClockGet(), (unsigned)elapsed[0],
+		(unsigned)elapsed[1], (unsigned)elapsed[2]);
+	CoreClockTestResult(pName, passed);
+
+	return passed;
+}
+
+// Measure the delay factors at this frequency, DWT when the core has it,
+// the HF timer times otherwise. The delays are timed again with the measured
+// factors before they are printed, then the factors of the code are back.
+static void CoreClockTestDelayCalibrate(DelayCalibrationPoint_t *pSample,
+	uint32_t UsElapsed, uint32_t NsElapsed)
+{
+	DelayCalibrationPoint_t code;
+	uint32_t us;
+	uint32_t ns;
 	bool valid;
 
-	cpuHz = SystemCoreClockGet();
-	if (cpuHz == 0U)
+	if (!DelayCalibrationMeasure(pSample) &&
+		!DelayCalibrationFromTimer(SystemCoreClockGet(), UsElapsed, NsElapsed, pSample))
 	{
-		return false;
+		CoreClockTestPrint("Delay calibration: UNSUPPORTED\r\n");
+		return;
 	}
-
-	pSample->CpuHz = cpuHz;
-	pSample->UsLoopsPerSecond = 0U;
-	pSample->NsLoopsPerSecond = 0U;
-	pSample->Measured = false;
-
-	// DWT is an optional measurement instrument, never the runtime delay.
-	// If unavailable, use the existing HF Timer calibration path.
-	if (DelayCalibrationMeasure(pSample))
+	CoreClockTestPrint("Measured %u Hz: us loop/s %u, ns loop/s %u\r\n",
+		(unsigned)pSample->CpuHz, (unsigned)pSample->UsLoopsPerSecond,
+		(unsigned)pSample->NsLoopsPerSecond);
+	if (!DelayCalibrationApply(pSample, &code))
 	{
-		CoreClockTestDelayDivisors(pSample);
-		return true;
+		pSample->Measured = false;
+		CoreClockTestResult("Measured delay factors", false);
+		return;
 	}
-
-	if (TimerGetHighFreqDevCount() <= 0 || TimerGetHighFreqDevNo() < 0)
-	{
-		CoreClockTestPrint("No delay timebase\r\n");
-		return false;
-	}
-	if (!CoreClockTestInitHighTimer())
-	{
-		return false;
-	}
-	// Sample the busy loop without UART or other interrupt-handler time.
-	// The independent HF hardware timer keeps running with PRIMASK set.
-	irqState = __get_PRIMASK();
-	__disable_irq();
-	start = TimerGetMicrosecond(&s_Timer);
-	msDelay(100);
-	usElapsed = TimerGetMicrosecond(&s_Timer) - start;
-	__set_PRIMASK(irqState);
-
-	// Sample the busy loop without UART or other interrupt-handler time.
-	// The independent HF hardware timer keeps running with PRIMASK set.
-	irqState = __get_PRIMASK();
-	__disable_irq();
-	start = TimerGetMicrosecond(&s_Timer);
-	nsDelay(100000000U);
-	nsPublicElapsed = TimerGetMicrosecond(&s_Timer) - start;
-	__set_PRIMASK(irqState);
-
-	CoreClockTestReleaseTimer();
-	// Recommend factors from the public API, never from a differently
-	// placed inline assembly probe.
-	valid = DelayCalibrationFromTimer(cpuHz, usElapsed, nsPublicElapsed,
-		pSample);
+	valid = CoreClockTestDelayCheck("Measured delay factors", &us, &ns);
+	(void)DelayCalibrationApply(&code, nullptr);
+	pSample->Measured = valid;
 	if (valid)
 	{
 		CoreClockTestDelayDivisors(pSample);
 	}
-	return valid;
 }
 
-static void CoreClockTestDelayCalibrationRecord(void)
+// The delays at this CPU frequency, with the factors of the code
+static void CoreClockTestDelay(DelayCalibrationPoint_t *pSample)
 {
-	DelayCalibrationPoint_t sample;
+	uint32_t us;
+	uint32_t ns;
 
-	if (!CORE_CLOCK_TEST_DELAY_CALIBRATION)
+	*pSample = {};
+	us = 0U;
+	ns = 0U;
+	(void)CoreClockTestDelayCheck("Delays within 2 percent", &us, &ns);
+	if (CORE_CLOCK_TEST_DELAY_CALIBRATION && us != 0U && ns != 0U)
+	{
+		CoreClockTestDelayCalibrate(pSample, us, ns);
+	}
+}
+
+// The two measured points as the port gives them to CalcDelayFactor. Each
+// was timed at its frequency, CalcDelayFactor gives them back there.
+static void CoreClockTestDelayFactors(void)
+{
+	if (!CORE_CLOCK_TEST_DELAY_CALIBRATION || !s_DelayHigh.Measured ||
+		!s_DelayLow.Measured || s_DelayLow.CpuHz >= s_DelayHigh.CpuHz)
 	{
 		return;
 	}
-
-	sample = {};
-
-	if (!CoreClockTestDelaySample(&sample))
-	{
-		CoreClockTestResult("Delay measurement", false);
-	}
+	CoreClockTestPrint("CalcDelayFactor us: %u Hz %u, %u Hz %u\r\n",
+		(unsigned)s_DelayLow.CpuHz, (unsigned)s_DelayLow.UsLoopsPerSecond,
+		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayHigh.UsLoopsPerSecond);
+	CoreClockTestPrint("CalcDelayFactor ns: %u Hz %u, %u Hz %u\r\n",
+		(unsigned)s_DelayLow.CpuHz, (unsigned)s_DelayLow.NsLoopsPerSecond,
+		(unsigned)s_DelayHigh.CpuHz, (unsigned)s_DelayHigh.NsLoopsPerSecond);
 }
 
 // Wait for the public completion event on interrupt-driven DMA targets.
@@ -571,8 +631,8 @@ int main(void)
 	CoreClockTestResult("Startup clock", SystemCoreClockGet() != 0U);
 	CoreClockTestSharedClock(false);
 	CoreClockTestSharedClock(true);
-	CoreClockTestDelayCalibrationRecord();
 	CoreClockTestPowerMode();
+	CoreClockTestDelayFactors();
 	domainCount = 0U;
 
 	for (cycle = 1U; cycle <= CLOCK_TEST_CYCLES; cycle++)

@@ -200,6 +200,15 @@ static inline bool DelayCalibrationFromTimer(uint32_t CpuHz,
 	return false;
 }
 
+// The delays count CPU cycles, there is no delay factor to set
+static inline bool DelayCalibrationApply(const DelayCalibrationPoint_t *pPoint,
+	DelayCalibrationPoint_t *pOld)
+{
+	(void)pPoint;
+	(void)pOld;
+	return false;
+}
+
 /** @} End of group Utilities */
 
 #endif	// __IDELAY_H__

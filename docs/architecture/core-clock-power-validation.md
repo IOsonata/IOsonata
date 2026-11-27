@@ -30,12 +30,22 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
 - Startup CPU frequency, CPU reduced-speed mode and performance restoration.
 - Shared LF and HF clock enable and disable. For each available timer class,
   use one timer and check that it keeps counting after the test releases its
-  clock requests. Reuse the HF timer for delay calibration when DWT is unavailable.
+  clock requests.
+- `usDelay`, `msDelay` and `nsDelay` of 100 ms at the highest and the lowest
+  CPU frequency, timed by the HF timer with the interrupts off, each within
+  2 percent (98,000 to 102,000 us). A port without a low power mode is
+  checked at its one frequency.
 - Numbered peripheral clock requests, actual rate, readback, restoration
   and invalid indices.
 - One calibration request for each configured RC oscillator where supported.
-- During porting, delay divisors at the startup and reduced CPU speeds.
-  Use DWT where available or measure the public delay calls with an HF timer.
+- With `CORE_CLOCK_TEST_DELAY_CALIBRATION`, during porting: at both
+  frequencies the delay factors are measured, with DWT where available or
+  from the HF timer times. The delays are timed again with the measured
+  factors, within 2 percent, before the factors, the divisors and the two
+  `CalcDelayFactor` points are printed. The factors of the code are back
+  after each measurement. The port puts the printed values in its code,
+  and a second run without calibration checks them. A flash-limited MCU can
+  leave calibration off.
 
 Timer trigger modes, callbacks, rollover and device power-off belong in the
 timer tests. On SAM D, run `python3 tests/samd/run_timer.py` for those drivers.
