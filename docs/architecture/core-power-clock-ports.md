@@ -58,8 +58,11 @@ preserved the 16-byte RAM test pattern.
 | nRF9151 DK | Passed at 64 MHz with the DK pin map. | Three System OFF pin wakes reported 0x100. The post-wake run passed 34 checks including 8 KiB RAM retention. In a separate run following a software reset, the modem-power guard refused System OFF. |
 
 The nRF5340 application-core run requested 48, 24 and 12 MHz on the QSPI
-clock. Each request returned 48 MHz. Hardware verification of the 96 and
-192 MHz selections remains open.
+clock. Each request returned 48 MHz. A subsequent Audio DK diagnostic selected
+96 MHz, then 192 MHz, and restored 48 MHz. The API returned each requested rate
+and HFCLK192MCTRL divider fields read back as 1, 0 and 2 respectively.
+CoreClockTest completed with zero failures.
+
 The nRF54LM20B library, CoreClockTest and CorePowerTest built in Debug and
 Release with zero errors and warnings. Hardware results are pending.
 
