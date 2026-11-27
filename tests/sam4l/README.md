@@ -266,5 +266,8 @@ the completion count included it. The October I2CMasterSlave did one register
 read and one read continuing from it, where the two errors cancel. The slave
 now transmits from the interrupt in both modes and keeps the DMA for the
 bytes received; `run_i2c_slave.py` gives the failing bytes with the earlier
-code and passes with the new one. The slave in DMA mode is not run on
-hardware again yet.
+code and passes with the new one. With it, 2026-11-27, as reported by the
+maintainer: all eight master and slave combinations pass, the slave in DMA
+mode included. I2CMasterSlave now starts each output line with the time since
+start, from timer DevNo 0 (AST) unless board.h sets `TIMER_DEVNO`, to compare
+the time each test takes between the combinations.
