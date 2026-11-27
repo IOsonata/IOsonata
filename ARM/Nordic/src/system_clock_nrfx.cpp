@@ -622,7 +622,8 @@ static bool nRFxLfclkOscSource(OSC_TYPE Type, uint32_t *pSrc)
 }
 
 #if defined(NRF5340_XXAA_APPLICATION)
-static uint32_t s_Hclk192m;
+// SystemInit reads the hardware divider before the C runtime clears .bss.
+static uint32_t s_Hclk192m = 192000000UL;
 #endif
 
 // SystemInit configures the source before the first LFCLK request.
