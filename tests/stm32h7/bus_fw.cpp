@@ -7,26 +7,16 @@ extern "C" {
 volatile uint32_t I2cIrqTestPhase;
 volatile uint32_t DmaTestActive;
 volatile uint32_t DmaSlaveCase;
-volatile uint32_t I2cIrqTestInside;
+volatile uint32_t IrqTestActive;
 uint32_t SystemCoreClock = 400000000;
 uint32_t SystemMicroSecLoopCnt = 1000000UL;
 uint32_t SystemPeriphClockGet(int n) { return n == 3 ? 50000000 : 100000000; }
-void SPI1_IRQHandler(); void SPI2_IRQHandler(); void SPI3_IRQHandler();
-void SPI4_IRQHandler(); void SPI5_IRQHandler(); void SPI6_IRQHandler();
-void I2C1_EV_IRQHandler(); void I2C2_EV_IRQHandler();
-void I2C3_EV_IRQHandler(); void I2C4_EV_IRQHandler();
 }
-static void (*const spiIrq[])() = {SPI1_IRQHandler, SPI2_IRQHandler, SPI3_IRQHandler,
-	SPI4_IRQHandler, SPI5_IRQHandler, SPI6_IRQHandler};
-static void (*const i2cIrq[])() = {I2C1_EV_IRQHandler, I2C2_EV_IRQHandler,
-	I2C3_EV_IRQHandler, I2C4_EV_IRQHandler};
-static volatile bool done;
-static volatile int count;
+// A master reports no completion: its transfers return their count
 static volatile int events;
-static volatile bool eventInIrq;
-static int Event(DevIntrf_t *, DEVINTRF_EVT evt, uint8_t *, int len)
+static int Event(DevIntrf_t *, DEVINTRF_EVT evt, uint8_t *, int)
 {
-	if (evt == DEVINTRF_EVT_COMPLETED) { count = len; done = true; events = events + 1; eventInIrq = I2cIrqTestInside != 0; }
+	if (evt == DEVINTRF_EVT_COMPLETED) { events = events + 1; }
 	return 0;
 }
 static uint8_t slaveRx[804], slaveTx[800];
@@ -58,12 +48,6 @@ static const IOPinCfg_t i2cPins[] = {
 	{IOPORTB, 8, IOPINOP_FUNC4, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
 	{IOPORTB, 9, IOPINOP_FUNC4, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
 };
-// Overwrite stack storage after Write returns, before the last IRQs run.
-__attribute__((noinline)) static void ClobberStack()
-{
-	volatile uint8_t bytes[1024];
-	for (unsigned i = 0; i < sizeof(bytes); ++i) bytes[i] = 0xEE;
-}
 // Reused pins test register programming only, not alternate-function routing.
 extern "C" int main()
 {
@@ -72,106 +56,83 @@ extern "C" int main()
 	uint8_t data[300] = {};
 	for (int n = 0; n < 6; ++n)
 	{
-		for (int async = 0; async < 2; ++async)
+		for (int irq = 0; irq < 2; ++irq)
 		{
 			SPICfg_t cfg = {};
 			cfg.DevNo = n; cfg.Mode = SPIMODE_MASTER; cfg.Phy = SPIPHY_NORMAL;
 			cfg.pIOPinMap = spiPins; cfg.NbIOPins = 4;
 			cfg.DataSize = 8; cfg.Rate = 1000000; cfg.ChipSel = SPICSEL_AUTO;
 			cfg.BitOrder = SPIDATABIT_MSB; cfg.DummyByte = 0xA5;
-			cfg.bIntEn = async; cfg.EvtCB = Event;
+			cfg.bIntEn = irq; cfg.EvtCB = Event;
 			CHECK(SPIInit(&spi[n], &cfg));
 			CHECK(SPIGetRate(&spi[n]) == (n < 3 ? 1000000 : 781250));
-			done = false;
+			events = 0; IrqTestActive = irq;
 			int ret = SPIRx(&spi[n], 0, data, sizeof(data));
-			if (async)
-			{
-				CHECK(ret == -1);
-				for (int k = 0; k < 100000 && !done; ++k) spiIrq[n]();
-				CHECK(done && count == sizeof(data));
-			}
-			else CHECK(ret == sizeof(data));
+			IrqTestActive = 0;
+			CHECK(ret == sizeof(data) && events == 0);
 			for (unsigned k = 0; k < sizeof(data); ++k) CHECK(data[k] == (uint8_t)(3 * k + 1));
 		}
 	}
 	CHECK((RCC->D2CCIP1R & RCC_D2CCIP1R_SPI123SEL) == RCC_D2CCIP1R_SPI123SEL_2);
 	for (int n = 0; n < 4; ++n)
 	{
-		for (int async = 0; async < 2; ++async)
+		for (int irq = 0; irq < 2; ++irq)
 		{
 			I2CCfg_t cfg = {};
 			cfg.DevNo = n; cfg.Type = I2CTYPE_STANDARD; cfg.Mode = I2CMODE_MASTER;
 			cfg.pIOPinMap = i2cPins; cfg.NbIOPins = 2; cfg.Rate = 400000;
-			cfg.AddrType = I2CADDR_TYPE_NORMAL; cfg.bIntEn = async; cfg.EvtCB = Event;
+			cfg.AddrType = I2CADDR_TYPE_NORMAL; cfg.bIntEn = irq; cfg.EvtCB = Event;
 			CHECK(I2CInit(&i2c[n], &cfg));
 			CHECK(I2CGetRate(&i2c[n]) > 350000 && I2CGetRate(&i2c[n]) <= 400000);
+			IrqTestActive = irq;
 			CHECK(I2CStartTx(&i2c[n], 0x50)); I2CStopTx(&i2c[n]);
 			CHECK(!I2CStartTx(&i2c[n], 0x23));
-			done = false;
+			events = 0;
 			int ret = I2CRx(&i2c[n], 0x50, data, sizeof(data));
-			if (async)
-			{
-				CHECK(ret == -1);
-				for (int k = 0; k < 100000 && !done; ++k) i2cIrq[n]();
-				CHECK(done && count == sizeof(data));
-			}
-			else CHECK(ret == sizeof(data));
+			IrqTestActive = 0;
+			CHECK(ret == sizeof(data) && events == 0);
 			for (unsigned k = 0; k < sizeof(data); ++k)
-				CHECK(data[k] == (uint8_t)(((k + async * 300) & 255) * 5 + 1));
+				CHECK(data[k] == (uint8_t)(((k + irq * 300) & 255) * 5 + 1));
 		}
-		// Command + payload crossing the old staging limit and NBYTES limit.
-		// The host model dispatches actual vectors only for enabled IRQ flags.
+		// Interrupt mode, command + payload over the NBYTES limit, sent from
+		// the buffer DeviceIntrfWrite builds. The host model dispatches the
+		// vectors of enabled IRQ flags.
 		static const int lengths[] = {1, 63, 64, 65, 255, 256, 600};
 		uint8_t payload[599];
 		for (unsigned k = 0; k < sizeof(payload); ++k) payload[k] = (uint8_t)(7 * k + 3);
+		IrqTestActive = 1;
 		for (int len : lengths)
 		{
 			uint8_t cmd = 0x55;
-			done = false; events = 0; eventInIrq = false;
+			events = 0;
 			I2cIrqTestPhase = (n + 1) * 1000 + len;
-			CHECK(I2CWrite(&i2c[n], 0x50, &cmd, 1, payload, len - 1) == 0);
-			ClobberStack();
-			for (int k = 0; k < 1000000 && !done; ++k) __NOP();
-			CHECK(done && count == len && events == 1 && eventInIrq);
+			CHECK(I2CWrite(&i2c[n], 0x50, &cmd, 1, payload, len - 1) == len - 1);
 			I2cIrqTestPhase = 0;
-			i2cIrq[n]();
-			CHECK(events == 1 && i2c[n].DevIntrf.bTxReady);
+			CHECK(events == 0 && i2c[n].DevIntrf.bTxReady);
 			CHECK(I2CStartTx(&i2c[n], 0x50)); I2CStopTx(&i2c[n]);
 		}
-		// NACK before and after staging refills releases the temporary source
-		// and reports exactly one short completion. The next write must work.
+		// A refused byte gives the bytes before it, the next write works
 		static const int nackCounts[] = {2, 69, 254};
 		for (int k = 0; k < 3; ++k)
 		{
 			uint8_t cmd = 0x55;
-			done = false; events = 0; eventInIrq = false;
+			events = 0;
 			I2cIrqTestPhase = (n + 1) * 1000 + 700 + k;
-			CHECK(I2CWrite(&i2c[n], 0x51 + k, &cmd, 1, payload, 599) == 0);
-			ClobberStack();
-			for (int j = 0; j < 1000000 && !done; ++j) __NOP();
-			CHECK(done && count == nackCounts[k] && events == 1 && eventInIrq);
+			CHECK(I2CWrite(&i2c[n], 0x51 + k, &cmd, 1, payload, 599) == nackCounts[k] - 1);
 			I2cIrqTestPhase = 0;
-			i2cIrq[n]();
-			CHECK(events == 1 && i2c[n].DevIntrf.bTxReady);
-			done = false;
-			CHECK(I2CTx(&i2c[n], 0x50, payload, 8) == -1);
-			for (int j = 0; j < 100000 && !done; ++j) i2cIrq[n]();
-			CHECK(done && count == 8);
+			CHECK(events == 0 && i2c[n].DevIntrf.bTxReady);
+			CHECK(I2CTx(&i2c[n], 0x50, payload, 8) == 8);
 		}
-		// No IRQ dispatch: the source wait must abort, detach the source and
-		// release busy once. A late vector must not complete a second time.
-		SystemCoreClock = 4000; // Shorten the instruction-count timeout only.
-		done = false; events = 0; eventInIrq = true;
-		CHECK(I2CTx(&i2c[n], 0x50, payload, 255) == -1);
-		CHECK(done && count == 0 && events == 1 && !eventInIrq);
+		// No IRQ dispatch: each wait of the engine ends on its bound, the
+		// flags are read after it and the transfer still ends with its count
+		IrqTestActive = 0;
+		SystemCoreClock = 4000; // Shorten the instruction-count bound only.
+		events = 0;
+		CHECK(I2CTx(&i2c[n], 0x50, payload, 255) == 255 && events == 0);
 		SystemCoreClock = 400000000;
-		ClobberStack();
-		i2cIrq[n]();
-		CHECK(events == 1 && i2c[n].DevIntrf.bTxReady);
-		done = false;
-		CHECK(I2CTx(&i2c[n], 0x50, payload, 8) == -1);
-		for (int j = 0; j < 100000 && !done; ++j) i2cIrq[n]();
-		CHECK(done && count == 8);
+		IrqTestActive = 1;
+		CHECK(I2CTx(&i2c[n], 0x50, payload, 8) == 8);
+		IrqTestActive = 0;
 		CHECK(I2CSetRate(&i2c[n], 1000000) > 900000);
 		CHECK(SYSCFG->PMCR & (SYSCFG_PMCR_I2C1_FMP << n));
 		I2CSetRate(&i2c[n], 100000);
@@ -183,38 +144,24 @@ extern "C" int main()
 	for (int n = 0; n < 6; n++)
 	{
 		spi[n].DevIntrf.PowerOff(&spi[n].DevIntrf);
-		for (int async = 0; async < 2; async++)
+		for (int irq = 0; irq < 2; irq++)
 		{
 			SPICfg_t cfg = {};
 			cfg.DevNo = n; cfg.Mode = SPIMODE_MASTER; cfg.Phy = SPIPHY_NORMAL;
 			cfg.pIOPinMap = spiPins; cfg.NbIOPins = 4; cfg.DataSize = 8;
 			cfg.Rate = 1000000; cfg.ChipSel = SPICSEL_AUTO; cfg.DummyByte = 0xA5;
-			cfg.bDmaEn = true; cfg.bIntEn = async; cfg.EvtCB = Event;
+			cfg.bDmaEn = true; cfg.bIntEn = irq; cfg.EvtCB = Event;
 			CHECK(SPIInit(&spi[n], &cfg));
 			CHECK(spi[n].DevIntrf.bDma);
 			dmaBuf[0] = dmaBuf[1201] = 0xCC;
-			done = false; events = 0; DmaTestActive = async;
+			events = 0; DmaTestActive = irq;
 			int ret = SPIRx(&spi[n], 0, dmaBuf + 1, 1200);
-			if (async)
-			{
-				CHECK(ret == -1);
-				for (int k = 0; k < 1000000 && !done; k++) __NOP();
-				CHECK(done && count == 1200 && events == 1);
-			}
-			else CHECK(ret == 1200);
+			CHECK(ret == 1200 && events == 0);
 			for (int k = 0; k < 1200; k++) CHECK(dmaBuf[k+1] == (uint8_t)(3*k+1));
 			CHECK(dmaBuf[0] == 0xCC && dmaBuf[1201] == 0xCC);
-			done = false; events = 0;
 			uint8_t cmd = 0x55;
 			ret = DeviceIntrfWrite(&spi[n].DevIntrf, 0, &cmd, 1, dmaBuf + 1, 1199);
-			if (async)
-			{
-				CHECK(ret == 0);
-				ClobberStack();
-				for (int k = 0; k < 1000000 && !done; k++) __NOP();
-				CHECK(done && count == 1200 && events == 1);
-			}
-			else CHECK(ret == 1199);
+			CHECK(ret == 1199 && events == 0);
 			DmaTestActive = 0;
 			spi[n].DevIntrf.PowerOff(&spi[n].DevIntrf);
 		}
@@ -222,49 +169,28 @@ extern "C" int main()
 	for (int n = 0; n < 4; n++)
 	{
 		i2c[n].DevIntrf.PowerOff(&i2c[n].DevIntrf);
-		for (int async = 0; async < 2; async++)
+		for (int irq = 0; irq < 2; irq++)
 		{
 			I2CCfg_t cfg = {};
 			cfg.DevNo = n; cfg.Type = I2CTYPE_STANDARD; cfg.Mode = I2CMODE_MASTER;
 			cfg.pIOPinMap = i2cPins; cfg.NbIOPins = 2; cfg.Rate = 400000;
-			cfg.AddrType = I2CADDR_TYPE_NORMAL; cfg.bIntEn = async; cfg.bDmaEn = true; cfg.EvtCB = Event;
+			cfg.AddrType = I2CADDR_TYPE_NORMAL; cfg.bIntEn = irq; cfg.bDmaEn = true; cfg.EvtCB = Event;
 			CHECK(I2CInit(&i2c[n], &cfg));
 			CHECK(i2c[n].DevIntrf.bDma);
 			for (int k = 0; k < 1200; k++) dmaBuf[k+1] = (uint8_t)(k*7);
 			dmaBuf[0] = dmaBuf[1201] = 0xCC;
-			done = false; events = 0; DmaTestActive = async;
+			events = 0; DmaTestActive = irq;
 			int ret = I2CTx(&i2c[n], 0x50, dmaBuf + 1, 1200);
-			if (async)
-			{
-				CHECK(ret == -1);
-				ClobberStack();
-				for (int k = 0; k < 1000000 && !done; k++) __NOP();
-				CHECK(done && count == 1200 && events == 1);
-			}
-			else CHECK(ret == 1200);
-			done = false; events = 0;
+			CHECK(ret == 1200 && events == 0);
 			ret = I2CRx(&i2c[n], 0x50, dmaBuf + 1, 1200);
-			if (async)
-			{
-				CHECK(ret == -1);
-				for (int k = 0; k < 1000000 && !done; k++) __NOP();
-				CHECK(done && count == 1200 && events == 1);
-			}
-			else CHECK(ret == 1200);
+			CHECK(ret == 1200 && events == 0);
 			for (int k = 0; k < 1200; k++) CHECK(dmaBuf[k+1] == (uint8_t)((1200+k)*7));
 			CHECK(dmaBuf[0] == 0xCC && dmaBuf[1201] == 0xCC);
 			static const int refused[] = {2, 69, 254};
 			for (int bad = 0; bad < 3; bad++)
 			{
-				done = false; events = 0;
 				ret = I2CTx(&i2c[n], 0x51+bad, dmaBuf+1, 600);
-				if (async)
-				{
-					CHECK(ret == -1);
-					for (int k = 0; k < 1000000 && !done; k++) __NOP();
-					CHECK(done && count == refused[bad] && events == 1);
-				}
-				else CHECK(ret == refused[bad]);
+				CHECK(ret == refused[bad] && events == 0);
 			}
 			DmaTestActive = 0;
 			i2c[n].DevIntrf.PowerOff(&i2c[n].DevIntrf);
