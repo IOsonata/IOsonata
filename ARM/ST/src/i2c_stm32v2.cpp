@@ -29,13 +29,13 @@
 		StartTx begins a new transfer. The address probe of StartTx adds one
 		address byte to each write.
 
-		Polling, interrupt and DMA run the same engine. Without bIntEn the
-		call waits for the end of the transfer. With bIntEn a receive, and a
-		transmit without bNoStop, return -1 and report the end through
-		DEVINTRF_EVT_COMPLETED. TX uses a fixed staging buffer, refilled at
-		RELOAD by the interrupt. A long TX call waits until its last chunk
-		is copied, keeping the temporary DeviceIntrfWrite buffer alive;
-		it never services TX flags in that wait. STOP completes in the IRQ.
+		Polling, interrupt and DMA run the same engine and the same
+		transfer: TxData and RxData return the number of bytes done when the
+		transfer has ended. With bIntEn each wait of the engine waits for the
+		interrupt: the handler masks the interrupts and tells the wait, which
+		then reads the flags as in polling mode. The application sets the
+		interrupt priority: a transfer is not called from an interrupt of the
+		same or a higher priority than the I2C and its DMA channels.
 		With bDmaEn the data bytes
 		are moved by a DMA channel: a GPDMA channel on the WBA, on the L4 a
 		DMA1 or DMA2 channel of the instance table from the DMA channel
@@ -46,8 +46,8 @@
 
 		A refused address or byte, an arbitration loss, a bus error or a bus
 		timeout stops the bus, clears the flags and returns the number of
-		bytes done. Waits are bounded in polling mode, and the SCL low timeout
-		of the peripheral ends a stuck transfer in interrupt mode.
+		bytes done. Waits are bounded, and the SCL low timeout of the
+		peripheral ends a stuck transfer.
 
 		Slave. Interrupt driven. One or two 7 bit addresses (OAR1 and OAR2).
 		The slave stretches SCL until the application has answered the event.
@@ -145,8 +145,6 @@ SOFTWARE.
 
 #define STM32_I2C_NBYTES_MAX		255
 
-#define I2C_STM32_TXBUF_SIZE		64
-
 #define STM32_I2C_RATE_DEFAULT		100000
 #define STM32_I2C_RATE_MAX			1000000
 
@@ -235,7 +233,7 @@ typedef struct {
 	bool bHold;				//!< Write ended without STOP, SCL held, next is a repeated start
 	bool bError;			//!< Last transfer failed
 	bool bRun;				//!< Transfer engine running
-	bool bAsync;			//!< Running transfer ends in the interrupt and reports with the event
+	volatile bool bIrq;		//!< Interrupt mode: an interrupt came since the wait started
 	bool bNack;				//!< Address or byte refused
 	bool bFail;				//!< Bus error, arbitration loss, timeout
 	bool bStopEnd;			//!< The last chunk ends with a STOP
@@ -246,7 +244,6 @@ typedef struct {
 	int DmaPair;			//!< Choice of Dma[] the channels come from
 #endif
 	const uint8_t *pTx;
-	std::atomic<int> *pTxStaged;	//!< Caller-local progress; NULL once source released
 	uint8_t *pRx;
 	int Len;				//!< Bytes of the transfer
 	int Done;				//!< Bytes of the chunks completed
@@ -261,7 +258,6 @@ typedef struct {
 	bool bSDma;			// the slave holds the DMA channels
 	bool bSDmaOn;		// a channel moves the data of the request
 	int SDmaLen;		// bytes given to the channel
-	uint8_t TxBuf[I2C_STM32_TXBUF_SIZE];
 } Stm32I2cDev_t;
 
 #pragma pack(pop)
@@ -394,11 +390,14 @@ static uint32_t Stm32I2cTimeout(Stm32I2cDev_t * const pDev)
 	return SystemCoreClock / 20U + (SystemCoreClock / rate) * 16U + 256U;
 }
 
-// Wait until (ISR & Mask) != 0. Return 1 on success, 0 on timeout,
-// -1 when an error flag came first.
+// Wait until (ISR & Mask) != 0, Mask of STOPF and NACKF. Return 1 on
+// success, 0 on timeout, -1 when an error flag came first. In interrupt mode
+// the wait is for the STOP, NACK and error interrupts, up to the wait bound,
+// the flags are read again after it.
 static int Stm32I2cWait(Stm32I2cDev_t * const pDev, uint32_t Mask)
 {
 	uint32_t n = Stm32I2cTimeout(pDev);
+	const bool irq = pDev->pI2cDev->DevIntrf.bIntEn;
 
 	do {
 		uint32_t isr = pDev->pReg->ISR;
@@ -410,6 +409,15 @@ static int Stm32I2cWait(Stm32I2cDev_t * const pDev, uint32_t Mask)
 		if (isr & (STM32_I2C_ERR_FLAGS | I2C_ISR_NACKF))
 		{
 			return -1;
+		}
+		if (irq)
+		{
+			pDev->bIrq = false;
+			pDev->pReg->CR1 |= I2C_CR1_STOPIE | I2C_CR1_NACKIE | I2C_CR1_ERRIE;
+			while (!pDev->bIrq && n > 1)
+			{
+				n--;
+			}
 		}
 	} while (n--);
 
@@ -795,16 +803,13 @@ static void Stm32I2cDmaGive(Stm32I2cDev_t * const pDev)
 	}
 }
 
+// The channel flags are taken by the acknowledge, the engine reads them
 static void Stm32I2cDmaIrq(int Ch, void *pCtx)
 {
 	Stm32I2cDev_t *dev = (Stm32I2cDev_t *)pCtx;
 
 	STM32_I2C_DMA_ACK(Ch);
-	// A transfer that the caller waits for is followed by its polling loop
-	if (dev->bAsync || dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
-	{
-		Stm32I2cService(dev);
-	}
+	Stm32I2cService(dev);
 }
 
 static inline int Stm32I2cDmaCh(Stm32I2cDev_t * const pDev)
@@ -892,15 +897,6 @@ static void Stm32I2cMasterEnd(Stm32I2cDev_t * const pDev, bool bHold)
 		pDev->bHold = false;
 	}
 
-	// No later interrupt may access the caller's temporary source.
-	if (pDev->pTxStaged != NULL)
-	{
-		std::atomic<int> *staged = pDev->pTxStaged;
-
-		pDev->pTxStaged = NULL;
-		pDev->pTx = NULL;
-		staged->store(pDev->Len);
-	}
 	pDev->bError = bad;
 	pDev->Result = count;
 	pDev->bRun = false;
@@ -920,17 +916,11 @@ static void Stm32I2cMasterChunk(Stm32I2cDev_t * const pDev, bool bFirst)
 {
 	I2C_TypeDef *reg = pDev->pReg;
 	int remain = pDev->Len - pDev->Done;
-	const bool stagedTx = pDev->bAsync && !pDev->bRx;
-	const int limit = stagedTx ? I2C_STM32_TXBUF_SIZE : STM32_I2C_NBYTES_MAX;
-	bool last = remain <= limit;
-	int len = last ? remain : limit;
+	bool last = remain <= STM32_I2C_NBYTES_MAX;
+	int len = last ? remain : STM32_I2C_NBYTES_MAX;
 	uint32_t cr2 = ((pDev->Addr << 1) & I2C_CR2_SADD_Msk) | ((uint32_t)len << I2C_CR2_NBYTES_Pos);
 
 	pDev->Chunk = len;
-	if (stagedTx)
-	{
-		memcpy(pDev->TxBuf, pDev->pTx + pDev->Done, len);
-	}
 	if (pDev->bRx)
 	{
 		cr2 |= I2C_CR2_RD_WRN;
@@ -957,22 +947,11 @@ static void Stm32I2cMasterChunk(Stm32I2cDev_t * const pDev, bool bFirst)
 		}
 		else
 		{
-			STM32_I2C_DMA_START(pDev->DmaTx, stagedTx ? pDev->TxBuf : pDev->pTx + pDev->Done, (uint32_t)len);
+			STM32_I2C_DMA_START(pDev->DmaTx, pDev->pTx + pDev->Done, (uint32_t)len);
 		}
 	}
 #endif
 	reg->CR2 = cr2;
-	if (stagedTx)
-	{
-		std::atomic<int> *staged = pDev->pTxStaged;
-
-		if (last)
-		{
-			pDev->pTxStaged = NULL;
-			pDev->pTx = NULL;
-		}
-		staged->store(pDev->Done + len);
-	}
 }
 
 // A refused address or byte. With AUTOEND the STOP follows, a transfer in
@@ -995,8 +974,7 @@ static uint32_t Stm32I2cMasterNack(Stm32I2cDev_t * const pDev, uint32_t Isr)
 	return Isr;
 }
 
-// One step of the transfer from the flags. Called by the polling loop and by
-// the interrupt.
+// One step of the transfer from the flags. Called by the loop of the engine.
 static void Stm32I2cMasterService(Stm32I2cDev_t * const pDev)
 {
 	I2C_TypeDef *reg = pDev->pReg;
@@ -1033,7 +1011,7 @@ static void Stm32I2cMasterService(Stm32I2cDev_t * const pDev)
 		}
 		else if ((isr & I2C_ISR_TXIS) && pDev->Moved < pDev->Len)
 		{
-			reg->TXDR = pDev->bAsync ? pDev->TxBuf[pDev->Moved - pDev->Done] : pDev->pTx[pDev->Moved];
+			reg->TXDR = pDev->pTx[pDev->Moved];
 			pDev->Moved++;
 			isr = Stm32I2cMasterNack(pDev, reg->ISR);
 		}
@@ -1084,14 +1062,13 @@ static void Stm32I2cMasterService(Stm32I2cDev_t * const pDev)
 }
 
 // Open the transfer: START, or the repeated START when a write is held.
-static bool Stm32I2cMasterBegin(Stm32I2cDev_t * const pDev, bool bRx, bool bStop, bool bAsync)
+static bool Stm32I2cMasterBegin(Stm32I2cDev_t * const pDev, bool bRx, bool bStop)
 {
 	I2C_TypeDef *reg = pDev->pReg;
 	uint32_t cr1;
 
 	pDev->bRx = bRx;
 	pDev->bStopEnd = bStop;
-	pDev->bAsync = bAsync;
 	pDev->bNack = false;
 	pDev->bFail = false;
 	pDev->bError = false;
@@ -1119,27 +1096,37 @@ static bool Stm32I2cMasterBegin(Stm32I2cDev_t * const pDev, bool bRx, bool bStop
 	pDev->bHold = false;
 	Stm32I2cMasterChunk(pDev, true);
 
-	// The interrupts are enabled last. The TC flag of a held write is still
-	// set until the START clears it, so enabling TCIE earlier would run the
-	// interrupt on the old flags in the middle of this setup.
-	if (bAsync)
-	{
-		cr1 = STM32_I2C_CR1_MASTER_INT;
-		if (pDev->bDma == false)
-		{
-			cr1 |= bRx ? I2C_CR1_RXIE : I2C_CR1_TXIE;
-		}
-		reg->CR1 |= cr1;
-	}
-
 	return true;
 }
 
-// Polling loop of the engine. The wait restarts whenever the transfer
-// progresses.
+// Interrupt mode: wait for the interrupt of what the engine waits for, up to
+// the wait bound left, kept at 1 or more: the step after the wait reads the
+// flags, the transfer ends when nothing has moved. The interrupts are enabled
+// after the START: the TC flag of a held write is set until the START clears
+// it.
+static void Stm32I2cMasterWaitIrq(Stm32I2cDev_t * const pDev, uint32_t *pLeft)
+{
+	uint32_t ints = STM32_I2C_CR1_MASTER_INT;
+
+	if (pDev->bDma == false)
+	{
+		ints |= pDev->bRx ? I2C_CR1_RXIE : I2C_CR1_TXIE;
+	}
+	pDev->bIrq = false;
+	pDev->pReg->CR1 |= ints;
+	while (!pDev->bIrq && *pLeft > 1)
+	{
+		(*pLeft)--;
+	}
+}
+
+// Loop of the engine. The wait restarts whenever the transfer progresses. In
+// interrupt mode a step without progress is followed by a wait for the
+// interrupt, the flags are read again after it.
 static void Stm32I2cMasterRun(Stm32I2cDev_t * const pDev)
 {
 	const uint32_t budget = Stm32I2cTimeout(pDev);
+	const bool irq = pDev->pI2cDev->DevIntrf.bIntEn;
 	uint32_t left = budget;
 	int last = -1;
 
@@ -1158,6 +1145,10 @@ static void Stm32I2cMasterRun(Stm32I2cDev_t * const pDev)
 		{
 			Stm32I2cMasterFail(pDev);
 		}
+		else if (irq && pDev->bRun)
+		{
+			Stm32I2cMasterWaitIrq(pDev, &left);
+		}
 	}
 }
 
@@ -1165,28 +1156,6 @@ static void Stm32I2cMasterRun(Stm32I2cDev_t * const pDev)
 static int Stm32I2cMasterResult(Stm32I2cDev_t * const pDev)
 {
 	return pDev->Result;
-}
-
-// An interrupt driven transfer ended
-static void Stm32I2cAsyncDone(Stm32I2cDev_t * const pDev)
-{
-	DevIntrf_t *intrf = &pDev->pI2cDev->DevIntrf;
-	const bool rx = pDev->bRx;
-	const int count = pDev->Result;
-
-	pDev->bAsync = false;
-	if (rx)
-	{
-		DeviceIntrfStopRx(intrf);
-	}
-	else
-	{
-		DeviceIntrfTxComplete(intrf);
-	}
-	if (intrf->EvtCB != NULL)
-	{
-		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, NULL, count);
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1448,6 +1417,9 @@ static void Stm32I2cSlaveService(Stm32I2cDev_t * const pDev)
 // Interrupts
 // ---------------------------------------------------------------------------
 
+// Interrupt of the instance or of its DMA channel. The slave is served here.
+// Master: the interrupts are masked and the wait told, the flags are left to
+// the wait.
 static void Stm32I2cService(Stm32I2cDev_t * const pDev)
 {
 	if (pDev->pI2cDev == NULL)
@@ -1462,16 +1434,8 @@ static void Stm32I2cService(Stm32I2cDev_t * const pDev)
 		return;
 	}
 
-	if (pDev->bRun == false)
-	{
-		return;
-	}
-
-	Stm32I2cMasterService(pDev);
-	if (pDev->bRun == false && pDev->bAsync)
-	{
-		Stm32I2cAsyncDone(pDev);
-	}
+	pDev->pReg->CR1 &= ~(STM32_I2C_CR1_MASTER_INT | STM32_I2C_CR1_DATA_INT);
+	pDev->bIrq = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1503,19 +1467,10 @@ static void Stm32I2cReset(DevIntrf_t * const pIntrf)
 	{
 		dev->pReg->CR1 |= STM32_I2C_CR1_SLAVE_INT;
 	}
-	if (dev->pTxStaged != NULL)
-	{
-		std::atomic<int> *staged = dev->pTxStaged;
-
-		dev->pTxStaged = NULL;
-		dev->pTx = NULL;
-		staged->store(dev->Len);
-	}
 	dev->bActive = false;
 	dev->bHold = false;
 	dev->bError = false;
 	dev->bRun = false;
-	dev->bAsync = false;
 	dev->SState = STM32_I2C_S_IDLE;
 	dev->SCount = 0;
 	dev->bSDmaOn = false;
@@ -1681,8 +1636,7 @@ static bool Stm32I2cStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 // Send Data. The whole data goes out in one transfer, in chunks of up to 255
 // bytes. The last chunk ends with STOP, or, when the interface bNoStop is
 // set, the bus is held after the last byte so that a following StartRx
-// generates a repeated START. With bIntEn, writes without bNoStop use IRQ
-// refills of the fixed staging buffer and report completion through the event.
+// generates a repeated START.
 static int Stm32I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int DataLen)
 {
 	Stm32I2cDev_t *dev = Stm32I2cHandle(pIntrf);
@@ -1693,61 +1647,11 @@ static int Stm32I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int D
 		return 0;
 	}
 
-	bool bNoStop = pIntrf->bNoStop;
-	bool async = pIntrf->bIntEn && !bNoStop;
-	std::atomic<int> staged(0);
-
 	dev->pTx = pData;
-	dev->pTxStaged = async ? &staged : NULL;
 	dev->Len = DataLen;
 	atomic_store(&pIntrf->bTxReady, false);
 
-	Stm32I2cMasterBegin(dev, false, !bNoStop, async);
-	if (async)
-	{
-		// DeviceIntrfWrite owns a temporary combined command/data buffer.
-		// Keep it alive until the IRQ has copied the final chunk. Only the
-		// IRQ moves bytes and handles RELOAD/STOP; this loop observes progress.
-		uint64_t wait = Stm32I2cTimeout(dev) +
-			(uint64_t)SystemCoreClock * I2C_STM32_TXBUF_SIZE * 10U /
-			(dev->pI2cDev->Cfg.Rate ? dev->pI2cDev->Cfg.Rate : 1U);
-		const uint32_t budget = wait > UINT32_MAX ? UINT32_MAX : (uint32_t)wait;
-		uint32_t left = budget;
-		int prior = -1;
-
-		while (staged.load() < DataLen)
-		{
-			int progress = staged.load();
-
-			if (progress != prior)
-			{
-				prior = progress;
-				left = budget;
-			}
-			else if (--left == 0)
-			{
-				// Bounded cleanup if interrupts cannot run. Detach the source
-				// before returning, and complete exactly once on this error path.
-				uint32_t mask = __get_PRIMASK();
-
-				__disable_irq();
-				bool abort = dev->pTxStaged == &staged;
-				if (abort)
-				{
-					Stm32I2cMasterFail(dev);
-					dev->bAsync = false;
-				}
-				__set_PRIMASK(mask);
-				if (abort)
-				{
-					Stm32I2cAsyncDone(dev);
-				}
-				break;
-			}
-		}
-		return -1;
-	}
-
+	Stm32I2cMasterBegin(dev, false, !pIntrf->bNoStop);
 	Stm32I2cMasterRun(dev);
 	atomic_store(&pIntrf->bTxReady, true);
 
@@ -1766,17 +1670,10 @@ static int Stm32I2cRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen
 		return 0;
 	}
 
-	bool async = pIntrf->bIntEn;
-
 	dev->pRx = pBuff;
 	dev->Len = BuffLen;
 
-	Stm32I2cMasterBegin(dev, true, true, async);
-	if (async)
-	{
-		return -1;
-	}
-
+	Stm32I2cMasterBegin(dev, true, true);
 	Stm32I2cMasterRun(dev);
 
 	return Stm32I2cMasterResult(dev);
@@ -1929,7 +1826,6 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	dev->bHold = false;
 	dev->bError = false;
 	dev->bRun = false;
-	dev->bAsync = false;
 	dev->bNack = false;
 	dev->bFail = false;
 	dev->bDma = false;
