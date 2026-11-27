@@ -16,7 +16,11 @@ the master interrupts and tells the wait, which then reads the status as in
 polling mode. A transfer must not be called from an interrupt handler of the
 same or a higher priority than the TWIM.
 
-Slave mode is interrupt driven, with optional PDCA data movement. The TWIS
+Slave mode is interrupt driven, with optional PDCA for the bytes received. The
+slave transmits from the interrupt in both modes: the next byte is loaded once
+the master has acknowledged the one before. A PDCA transmit channel loads it
+while the byte before is still on the bus, and a byte the master then refuses
+would stay in the transmit register for the next read. The TWIS
 address-match clock stretching is used so application callbacks can install the
 read/write buffers before the transfer continues. Enabled slaves request their
 clock during WAIT for address matching, and wake the CPU on a matching address.
@@ -76,11 +80,9 @@ SOFTWARE.
 #define SAM4L_I2C_PDCA_RX_CHAN(n)	(4U + ((uint32_t)(n) << 1U))
 #define SAM4L_I2C_PDCA_TX_CHAN(n)	(5U + ((uint32_t)(n) << 1U))
 #define SAM4L_I2C_PDCA_SLAVE_RX_CHAN(n)	SAM4L_I2C_PDCA_RX_CHAN(n)
-#define SAM4L_I2C_PDCA_SLAVE_TX_CHAN(n)	SAM4L_I2C_PDCA_TX_CHAN(n)
 #define SAM4L_PDCA_PID_TWIM_RX(n)	(5U + (uint32_t)(n))
 #define SAM4L_PDCA_PID_TWIM_TX(n)	(23U + (uint32_t)(n))
 #define SAM4L_PDCA_PID_TWIS_RX(n)	(9U + (uint32_t)(n))
-#define SAM4L_PDCA_PID_TWIS_TX(n)	(27U + (uint32_t)(n))
 #define SAM4L_PDCA_MAX_COUNT		0xFFFFU
 
 #define SAM4L_TWIM_ERROR_MASK \
@@ -203,11 +205,6 @@ static PdcaChannel *Sam4lI2CSlavePdcaRxChannel(const SAM4L_I2CDEV *dev)
 	return &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_I2C_PDCA_SLAVE_RX_CHAN(dev->DevNo)];
 }
 
-static PdcaChannel *Sam4lI2CSlavePdcaTxChannel(const SAM4L_I2CDEV *dev)
-{
-	return &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_I2C_PDCA_SLAVE_TX_CHAN(dev->DevNo)];
-}
-
 static void Sam4lI2CPdcaChannelInit(PdcaChannel *chan, uint32_t PeripheralId)
 {
 	chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
@@ -239,8 +236,6 @@ static void Sam4lI2CSlavePdcaInit(SAM4L_I2CDEV *dev)
 	Sam4lI2CPdcaClockEnable();
 	Sam4lI2CPdcaChannelInit(Sam4lI2CSlavePdcaRxChannel(dev),
 		SAM4L_PDCA_PID_TWIS_RX(dev->DevNo));
-	Sam4lI2CPdcaChannelInit(Sam4lI2CSlavePdcaTxChannel(dev),
-		SAM4L_PDCA_PID_TWIS_TX(dev->DevNo));
 
 	const IRQn_Type irq = (IRQn_Type)(PDCA_0_IRQn +
 		SAM4L_I2C_PDCA_SLAVE_RX_CHAN(dev->DevNo));
@@ -252,11 +247,8 @@ static void Sam4lI2CSlavePdcaInit(SAM4L_I2CDEV *dev)
 static void Sam4lI2CSlavePdcaStop(SAM4L_I2CDEV *dev)
 {
 	PdcaChannel *rx = Sam4lI2CSlavePdcaRxChannel(dev);
-	PdcaChannel *tx = Sam4lI2CSlavePdcaTxChannel(dev);
 	rx->PDCA_CR = PDCA_CR_TDIS;
-	tx->PDCA_CR = PDCA_CR_TDIS;
 	rx->PDCA_IDR = 0xFFFFFFFFU;
-	tx->PDCA_IDR = 0xFFFFFFFFU;
 }
 
 static void Sam4lI2CPdcaStop(SAM4L_I2CDEV *dev)
@@ -1131,20 +1123,6 @@ static int Sam4lI2CSlaveRxDmaCount(SAM4L_I2CDEV *dev)
 	return dev->SlaveRxCount > dmaCount ? dev->SlaveRxCount : dmaCount;
 }
 
-static int Sam4lI2CSlaveTxDmaCount(SAM4L_I2CDEV *dev)
-{
-	I2CDev_t *i2c = dev->pI2cDev;
-	if (i2c->pRRData[0] == nullptr || i2c->RRDataLen[0] <= 0)
-		return dev->SlaveTxCount;
-
-	const int dmaLen = i2c->RRDataLen[0];
-	uint32_t remain = Sam4lI2CSlavePdcaTxChannel(dev)->PDCA_TCR;
-	if (remain > (uint32_t)dmaLen)
-		remain = (uint32_t)dmaLen;
-	const int dmaCount = dmaLen - (int)remain;
-	return dev->SlaveTxCount > dmaCount ? dev->SlaveTxCount : dmaCount;
-}
-
 static void Sam4lI2CSlaveRxPdcaIrqHandler(SAM4L_I2CDEV *dev)
 {
 	if (dev->pI2cDev == nullptr || dev->pI2cDev->Cfg.Mode != I2CMODE_SLAVE ||
@@ -1170,11 +1148,9 @@ static void Sam4lI2CSlaveRxPdcaIrqHandler(SAM4L_I2CDEV *dev)
 		dev->pSReg->TWIS_IER = TWIS_IER_RXRDY;
 }
 
+// Slave transmit, with or without DMA: load THR with the next byte
 static void Sam4lI2CSlavePrimeTx(SAM4L_I2CDEV *dev)
 {
-	if (dev->pI2cDev->DevIntrf.bDma)
-		return;
-
 	if (!dev->SlaveTxActive || dev->pSReg == nullptr)
 		return;
 
@@ -1201,22 +1177,18 @@ static void Sam4lI2CSlaveFinish(SAM4L_I2CDEV *dev)
 	I2CDev_t *i2c = dev->pI2cDev;
 	int count;
 
-	if (i2c->DevIntrf.bDma)
+	if (dev->SlaveTxActive)
 	{
-		if (dev->SlaveTxActive)
-		{
-			count = Sam4lI2CSlaveTxDmaCount(dev);
-			Sam4lI2CSlavePdcaTxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
-		}
-		else
-		{
-			count = Sam4lI2CSlaveRxDmaCount(dev);
-			Sam4lI2CSlavePdcaRxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
-		}
+		count = dev->SlaveTxCount;
+	}
+	else if (i2c->DevIntrf.bDma)
+	{
+		count = Sam4lI2CSlaveRxDmaCount(dev);
+		Sam4lI2CSlavePdcaRxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
 	}
 	else
 	{
-		count = dev->SlaveTxActive ? dev->SlaveTxCount : dev->SlaveRxCount;
+		count = dev->SlaveRxCount;
 	}
 
 	dev->SlaveRxActive = false;
@@ -1306,11 +1278,15 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 					Sam4lI2CSlavePdcaRxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
 				}
 
+				// Transmit from the interrupt, as without DMA
 				dev->SlaveRxActive = false;
 				dev->SlaveTxActive = true;
 				dev->SlaveTxCount = 0;
 				dev->SlaveTxLoaded = 0;
-				reg->TWIS_IDR = TWIS_IER_RXRDY | TWIS_IER_BTF;
+				reg->TWIS_IDR = TWIS_IER_RXRDY;
+				reg->TWIS_SCR = TWIS_SCR_BTF;
+				pending &= ~TWIS_SR_BTF;
+				reg->TWIS_IER = TWIS_IER_BTF;
 
 				i2c->pRRData[0] = nullptr;
 				i2c->RRDataLen[0] = 0;
@@ -1318,17 +1294,13 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 				if (i2c->DevIntrf.EvtCB)
 					i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
 						DEVINTRF_EVT_READ_RQST, nullptr, priorRx);
+				Sam4lI2CSlavePrimeTx(dev);
 			}
 			else
 			{
-				if (dev->SlaveTxActive)
-				{
-					const int priorTx = Sam4lI2CSlaveTxDmaCount(dev);
-					Sam4lI2CSlavePdcaTxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
-					if (i2c->DevIntrf.EvtCB)
-						i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
-							DEVINTRF_EVT_COMPLETED, nullptr, priorTx);
-				}
+				if (dev->SlaveTxActive && i2c->DevIntrf.EvtCB)
+					i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
+						DEVINTRF_EVT_COMPLETED, nullptr, dev->SlaveTxCount);
 
 				dev->SlaveTxActive = false;
 				dev->SlaveRxActive = true;
@@ -1369,7 +1341,7 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 	{
 		// THR can be filled ahead of the byte on the bus. Count completed
 		// bytes at BTF, including the final byte terminated by the master's NAK.
-		if (!i2c->DevIntrf.bDma && dev->SlaveTxCount < dev->SlaveTxLoaded)
+		if (dev->SlaveTxCount < dev->SlaveTxLoaded)
 			++dev->SlaveTxCount;
 
 		if ((sr & TWIS_SR_NAK) != 0U)
@@ -1495,20 +1467,7 @@ void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx,
 		!dev->SlaveTxActive || pData == nullptr || DataLen <= 0)
 		return;
 
-	if (pDev->DevIntrf.bDma)
-	{
-		PdcaChannel *chan = Sam4lI2CSlavePdcaTxChannel(dev);
-		chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
-		chan->PDCA_PSR = PDCA_PSR_PID(SAM4L_PDCA_PID_TWIS_TX(dev->DevNo));
-		chan->PDCA_MAR = (uint32_t)pData;
-		chan->PDCA_TCR = (uint32_t)DataLen;
-		chan->PDCA_IDR = 0xFFFFFFFFU;
-		chan->PDCA_CR = PDCA_CR_TEN;
-	}
-	else
-	{
-		Sam4lI2CSlavePrimeTx(dev);
-	}
+	Sam4lI2CSlavePrimeTx(dev);
 }
 
 void I2CSetWriteRqstBuffer(I2CDev_t * const pDev, int SlaveIdx,
