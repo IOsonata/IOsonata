@@ -270,4 +270,12 @@ code and passes with the new one. With it, 2026-11-27, as reported by the
 maintainer: all eight master and slave combinations pass, the slave in DMA
 mode included. I2CMasterSlave now starts each output line with the time since
 start, from timer DevNo 0 (AST) unless board.h sets `TIMER_DEVNO`, to compare
-the time each test takes between the combinations.
+the time each test takes between the combinations. In the first stamped run
+the four combinations with the master interrupt on took 57 s against 8.7 s:
+the example still waited for a master completion event after the command
+only write and the refused address, which return 0, and the wait ran to its
+count, 24 s each time. The masters send no event; the example now takes the
+returned count. Run of 2026-11-27 after that change, Debug build with the
+output by semihosting, as reported by the maintainer: all eight pass, each
+in 8.8 to 9.0 s, no gap between two lines over 0.42 s. The 0.2 s between
+lines is the semihosting output.
