@@ -35,6 +35,26 @@ class CoreTestProjects(unittest.TestCase):
                     self.assertNotIn("ClockDemo", project + cproject)
                     self.assertNotIn("PowerOffDemo", project + cproject)
 
+    def test_timer_test_projects_link_the_shared_test(self):
+        roots = []
+        for arch in ("ARM", "RISCV"):
+            roots += list((ROOT / arch).glob("**/exemples/TimerTest/ioc/.project"))
+        self.assertGreaterEqual(len(roots), 13)
+        for project_file in roots:
+            folder = project_file.parent
+            with self.subTest(project=folder):
+                project = project_file.read_text(encoding="utf-8")
+                cproject = (folder / ".cproject").read_text(encoding="utf-8")
+                board = (folder.parent / "src/board.h").read_text(encoding="utf-8")
+                self.assertIn("<name>TimerTest</name>", project)
+                self.assertIn("exemples/misc/timer_test.cpp", project)
+                self.assertIn("src/timer_test.cpp", project)
+                self.assertIn("${workspace_loc:/TimerTest}", cproject)
+                self.assertNotIn("CoreClockTest", project + cproject + board)
+                self.assertNotIn("core_clock_test", project + cproject)
+                self.assertNotIn("CORE_CLOCK_TEST", board)
+                self.assertIn("#define UART_DEVNO", board)
+
 
 if __name__ == "__main__":
     unittest.main()

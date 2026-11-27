@@ -50,6 +50,34 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
 Timer trigger modes, callbacks, rollover and device power-off belong in the
 timer tests. On SAM D, run `python3 tests/samd/run_timer.py` for those drivers.
 
+## TimerTest coverage
+
+`exemples/misc/timer_test.cpp`, the TimerTest project of each target, tests
+the timers and the Timer API on hardware. It uses the generic interfaces
+only, board.h gives the UART pins. For every DevNo, the low power timers
+first:
+
+- Init at the highest rate, `TimerSetFrequency` to half of it gives the
+  closest rate and `TimerGetFrequency` returns it, the highest rate again.
+- Init of the same DevNo by another `TimerDev_t` is refused while the timer
+  runs and while it is disabled.
+- The count over 200 ms is within 2 percent of a reference timer, the first
+  high frequency timer or another one when that is under test. At the
+  highest rate a 16-bit counter wraps many times in the window.
+- A single trigger of 10 ms fires once. A continuous trigger of 10 ms fires
+  10 times, plus or minus one, in 105 ms, and no more once disabled.
+- Enable after Disable counts again. After `TimerPowerOff`, Enable fails and
+  another `TimerDev_t` can take the DevNo.
+
+`sDelay(1)`, timed by the first high frequency timer, is within 2 percent:
+as the first call after reset, with the low frequency clock held running by
+the test, and with every low power timer held, so sDelay takes a high
+frequency timer. Each line prints the time and its difference from 1 s.
+
+TimerTest projects exist for the Nordic targets, SAMD21, SAM4LCxC,
+SAM4LSxC and SAM4E16E. It uses `UARTprintf` and does not fit the 16 KB
+SAMD11D14AM.
+
 ## TimerDemo
 
 TimerDemo is a user-facing educational example for learning the generic
