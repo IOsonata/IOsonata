@@ -158,6 +158,9 @@ Conversion status: the master drivers below still return `-1` from an
 interrupt driven transfer and complete it from the interrupt handler, most of
 them from a private copy of the transmit data. They are converted one driver
 per commit and removed from this list as they are done.
+`exemples/i2c/i2c_master_slave.cpp` takes the count a master transfer returns
+and does not wait for a master event, so its runs with the master interrupt
+on need a converted driver.
 
 | Family | I2C master | SPI master |
 |---|---|---|
