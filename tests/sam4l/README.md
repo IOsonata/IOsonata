@@ -218,6 +218,29 @@ interrupts masked after each transfer. Each of 9 changes to the waits and the
 handlers makes the check fail. Bus timing is not modelled; this is not
 hardware validation.
 
+## I2C slave check
+
+```sh
+python3 tests/sam4l/run_i2c_slave.py [--cxx arm-none-eabi-g++]
+```
+
+`i2c_slave_fixture.cpp` builds the production `i2c_sam4l.cpp` for the SAM4L
+at `-O1` and `-Os` with the register memory event handler of the
+I2CMasterSlave example; `run_i2c_slave.py` runs it in an Arm emulator with a
+TWIS and PDCA register model that plays the bus master, one bus step at a
+time, and runs the TWIS or PDCA receive handler when an enabled flag is set.
+The transmit holding register keeps its byte across transfers, and a PDCA
+transmit channel loads it as soon as it is empty, while the byte before is
+still on the bus.
+
+It covers the slave in interrupt and in DMA mode: a register write, reads of
+1, 2 and 8 bytes at the same offset, reads without a command that continue
+after the last one, reads of 15 to 65 bytes each followed by a read, the data
+on the bus, the count of each completion and no byte left in the transmit
+holding register after a read. With the earlier slave transmit DMA it gives
+the bytes of the hardware run below. Bus timing is not modelled; this is not
+hardware validation.
+
 ## Hardware runs of the synchronous masters
 
 The I2C and SPI hardware validation of 2026-10-08 was made with the earlier
