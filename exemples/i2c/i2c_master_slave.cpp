@@ -165,7 +165,7 @@ UART g_Uart;
 static const TimerCfg_t s_TimerCfg = {
 	.DevNo = TIMER_DEVNO,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
-	.Freq = 0,				// Highest frequency of the timer
+	.Freq = 0,				// Default frequency of the timer
 	.IntPrio = IRQ_PRIO_LOW,
 	.EvtHandler = nullptr,
 	.bTickInt = false,
@@ -181,9 +181,6 @@ static void Log(const char *pFormat, ...) __attribute__((format(printf, 1, 2)));
 #ifndef I2C_TEST_RATES
 #define I2C_TEST_RATES { I2C_SCL_RATE }
 #endif
-
-static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
-	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
 
 static const IOPinCfg_t s_I2cMasterPins[] = {
 	{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
@@ -204,13 +201,10 @@ static const I2CCfg_t s_I2cCfgMaster = {
 	.bDmaEn = false,			// set for each run
 	.bIntEn = false,
 	.IntPrio = I2C_MASTER_INT_PRIO,	// Interrupt prio
-	.EvtCB = I2CMasterIntrfHandler		// Event callback
+	.EvtCB = NULL			// A master transfer returns its byte count, no event
 };
 
 I2C g_I2CMaster;
-
-static std::atomic<bool> s_MasterCompleted(false);
-static std::atomic<int> s_MasterCount(0);
 
 //********** I2C Slave **********
 
@@ -271,26 +265,6 @@ static bool s_bWriteRqst = false;
 static int s_Offset = 0;
 
 
-
-static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
-	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
-{
-	if (EvtId == DEVINTRF_EVT_COMPLETED)
-	{
-		s_MasterCount = Len;
-		s_MasterCompleted = true;
-	}
-	return 0;
-}
-
-static int WaitMasterComplete(int Timeout)
-{
-	while (!s_MasterCompleted && --Timeout > 0)
-	{
-		// Interrupt completion updates the atomic state.
-	}
-	return s_MasterCompleted ? (int)s_MasterCount : -1;
-}
 
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
@@ -414,59 +388,27 @@ static const char *ModeName(const I2CCfg_t &Cfg)
 	return Cfg.bIntEn ? "interrupt" : "polling";
 }
 
+// The master transfers are synchronous in every mode: each returns when the
+// transfer is done, with the byte count.
+
 // Master write of the command byte then Len data bytes. Returns the data
-// bytes written. A master that completes an interrupt transfer later gives
-// the count with the completion.
-static int MasterWrite(const I2CCfg_t &Cfg, uint8_t Addr, uint8_t Cmd, const uint8_t *pData, int Len)
+// bytes written, 0 when nothing was written.
+static int MasterWrite(uint8_t Addr, uint8_t Cmd, const uint8_t *pData, int Len)
 {
-	int c;
-
-	s_MasterCompleted = false;
-	s_MasterCount = 0;
-	c = g_I2CMaster.Write(Addr, &Cmd, 1, pData, Len);
-	if (c == 0 && Cfg.bIntEn)
-	{
-		// DeviceIntrfWrite() converts the -1 of a transfer completed later
-		// into 0 after subtracting the command length. A synchronous master
-		// returns the count, 0 when nothing was written.
-		int total = WaitMasterComplete(10000000);
-		c = total >= 1 ? total - 1 : 0;
-	}
-
-	return c;
+	return g_I2CMaster.Write(Addr, &Cmd, 1, pData, Len);
 }
 
 // Register read of Len bytes at Offset
 static int MasterRead(uint8_t Offset, uint8_t *pBuff, int Len)
 {
-	int c;
-
-	s_MasterCompleted = false;
-	s_MasterCount = 0;
-	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &Offset, 1, pBuff, Len);
-	if (c < 0)
-	{
-		c = WaitMasterComplete(10000000);
-	}
-
-	return c;
+	return g_I2CMaster.Read(I2C_SLAVE_ADDR, &Offset, 1, pBuff, Len);
 }
 
 // Receive of Len bytes without a command, the slave continues from its last
 // offset
 static int MasterRx(uint8_t *pBuff, int Len)
 {
-	int c;
-
-	s_MasterCompleted = false;
-	s_MasterCount = 0;
-	c = g_I2CMaster.Rx(I2C_SLAVE_ADDR, pBuff, Len);
-	if (c < 0)
-	{
-		c = WaitMasterComplete(10000000);
-	}
-
-	return c;
+	return g_I2CMaster.Rx(I2C_SLAVE_ADDR, pBuff, Len);
 }
 
 static void PrintBytes(const uint8_t *pData, int Len)
@@ -497,7 +439,7 @@ static bool CheckRx(const char *pLabel, int Count, int Len, const uint8_t *pRx, 
 
 // Write Len data bytes after the test command. The slave must receive every
 // byte, in order.
-static bool WriteTest(const I2CCfg_t &Cfg, int Len)
+static bool WriteTest(int Len)
 {
 	uint32_t timeout;
 	int c;
@@ -509,7 +451,7 @@ static bool WriteTest(const I2CCfg_t &Cfg, int Len)
 	memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
 	s_SlaveWriteLen = 0;
 
-	c = MasterWrite(Cfg, I2C_SLAVE_ADDR, I2C_WRITE_TEST_CMD, Len > 0 ? s_WriteTestData : NULL, Len);
+	c = MasterWrite(I2C_SLAVE_ADDR, I2C_WRITE_TEST_CMD, Len > 0 ? s_WriteTestData : NULL, Len);
 
 	// The slave reports the write when it sees the STOP
 	timeout = 1000000;
@@ -542,7 +484,7 @@ static bool WriteTest(const I2CCfg_t &Cfg, int Len)
 #endif
 
 #if I2C_TEST_STRESS_ROUNDS > 0
-static bool StressTest(const I2CCfg_t &Cfg)
+static bool StressTest(void)
 {
 	static const int lengths[] = { 1, 2, 8, 15, 16, 17, 31, 32, 33, 63, 64, 65 };
 	uint8_t expected[66];
@@ -565,7 +507,7 @@ static bool StressTest(const I2CCfg_t &Cfg)
 			expected[i] = (uint8_t)(round * 37U + i * 13U + (round >> 8));
 		}
 		s_SlaveWriteLen = 0;
-		count = MasterWrite(Cfg, I2C_SLAVE_ADDR, offset, expected, len + 1);
+		count = MasterWrite(I2C_SLAVE_ADDR, offset, expected, len + 1);
 		timeout = 1000000;
 		while (s_SlaveWriteLen == 0 && --timeout != 0)
 		{
@@ -579,7 +521,7 @@ static bool StressTest(const I2CCfg_t &Cfg)
 		// Every hundredth read also checks recovery from an address NACK.
 		if ((round + 1) % 100U == 0)
 		{
-			count = MasterWrite(Cfg, I2C_NACK_ADDR, offset, expected, len + 1);
+			count = MasterWrite(I2C_NACK_ADDR, offset, expected, len + 1);
 			if (count != 0)
 			{
 				Log("Stress round %u NACK FAIL: returned %d\r\n", round + 1, count);
@@ -665,7 +607,7 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 
 
 	// Register write of 8 bytes at offset 4
-	c = MasterWrite(MasterCfg, I2C_SLAVE_ADDR, offset, wr, sizeof(wr));
+	c = MasterWrite(I2C_SLAVE_ADDR, offset, wr, sizeof(wr));
 	Log("Write %d/%d bytes at offset %d\r\n", c, (int)sizeof(wr), offset);
 	pass = c == (int)sizeof(wr);
 
@@ -716,7 +658,7 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 	// Writes of 0 (command only), 1, 2, 8 and I2C_LONG_WRITE_LEN data bytes
 	for (i = 0; pass && i < (int)(sizeof(writeLen) / sizeof(writeLen[0])); ++i)
 	{
-		pass = WriteTest(MasterCfg, writeLen[i]);
+		pass = WriteTest(writeLen[i]);
 	}
 
 	// Run recovery even if an earlier data check failed.
@@ -725,7 +667,7 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 		// reported as written, and a register read must work after the error.
 		Log("Starting NACK test (MaxRetry=%d)\r\n", MasterCfg.MaxRetry);
 		fflush(stdout);
-		c = MasterWrite(MasterCfg, I2C_NACK_ADDR, offset, wr, sizeof(wr));
+		c = MasterWrite(I2C_NACK_ADDR, offset, wr, sizeof(wr));
 		Log("NACK write %d/%d bytes at address 0x%02x\r\n", c, (int)sizeof(wr), I2C_NACK_ADDR);
 		pass = pass && c == 0;
 
@@ -740,7 +682,7 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 #if I2C_TEST_STRESS_ROUNDS > 0
 	if (pass)
 	{
-		pass = StressTest(MasterCfg);
+		pass = StressTest();
 	}
 #endif
 
