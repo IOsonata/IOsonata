@@ -310,6 +310,27 @@ bool SystemLowFreqClockEnable(void);
 /** @brief Disable one shared low-frequency clock requirement. */
 void SystemLowFreqClockDisable(void);
 
+/**
+ * @brief Time the last SystemHighFreqClockEnable waited for the oscillator.
+ *
+ * The clock code measures the wait while it starts the oscillator. A call
+ * that found the oscillator running gives 0, as does a port that starts its
+ * oscillators once in SystemInit. A delay that starts the clock subtracts
+ * this time, so the call lasts the requested time.
+ *
+ * @return Wait in microseconds.
+ */
+uint32_t SystemHighFreqClockStartTime(void);
+
+/**
+ * @brief Time the last SystemLowFreqClockEnable waited for the oscillator.
+ *
+ * As SystemHighFreqClockStartTime, for the low-frequency clock.
+ *
+ * @return Wait in microseconds.
+ */
+uint32_t SystemLowFreqClockStartTime(void);
+
 /** @brief Calibrate the configured high-frequency RC clock.
  *
  * For periodic calibration of the RC oscillator. One call runs one
@@ -339,6 +360,41 @@ bool SystemLowFreqClockCalibrate(void);
  * @return	Core frequency in Hz.
  */
 uint32_t SystemCoreClockGet(void);
+
+/**
+ * @brief	Delay factor at a CPU frequency from two calibration points.
+ *
+ * A delay factor measured at the lowest and at the highest CPU frequency
+ * gives the factor at any frequency between them, linear, without a
+ * calibration at each frequency. Outside the two points, the nearest one is
+ * used. The port stores the result in its delay factor.
+ *
+ * @param	CpuHz      : CPU frequency the factor is for
+ * @param	LowHz      : CPU frequency of the low calibration point
+ * @param	LowFactor  : Delay factor measured at LowHz
+ * @param	HighHz     : CPU frequency of the high calibration point
+ * @param	HighFactor : Delay factor measured at HighHz
+ *
+ * @return	Delay factor at CpuHz.
+ */
+static inline uint32_t CalcDelayFactor(uint32_t CpuHz, uint32_t LowHz,
+	uint32_t LowFactor, uint32_t HighHz, uint32_t HighFactor)
+{
+	uint32_t span;
+
+	if (CpuHz <= LowHz || HighHz <= LowHz)
+	{
+		return LowFactor;
+	}
+	if (CpuHz >= HighHz)
+	{
+		return HighFactor;
+	}
+	span = HighHz - LowHz;
+
+	return (uint32_t)(((uint64_t)LowFactor * (HighHz - CpuHz) +
+		(uint64_t)HighFactor * (CpuHz - LowHz) + span / 2U) / span);
+}
 
 /**
  * @brief	Get peripheral clock frequency (PCLK)
