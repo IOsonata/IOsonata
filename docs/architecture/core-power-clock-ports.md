@@ -40,6 +40,12 @@ and 12 button Standby wakes preserved the CPU and peripheral clocks, UART
 rate, and static and stack RAM. All three System OFF wakes reported reset
 reason 0x00000100 and preserved the 16-byte RAM test pattern.
 
+On the nRF52832 BLYST-NANO-DK, CoreClockTest completed twice with zero
+failures. Two complete CorePowerTest runs passed 66 checks. All six RTC
+Standby wakes and six button Standby wakes passed the clock, UART rate and
+RAM checks. The System OFF wake reported reset reason 0x00000100 and
+preserved the 16-byte RAM test pattern.
+
 During the SAM D refactor, `system_samd.c` went from 4,466 to
 2,366 bytes at `-Os`, and the SAM D11 `CoreClockTest` Release image from
 14,960 to 11,684 bytes of flash on a 16 KB part. The removed code was the
