@@ -646,7 +646,7 @@ int main(void)
 	CorePowerTestSleep(caps);
 	pinWake = CorePowerTestWakePin(caps);
 #if defined(WAKE_BUT_PIN)
-	if (pinWake && (caps & SYSTEM_POWER_CAP_SYSTEM_OFF) == 0U)
+	if (pinWake && (caps & SYSTEM_POWER_CAP_SLEEP) != 0U)
 	{
 		CorePowerTestSleep(caps, true);
 	}

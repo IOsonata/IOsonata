@@ -190,24 +190,21 @@ static bool s_bRtcHwClear[TIMER_NRFX_RTC_MAX];
 // prescaler and timer conversions, never for CPU delay-loop calibration.
 extern "C" bool nRFxLfclkRunningFromRc(void);
 extern "C" bool nRFxLfclkUsesRc(void);
-extern "C" uint32_t nRFxLfclkConfigurationEpoch(void);
 
 #define NRF91_LFRC_MEASURE_US		100000U
 #define NRF91_LFRC_MIN_HZ		16000U
 #define NRF91_LFRC_MAX_HZ		64000U
 
 static uint32_t s_nRF91LfrcHz;
-static uint32_t s_nRF91LfrcEpoch;
 static bool s_bNRF91LfrcMeasured;
 
 static uint32_t nRFxRtcBaseFrequency(void)
 {
 	// The timer may be disabled and LFCLK physically stopped when
 	// TimerSetFrequency runs. Keep the measured frequency while the
-	// configured clock source and its measurement epoch are unchanged.
+	// board uses LFRC.
 	// A running externally owned LFXO must still use 32768 Hz.
 	if (s_bNRF91LfrcMeasured &&
-		s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch() &&
 		nRFxLfclkUsesRc())
 	{
 		return s_nRF91LfrcHz;
@@ -218,10 +215,9 @@ static uint32_t nRFxRtcBaseFrequency(void)
 // This RTC is already initialized, enabled, and has PRESCALER=0.
 // Measure its raw ticks using the CPU's independently calibrated
 // high-frequency delay loop. Interrupts remain enabled, and no other
-// RTC or HF TIMER is allocated. Measure once per source selection.
+// RTC or HF TIMER is allocated. Measure once per boot.
 static bool nRFxRtcMeasureLfrc(NRF_RTC_Type *pReg)
 {
-	uint32_t epoch;
 	uint32_t before;
 	uint32_t after;
 	uint32_t ticks;
@@ -231,8 +227,7 @@ static bool nRFxRtcMeasureLfrc(NRF_RTC_Type *pReg)
 	{
 		return true;
 	}
-	epoch = nRFxLfclkConfigurationEpoch();
-	if (s_bNRF91LfrcMeasured && s_nRF91LfrcEpoch == epoch)
+	if (s_bNRF91LfrcMeasured)
 	{
 		return true;
 	}
@@ -249,13 +244,11 @@ static bool nRFxRtcMeasureLfrc(NRF_RTC_Type *pReg)
 	freq = (uint32_t)(((uint64_t)ticks * 1000000ULL +
 		NRF91_LFRC_MEASURE_US / 2U) / NRF91_LFRC_MEASURE_US);
 	if (freq < NRF91_LFRC_MIN_HZ || freq > NRF91_LFRC_MAX_HZ ||
-		!nRFxLfclkRunningFromRc() ||
-		nRFxLfclkConfigurationEpoch() != epoch)
+		!nRFxLfclkRunningFromRc())
 	{
 		return false;
 	}
 	s_nRF91LfrcHz = freq;
-	s_nRF91LfrcEpoch = epoch;
 	s_bNRF91LfrcMeasured = true;
 	return true;
 }

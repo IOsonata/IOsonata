@@ -43,20 +43,18 @@ class Nrf52PowerClockRegression(unittest.TestCase):
             self.assertIn(token, caps)
         self.assertNotIn("SYSTEM_POWER_CAP_LOW_POWER", caps)
 
-    def test_system_off_rearms_wake_sense_after_irq_cleanup(self):
-        off = section(self.power, "void SystemPowerOff(void)", "bool SystemWakePin(")
-        wake = section(self.power, "bool SystemWakePin(", "int SystemRetRegCount(")
-        cleanup = section(self.gpio, "void IOPinDisableInterrupt(", "void IOPinFreeInterrupt(") if "void IOPinFreeInterrupt(" in self.gpio else self.gpio[self.gpio.index("void IOPinDisableInterrupt("):]
-        self.assertIn("SysPwrWakePinsRearm();", off)
-        self.assertLess(off.index("SysPwrWakePinsRearm();"), off.index("sd_power_system_off()"))
-        self.assertIn("s_SysPwrWakeMask[PortNo] |= bit", wake)
-        self.assertIn("s_SysPwrWakeMask[PortNo] &= ~bit", wake)
-        self.assertIn("s_SysPwrWakeHigh[PortNo]", wake)
-        self.assertIn("GPIO_PIN_CNF_SENSE_Msk", cleanup)
+    def test_gpio_interrupt_owns_wake_sense(self):
+        self.assertNotIn("SystemWakePin", self.power)
+        self.assertNotIn("IOPinSetSense(", self.power)
+        enable = section(self.gpio, "bool IOPinEnableInterrupt(", "static int IOPinOpenTask(")
+        disable = section(self.gpio, "void IOPinDisableInterrupt(", "bool IOPinEnableInterrupt(")
+        self.assertIn("GPIO_PIN_CNF_SENSE_Low", enable)
+        self.assertIn("GPIO_PIN_CNF_SENSE_High", enable)
+        self.assertIn("~GPIO_PIN_CNF_SENSE_Msk", disable)
 
     def test_deferred_lfclk_stop_is_nrf52_softdevice_only(self):
         declaration = section(self.clock, "static bool s_bNRFxLfclkStopPending",
-                              "// Temporarily selected sources")
+                              "static bool s_bNRFxLfclkCalibrating")
         self.assertIn("#if defined(NRF52_SERIES) && defined(SOFTDEVICE_PRESENT)", declaration)
         self.assertIn("s_bNRFxSdLfclkStopPending", declaration)
         handler = section(self.clock, "static void nRFxClockSdhStateHandler(",
@@ -67,7 +65,7 @@ class Nrf52PowerClockRegression(unittest.TestCase):
         self.assertIn("s_nRFxMpslLfclkReqCnt == 0U", handler)
         self.assertIn("NRF_CLOCK->TASKS_LFCLKSTOP = 1U", handler)
         disable = section(self.clock, "void SystemLowFreqClockDisable(",
-                          "bool SystemLowFreqClockSelect(")
+                          "uint32_t SystemPeriphClockGet(")
         self.assertIn("s_bNRFxSdLfclkStopPending = true", disable)
 
     def test_mpsl_ownership_and_generic_drivers_remain_intact(self):

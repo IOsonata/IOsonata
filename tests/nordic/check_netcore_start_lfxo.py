@@ -14,7 +14,7 @@ class NetCoreStartLfxo(unittest.TestCase):
 		s = START.read_text(encoding="utf-8")
 		self.assertIn('#include "coredev/system_core_clock.h"', s)
 		self.assertIn("g_McuOsc.LowPwrOsc.Type != OSC_TYPE_XTAL", s)
-		self.assertIn("SystemLowFreqClockSelect(OSC_TYPE_XTAL,", s)
+		self.assertNotIn("SystemLowFreqClockSelect(", s)
 		self.assertIn("SystemLowFreqClockEnable()", s)
 		self.assertIn("return 2;", s)
 		self.assertLess(s.index("SystemLowFreqClockEnable()"),

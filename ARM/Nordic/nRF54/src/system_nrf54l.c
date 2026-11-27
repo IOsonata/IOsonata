@@ -26,6 +26,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include <stdint.h>
 #include <stdbool.h>
 #include "nrf.h"
+#include "clock_tree_nrfx.h"
 #include "system_nrf54l.h"
 #include "nrf_peripherals.h"
 #include "nrf54l_erratas.h"
@@ -402,6 +403,7 @@ void SystemInit(void)
 		// before application clock users can start LFXO or HFXO.
 #if !defined(NRF_TRUSTZONE_NONSECURE) && !defined(NRF_SKIP_CLOCK_CONFIGURATION)
 		SystemOscInit();
+		nRFxClockInit();
 #endif
 
     #endif

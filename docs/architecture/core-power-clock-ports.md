@@ -11,13 +11,13 @@ November 25, 2026.
 | SAM D11, SAM D21 | Yes | Yes | Yes | Yes |
 | SAM4L | Yes, not run on hardware | Yes, not run on hardware | Yes, not run on hardware | No |
 | SAM4E | No | No | Not reviewed | No |
-| Nordic | No | No | Not reviewed | No |
+| nRF52, nRF5340 App/Net, nRF54L15/LM20A/LM20B, nRF9160/91x1 | Yes | Yes | Yes | Yes |
 | ST | No | Not reviewed | Not reviewed | No |
 | NXP | No | Not reviewed | Not reviewed | No |
 | Renesas | No | Not reviewed | Not reviewed | No |
 | Espressif | No | Not reviewed | No | No |
 
-The last column: every port except SAM D still defines `SystemWakePin`, which is no
+The last column: the remaining older ports still define `SystemWakePin`, which is no
 longer an application function. `CorePowerTest` enables the wake button
 with `IOPinAllocateInterrupt`. Until the pin driver of a port makes its pin
 interrupt wake the MCU, the button wake of `CorePowerTest` is not expected
@@ -26,8 +26,13 @@ the port documents describes code to be removed. On SAM D the
 pin driver requests the low frequency clock for the EIC, so an enabled pin
 interrupt wakes the MCU from Standby and `SystemSleep` calls no driver.
 
-Nordic: the clock code refuses a source selection while a request count is
-not zero.
+Nordic startup takes the sources from the board oscillator descriptor. GPIO
+interrupt enable configures GPIOTE and pin SENSE. Interrupt disable releases
+the pin. System ON sleep uses the configured interrupt, and System OFF uses
+GPIO DETECT. The nRF5340 network core has no independent System OFF.
+The nRF5340 application core exposes the QSPI peripheral clock as clock 1.
+Radio stack clock ownership, modem shutdown checks, and network-core LFRC
+fallback still apply. Hardware validation of these changes is pending.
 
 During the SAM D refactor, `system_samd.c` went from 4,466 to
 2,366 bytes at `-Os`, and the SAM D11 `CoreClockTest` Release image from

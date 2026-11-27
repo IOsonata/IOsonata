@@ -78,14 +78,14 @@ class Nrf91PowerClock(unittest.TestCase):
 	def test_nrf91_lfrc_measured_before_timer_frequency_is_exposed(self):
 		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
 		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
-		self.assertIn("s_nRF91LfclkConfigEpoch++", clock)
-		self.assertIn('extern "C" uint32_t nRFxLfclkConfigurationEpoch(void)', clock)
+		self.assertNotIn("SystemLowFreqClockSelect(", clock)
+		self.assertNotIn("nRFxLfclkConfigurationEpoch", clock)
 		self.assertIn('extern "C" bool nRFxLfclkRunningFromRc(void)', clock)
 		self.assertIn("NRF91_LFRC_MEASURE_US", rtc)
 		self.assertIn("usDelay(NRF91_LFRC_MEASURE_US);", rtc)
 		self.assertIn("if (__get_IPSR() != 0U || __get_PRIMASK() != 0U)", rtc)
 		self.assertIn("ticks = (after - before) & RTC_COUNTER_MASK;", rtc)
-		self.assertIn("s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch()", rtc)
+		self.assertIn("s_bNRF91LfrcMeasured", rtc)
 		self.assertIn("s_nRF91LfrcHz = freq;", rtc)
 		self.assertIn("uint32_t base = nRFxRtcBaseFrequency();", rtc)
 		self.assertIn("pTimer->Freq = (base + div / 2U) / div;", rtc)
@@ -148,7 +148,7 @@ class Nrf91PowerClock(unittest.TestCase):
 		start = clock.index('extern "C" bool nRFxLfclkUsesRc(void)')
 		end = clock.index("#endif", start)
 		helper = clock[start:end]
-		self.assertIn("nRFxLowOscSelected() != OSC_TYPE_RC", helper)
+		self.assertIn("g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC", helper)
 		self.assertIn("(stat & NRFX_LFCLK_STATE_Msk) == 0U", helper)
 		self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", helper)
 		self.assertIn("NRFX_LFCLK_SRC_RC", helper)
@@ -158,23 +158,21 @@ class Nrf91PowerClock(unittest.TestCase):
 		base = rtc[begin:end]
 		self.assertIn("nRFxLfclkUsesRc()", base)
 		self.assertNotIn("nRFxLfclkRunningFromRc()", base)
-		self.assertIn("s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch()", base)
+		self.assertIn("s_bNRF91LfrcMeasured", base)
 		self.assertIn("return s_nRF91LfrcHz;", base)
 		self.assertIn("return TIMER_NRFX_RTC_BASE_FREQ;", base)
 
 		# A stopped LFCLK does not invalidate the selected RC source.
-		# An externally supplied LFXO and a changed selection epoch do.
+		# An externally supplied LFXO uses its nominal rate.
 		measured = 44720
-		def base_rate(selected_rc, running, active_rc, same_epoch):
+		def base_rate(selected_rc, running, active_rc):
 			uses_rc = selected_rc and (not running or active_rc)
-			return measured if uses_rc and same_epoch else 32768
+			return measured if uses_rc else 32768
 
-		self.assertEqual(base_rate(True, True, True, True), measured)
-		self.assertEqual(base_rate(True, False, False, True), measured)
-		self.assertEqual(base_rate(True, True, True, True), measured)
-		self.assertEqual(base_rate(True, True, False, True), 32768)
-		self.assertEqual(base_rate(False, False, False, True), 32768)
-		self.assertEqual(base_rate(True, False, False, False), 32768)
+		self.assertEqual(base_rate(True, True, True), measured)
+		self.assertEqual(base_rate(True, False, False), measured)
+		self.assertEqual(base_rate(True, True, False), 32768)
+		self.assertEqual(base_rate(False, False, False), 32768)
 
 	def test_nrf91_hf_timer_reinit(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")

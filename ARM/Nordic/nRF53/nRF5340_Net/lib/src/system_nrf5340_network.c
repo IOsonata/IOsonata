@@ -26,6 +26,7 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include <stdint.h>
 #include <stdbool.h>
 #include "nrf.h"
+#include "clock_tree_nrfx.h"
 #include "system_nrf53.h"
 #include "nrf53_erratas.h"
 #include "system_nrf53_approtect.h"
@@ -133,6 +134,7 @@ void SystemInit(void)
 
     /* Handle fw-branch APPROTECT setup. */
     nrf53_handle_approtect();
+	nRFxClockInit();
 }
 
 /*lint --flb "Leave library region" */
