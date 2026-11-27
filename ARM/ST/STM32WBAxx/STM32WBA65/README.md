@@ -370,7 +370,7 @@ https://github.com/STMicroelectronics/STM32CubeWBA
 
 ## I2C and example project
 
-`ARM/ST/src/i2c_stm32.cpp` is the I2C driver shared by the STM32 families
+`ARM/ST/src/i2c_stm32v2.cpp` is the I2C driver shared by the STM32 families
 that have the I2C v2 peripheral (WBA, L4, G4). The WBA instance table selects
 the RCC bits, the interrupts and the GPDMA requests. DevNo 0 to 3 select
 I2C1, I2C2, I2C3 and I2C4. I2C3 is on APB7, the others on APB1. The kernel
@@ -386,6 +386,15 @@ channels come from `gpdma_stm32wba.cpp`, which the UART shares, so UART and
 I2C do not take the same channel. Slave: interrupt driven, one or two 7 bit
 addresses, with the read and write request events of the other IOsonata I2C
 slaves.
+
+A master transfer of the I2C and SPI drivers is synchronous in every mode:
+`TxData` and `RxData` return the count of bytes moved when the transfer is
+done, and the master reports no `DEVINTRF_EVT_COMPLETED`. With `bIntEn` each
+wait of the transfer waits for the bus or GPDMA channel interrupt; the
+handler masks the interrupt and tells the wait, which reads the flags as in
+polling mode. The application sets the interrupt priority: a transfer is not
+called from an interrupt handler of the same or a higher priority than the
+bus and its GPDMA channels.
 
 Limits: 7 bit addresses only, no general call. In slave mode a GPDMA channel pair moves the data of a request into the buffer that the application installs from the request event; bytes past the buffer are dropped on a write and read as 0xFF on a read.
 
@@ -406,11 +415,16 @@ DMA mode (8 combinations) and prints a summary line. `I2C_TEST_MASTER_MASK` and
 `I2C_TEST_SLAVE_MASK` in `board.h` restrict the set.
 
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
-instruction set emulator with an I2C model and a GPDMA model (70 checks: polling,
-interrupt, DMA, slave in interrupt and DMA mode). On the DK1 the I2CScan example found the codec at 0x1A,
+instruction set emulator with an I2C model and a GPDMA model (75 checks: polling,
+interrupt, DMA, slave in interrupt and DMA mode). In the interrupt runs the
+emulator runs the I2C1 and GPDMA1 channel vectors of the enabled flags, and
+checks that each wait ends on its vector and that the handler leaves its
+interrupt masked. On the DK1 the I2CScan example found the codec at 0x1A,
 and the I2CMasterSlave example passed all 8 combinations in one run: the master
 in polling, interrupt, DMA and DMA with interrupt mode against the slave in
-interrupt and DMA mode (I2C1 to I2C2, 100 kHz).
+interrupt and DMA mode (I2C1 to I2C2, 100 kHz). That run was made with the
+earlier master driver, which completed an interrupt transfer from the
+handler. The synchronous master (Nov. 26, 2026) is not run on hardware yet.
 
 ## SPI and example project
 
@@ -428,6 +442,7 @@ to StopTx or StopRx, so it stays low between the command and the data of a
 read. With `SPICSEL_MAN`, or no chip select pin in the map, the application
 drives it. Receive clocks out `DummyByte`. Polling, interrupt (`bIntEn`) and
 GPDMA (`bDmaEn`, shared with the UART and I2C through `gpdma_stm32wba.cpp`).
+A master transfer is synchronous in every mode, see the I2C master above.
 
 Slave: interrupt driven, with or without DMA. The fourth pin of the map is the
 NSS pin, used by the hardware. Each frame is announced by
@@ -476,13 +491,18 @@ modes with the slave in interrupt and in DMA mode.
 
 Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
 emulator with a model of the SPI registers, the GPDMA channels and the chip
-select pins (64 checks: polling, interrupt, DMA, slave, a receive FIFO overrun
-check and the 70000 byte chunking).
+select pins (68 checks: polling, interrupt, DMA, slave, a receive FIFO overrun
+check and the 70000 byte chunking). In the interrupt runs the emulator runs
+the SPI1 and GPDMA1 channel vectors of the enabled flags, and checks that each
+wait ends on its vector and that the handler leaves its interrupt masked.
 Hardware: SPIMasterSlave passed all 8 combinations on the DK1 (SPI3 master in
 polling, interrupt, DMA and DMA with interrupt against the SPI2 slave in
 interrupt and DMA mode), in all four SPI modes with frames of 1, 16 and 129
 bytes, TX and RX. The 500000 Hz request ran at 390625 Hz (kernel clock divider).
 Earlier runs with the SPISoft master also passed. SPILoopback is not tested.
+These runs were made with the earlier master driver, which completed an
+interrupt transfer from the handler. The synchronous master (Nov. 26, 2026)
+is not run on hardware yet.
 
 ## Build dependency
 

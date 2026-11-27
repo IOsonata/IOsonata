@@ -98,6 +98,10 @@ and receive frames of 1, 16 and 129 bytes, and a 1 byte frame that discards
 the slave transmit prefetch before the next frame. With DMA (2026-10-19) the
 same test passes in all 8 combinations: master polling, interrupt, DMA and DMA
 with interrupt, each against the interrupt driven slave and the DMA slave.
+These runs were made with the earlier master driver, which completed an
+interrupt transfer from the handler. The master transfer is now synchronous
+in every mode (Nov. 26, 2026), see the I2C and SPI master note below; it is
+not run on hardware yet.
 
 The master chip select is a GPIO driven by the driver; the hardware NSS is
 used by the slave only. The old driver drove the master NSS pin by hardware
@@ -152,7 +156,7 @@ in `ARM/ST/STM32F0xx/README.md` and `ARM/ST/include/timer_stm32.h`.
 ## I2C limits
 
 The four L4 libraries build the shared STM32 I2C driver,
-`ARM/ST/src/i2c_stm32.cpp`; `src/i2c_stm32l4xx.cpp` is removed (2026-10-19):
+`ARM/ST/src/i2c_stm32v2.cpp`; `src/i2c_stm32l4xx.cpp` is removed (2026-10-19):
 master in polling and interrupt mode, slave in interrupt mode, 7 bit
 addresses. DMA for master and slave through the DMA channel manager: I2C1 TX
 DMA1 channel 6 and RX channel 7 (CSELR 3), or DMA2 channels 7 and 6 (CSELR 5)
@@ -166,10 +170,20 @@ interrupt, each against the interrupt driven slave, pass: write 8 bytes at an
 offset, read them back, and a 4 byte read, at 100 kHz with the internal
 pull-ups. With DMA (2026-10-19) the same test passes in all 8 combinations:
 master polling, interrupt, DMA and DMA with interrupt, each against the
-interrupt driven slave and the DMA slave.
+interrupt driven slave and the DMA slave. These runs were made with the
+earlier master driver, which completed an interrupt transfer from the
+handler; the synchronous master is not run on hardware yet.
 
 The shared driver is not tested on the L476, L496 and L4S9 hardware yet. The
 old driver accepted polling master configurations only.
+
+I2C and SPI master: `TxData` and `RxData` return the count of bytes moved
+when the transfer is done, with or without `bIntEn` and DMA, and the master
+reports no `DEVINTRF_EVT_COMPLETED`. With `bIntEn` each wait of the transfer
+waits for the bus or DMA channel interrupt; the handler masks the interrupt
+and tells the wait, which reads the flags as in polling mode. The application
+sets the interrupt priority: a transfer is not called from an interrupt
+handler of the same or a higher priority than the bus and its DMA channels.
 The STM32L476 EepromDemo (`exemples/storage/eeprom_demo.cpp`) needs an
 external I2C EEPROM on the B-L475E-IOT01A Arduino header, I2C1 (DevNo 0, D14
 PB9 SDA, D15 PB8 SCL, open drain), by default a 24xx32 class part at 0x50.

@@ -162,7 +162,7 @@ per commit and removed from this list as they are done.
 | Family | I2C master | SPI master |
 |---|---|---|
 | Nordic | `i2c_nrfx.cpp`: done | `spi_nrfx.cpp`: done |
-| ST | `i2c_stm32v2.cpp`: 64 byte copy, state flags | `spi_stm32.cpp`: 256 byte copy, state flags |
+| ST | `i2c_stm32v2.cpp`: done | `spi_stm32.cpp`: done |
 | Microchip SAM4L | `i2c_sam4l.cpp`: done | `spi_sam4l.cpp`: done |
 | Microchip SAM D | `i2c_samd.cpp`: done | `spi_samd.cpp`: done |
 | Renesas RA4M1 | `i2c_ra4m1.cpp`: 64 byte copy, state flags | `spi_ra4m1.cpp`: state flag |

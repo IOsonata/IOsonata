@@ -161,8 +161,8 @@ add a second Cube startup or vector table to the application.
 | GPIO | Shared STM32 pin configuration, atomic output writes, EXTI dispatch | LED output and external input/EXTI confirmed on hardware |
 | UART | LPUART1, USART1/2/3; polling, interrupt and GPDMA | 1 Mbaud PRBS TX and loopback passed; loopback reported zero errors |
 | Timers | Two LPTIM and six TIM instances through the shared STM32 driver | LPTIM and TIM callbacks passed; no external frequency reference used |
-| I2C | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | I2CMasterSlave: all eight combinations passed on DK1 |
-| SPI | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | SPIMasterSlave: all eight combinations passed; see detailed README |
+| I2C | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | I2CMasterSlave: all eight combinations passed on DK1 with the earlier interrupt master; the synchronous master is not run on hardware yet |
+| SPI | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | SPIMasterSlave: all eight combinations passed with the earlier interrupt master; the synchronous master is not run on hardware yet; see detailed README |
 | Crypto | RNG, AES and PKA engines | Hardware validated: 51 passed, 0 failed; see Crypto above |
 | USB | Shared STM32 OTG device controller; control, bulk and interrupt transfers | CDC hardware validated: Debug/Release PRBS TX and Release 60-second loopback; additional modes pending |
 | BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; Numeric Comparison, encrypted transfer and bonded reconnect after reset hardware validated; central scan/connect/discovery/notification/reconnect tested; explicit characteristic reads unvalidated |
