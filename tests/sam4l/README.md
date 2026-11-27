@@ -191,3 +191,29 @@ by a new transfer; a status flag whose interrupt is held off, which does not
 end the wait, the transfer ends on its time limit; no event reported by the
 master, and the interrupts masked after each transfer. It also runs polled
 transfers. Bus timing is not modelled; this is not hardware validation.
+
+## SPI master interrupt check
+
+```sh
+python3 tests/sam4l/run_spi_irq.py [--cxx arm-none-eabi-g++]
+```
+
+`spi_irq_fixture.cpp` builds the production `spi_sam4l.cpp` and
+`device_intrf.cpp` for the SAM4L at `-O1` and `-Os`; `run_spi_irq.py` runs it
+in an Arm emulator with a SPI and PDCA register model: TDR, RDR, the status
+with its read-to-clear error flags, the interrupt registers, the two PDCA
+channels moving halfwords to TDR and from RDR, and the NVIC enable registers.
+A master transfer is synchronous and waits; each time the firmware has run
+for a while without returning, the model takes its next steps and runs the
+handler of an enabled line with an enabled flag set, again while the line
+stays pending.
+
+It covers the four master modes (polled, interrupt, PDCA, PDCA with
+interrupt): transmit up to 300 bytes over several PDCA chunks, receive, the
+command and read of `DeviceIntrfRead()`, 16-bit words, a receive overflow in
+the second PDCA chunk, which ends the transfer with the bytes received; in
+interrupt mode a flag whose interrupt is held off does not end the wait, the
+transfer ends on its time limit; no event reported by the master, and the
+interrupts masked after each transfer. Each of 9 changes to the waits and the
+handlers makes the check fail. Bus timing is not modelled; this is not
+hardware validation.
