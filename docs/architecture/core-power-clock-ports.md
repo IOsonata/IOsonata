@@ -32,7 +32,13 @@ the pin. System ON sleep uses the configured interrupt, and System OFF uses
 GPIO DETECT. The nRF5340 network core has no independent System OFF.
 The nRF5340 application core exposes the QSPI peripheral clock as clock 1.
 Radio stack clock ownership, modem shutdown checks, and network-core LFRC
-fallback still apply. Hardware validation of these changes is pending.
+fallback still apply.
+
+On the nRF52840 DK, CoreClockTest completed twice with zero failures.
+CorePowerTest passed 134 checks across four boots. All 12 RTC Standby wakes
+and 12 button Standby wakes preserved the CPU and peripheral clocks, UART
+rate, and static and stack RAM. All three System OFF wakes reported reset
+reason 0x00000100 and preserved the 16-byte RAM test pattern.
 
 During the SAM D refactor, `system_samd.c` went from 4,466 to
 2,366 bytes at `-Os`, and the SAM D11 `CoreClockTest` Release image from
