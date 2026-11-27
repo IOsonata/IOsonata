@@ -113,28 +113,16 @@ static I2CDev_t s_I2c3;
 static uint8_t s_Tx[512];
 
 static volatile int s_MasterDone;
-static volatile int s_MasterCount;
 
+// A master reports no completion, its transfers return their count
 static int MasterCb(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuff, int Len)
 {
 	if (Evt == DEVINTRF_EVT_COMPLETED)
 	{
-		s_MasterCount = Len;
-		s_MasterDone = 1;
+		s_MasterDone = s_MasterDone + 1;
 	}
 
 	return 0;
-}
-
-// Interrupt mode: the vector is called from here, the emulator has no NVIC
-static int WaitMaster(void)
-{
-	for (int i = 0; i < 20000 && !s_MasterDone; i++)
-	{
-		I2C1_EV_IRQHandler();
-	}
-
-	return s_MasterDone ? s_MasterCount : -2;
 }
 
 static int SlaveCb(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuff, int Len)
@@ -267,31 +255,28 @@ extern "C" int main(void)
 	g_I2cTestResult[r++] = (int32_t)I2CSetRate(&s_I2c1, 1000000);
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 2);
 
-	// 13 : interrupt master on I2C1, the end is the completed event
+	// 13 : interrupt master on I2C1, the emulator runs the vector of an
+	// enabled flag. Each call returns its count, no event.
 	I2cTestMark(13);
 	SystemCoreClock = 16000000;
 	I2CCfg_t cfgi = MakeCfg(0, s_I2c1Pins, 400000);
 	cfgi.bIntEn = true;
 	cfgi.EvtCB = MasterCb;
 	g_I2cTestResult[r++] = I2CInit(&s_I2c1, &cfgi) ? 1 : 0;
+	g_I2cTestAutoIrq = 1;
 	s_MasterDone = 0;
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 5);
-	g_I2cTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
+	g_I2cTestResult[r++] = s_MasterDone;
 	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)&g_I2cTestRx[400], 4);
-	g_I2cTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
+	g_I2cTestResult[r++] = s_MasterDone;
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x51, s_Tx, 5);
-	g_I2cTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
+	g_I2cTestResult[r++] = s_MasterDone;
 	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)g_I2cTestRx2[0], 300);
-	g_I2cTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
-	g_I2cTestAutoIrq = 1;
+	g_I2cTestResult[r++] = s_MasterDone;
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 100);
-	g_I2cTestAutoIrq = 0;
-	g_I2cTestLongCount = WaitMaster();
+	g_I2cTestLongCount = s_MasterDone;
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x23, s_Tx, 3);
+	g_I2cTestAutoIrq = 0;
 
 	// 14 : slave on I2C3 with two addresses, the emulator plays the bus master
 	I2cTestMark(14);
@@ -328,23 +313,22 @@ extern "C" int main(void)
 	cmd = 7;
 	g_I2cTestResult[r++] = I2CRead(&s_I2c1, 0x50, &cmd, 1, (uint8_t*)&g_I2cTestRx[430], 6);
 
-	// 16 : DMA master, interrupt, the end is the completed event
+	// 16 : DMA master, interrupt, each call returns its count, no event
 	I2cTestMark(16);
 	cfgd.bIntEn = true;
 	cfgd.EvtCB = MasterCb;
 	g_I2cTestResult[r++] = I2CInit(&s_I2c1, &cfgd) ? 1 : 0;
+	g_I2cTestAutoIrq = 1;
 	s_MasterDone = 0;
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 5);
-	g_I2cTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
+	g_I2cTestResult[r++] = s_MasterDone;
 	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)&g_I2cTestRx[440], 4);
-	g_I2cTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
+	g_I2cTestResult[r++] = s_MasterDone;
 	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)g_I2cTestRx2[2], 300);
-	g_I2cTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
+	g_I2cTestResult[r++] = s_MasterDone;
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x51, s_Tx, 5);
-	g_I2cTestResult[r++] = WaitMaster();
+	g_I2cTestResult[r++] = s_MasterDone;
+	g_I2cTestAutoIrq = 0;
 
 	I2cTestMark(17);
 
