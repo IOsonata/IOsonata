@@ -217,3 +217,13 @@ transfer ends on its time limit; no event reported by the master, and the
 interrupts masked after each transfer. Each of 9 changes to the waits and the
 handlers makes the check fail. Bus timing is not modelled; this is not
 hardware validation.
+
+## Hardware runs of the synchronous masters
+
+The I2C and SPI hardware validation of 2026-10-08 was made with the earlier
+master drivers, which completed an interrupt transfer from the handler. With
+the synchronous masters, on SAM4L8 Xplained Pro (SAM4LC8C), 2026-11-26:
+ClockDisplayDemo with OLED1 on EXT2 works with the SPI master in interrupt and
+DMA mode (`DISPLAY_SPI_INT_ENABLE` and `DISPLAY_SPI_DMA_ENABLE` set), as
+reported by the maintainer. Not run on hardware yet: the SPI master in
+polling, interrupt only and DMA only mode, SPILoopback, and the I2C master.
