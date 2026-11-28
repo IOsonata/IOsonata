@@ -76,8 +76,10 @@ uint32_t IOsonataRiscvCycle32(void);
  * src/sdelay.cpp takes a free timer for the time of the call: a low power
  * timer when one is free, a high frequency timer otherwise. The CPU waits in
  * light sleep. The whole call, timer setup, clock start, sleep and release,
- * lasts the requested time. TimerInit refuses a timer held by another Timer
- * object, so the application timers are never taken.
+ * lasts the requested time: the time programmed is less the clock start time
+ * and the setup time of the timer, TimerDev_t nsSetup. TimerInit refuses a
+ * timer held by another Timer object, so the application timers are never
+ * taken.
  *
  * Interrupt context, masked interrupts, a call during another sDelay or no
  * free timer return false. Zero seconds succeeds immediately.
@@ -87,6 +89,19 @@ uint32_t IOsonataRiscvCycle32(void);
  * @return	true - The delay is done
  */
 bool sDelay(uint32_t Seconds);
+
+/**
+ * @brief Sleep for a number of seconds on the timer given.
+ *
+ * sDelay on timer DevNo instead of a free one. TimerTest uses it to measure
+ * the setup time of each timer. False when the timer is not free.
+ *
+ * @param	DevNo	: Timer DevNo
+ * @param	Seconds : Seconds to wait
+ *
+ * @return	true - The delay is done
+ */
+bool sDelayTimer(int DevNo, uint32_t Seconds);
 
 #ifdef __cplusplus
 }

@@ -163,6 +163,12 @@ struct __Timer_Device {
     int DevNo;				//!< Timer device number.
 	uint32_t Freq;			//!< Frequency in Hz
 	uint64_t nsPeriod;		//!< Period in nsec
+	int32_t nsSetup;		//!< Time in nsec a delay on this timer takes besides
+							//!< the time it programs: Init, compare setup, wake
+							//!< and power off. Measured by TimerTest, kept in
+							//!< flash by the timer driver and set by TimerInit,
+							//!< 0 when not measured. sDelay programs its time
+							//!< less this.
 	uint64_t Rollover;     	//!< Rollover counter adjustment
 	uint32_t LastCount;		//!< Last counter read value
 	TimerEvtHandler_t EvtHandler;	//!< Pointer to user event handler callback

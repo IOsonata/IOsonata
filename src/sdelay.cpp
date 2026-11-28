@@ -4,9 +4,10 @@
 @brief	Seconds delay in light sleep on a timer
 
 sDelay takes a free timer for the time of the call, a low power one when there
-is one, a high frequency one otherwise. TimerInit refuses a timer held by
-another Timer object, so the application timers are never taken. The time the
-clock code waited to start the timer clock is part of the delay, the call lasts
+is one, a high frequency one otherwise. sDelayTimer takes the timer given.
+TimerInit refuses a timer held by another Timer object, so the application
+timers are never taken. The time the clock code waited to start the timer clock
+and the setup time of the timer, nsSetup, are part of the delay: the call lasts
 the requested time from the call to the return.
 
 @author	Hoang Nguyen Hoan
@@ -97,6 +98,38 @@ static bool SDelayIntContext(void)
 #endif
 }
 
+// Takes the delay for this call. False from an interrupt, with the interrupts
+// masked or during another delay: the timer interrupt could not end the wait,
+// or the timer is in use.
+static bool SDelayAcquire(void)
+{
+	uint32_t state;
+	bool success;
+
+	if (SDelayIntContext())
+	{
+		return false;
+	}
+	state = DisableInterrupt();
+	success = !s_bSDelayBusy;
+	if (success)
+	{
+		s_bSDelayBusy = true;
+	}
+	EnableInterrupt(state);
+
+	return success;
+}
+
+static void SDelayRelease(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	s_bSDelayBusy = false;
+	EnableInterrupt(state);
+}
+
 // Init the first free timer from DevNo First, Count timers, DevNo moving by
 // Step. The clock of the timers is requested before, so the time its start
 // took is known. The timer keeps its own request from its Init.
@@ -124,6 +157,8 @@ static bool SDelayTimerInit(int First, int Count, int Step, bool bLowFreq, uint3
 	for (i = 0; i < Count && !success; i++)
 	{
 		cfg.DevNo = First + i * Step;
+		// 0 for a timer driver that does not set it
+		s_SDelayTimer.nsSetup = 0;
 		success = TimerInit(&s_SDelayTimer, &cfg);
 	}
 
@@ -142,35 +177,93 @@ static bool SDelayTimerInit(int First, int Count, int Step, bool bLowFreq, uint3
 	return success;
 }
 
-bool sDelay(uint32_t Seconds)
+// The delay on the timer that SDelayTimerInit started, StartUs the time its
+// clock took to start. The timer is powered off at the end.
+static bool SDelayRun(uint32_t Seconds, uint32_t StartUs)
 {
 	uint64_t remaining;
 	uint64_t actual;
 	uint64_t ns;
-	uint32_t startUs;
+	int64_t setup;
 	uint32_t state;
-	int count;
 	bool success;
 #if defined(__arm__) || defined(__ICCARM__)
 	uint32_t scr;
 #endif
 
+	// The clock start and the setup of the timer are part of the call
+	remaining = (uint64_t)Seconds * 1000000000ULL;
+	setup = (int64_t)StartUs * 1000LL + s_SDelayTimer.nsSetup;
+	if (setup >= 0)
+	{
+		remaining -= (uint64_t)setup < remaining ? (uint64_t)setup : remaining;
+	}
+	else
+	{
+		remaining += (uint64_t)(-setup);
+	}
+	success = true;
+#if defined(__arm__) || defined(__ICCARM__)
+	// Light sleep, the timer keeps running
+	scr = SDELAY_SCR;
+	SDELAY_SCR = scr & ~(SDELAY_SCR_SLEEPDEEP | SDELAY_SCR_SLEEPONEXIT);
+#endif
+	while (success && remaining != 0U)
+	{
+		ns = SDELAY_PART_SEC * 1000000000ULL;
+		if (remaining < ns)
+		{
+			ns = remaining;
+		}
+		s_bSDelayDone = false;
+		actual = nsTimerEnableTrigger(&s_SDelayTimer, 0, ns, TIMER_TRIG_TYPE_SINGLE,
+			SDelayTimerHandler, nullptr);
+		success = actual != 0U;
+		// A narrow counter can fit only part of the requested interval.
+		// Treat rounding within one timer tick as the full interval.
+		remaining -= actual < ns && ns - actual > s_SDelayTimer.nsPeriod ? actual : ns;
+
+		// With the interrupts masked a pending timer interrupt still ends
+		// the wait, its handler runs once they are on again. No interrupt
+		// is lost between the check and the wait.
+		state = DisableInterrupt();
+		while (success && !s_bSDelayDone)
+		{
+#if defined(__arm__) || defined(__ICCARM__)
+			__DSB();
+#endif
+			__WFI();
+			EnableInterrupt(state);
+			state = DisableInterrupt();
+		}
+		EnableInterrupt(state);
+	}
+#if defined(__arm__) || defined(__ICCARM__)
+	SDELAY_SCR = scr;
+#endif
+	TimerDisableTrigger(&s_SDelayTimer, 0);
+	if (!TimerPowerOff(&s_SDelayTimer))
+	{
+		success = false;
+	}
+
+	return success;
+}
+
+bool sDelay(uint32_t Seconds)
+{
+	uint32_t startUs;
+	int count;
+	bool success;
+
 	if (Seconds == 0U)
 	{
 		return true;
 	}
-	if (SDelayIntContext())
+	if (!SDelayAcquire())
 	{
 		return false;
 	}
-	state = DisableInterrupt();
-	if (s_bSDelayBusy)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	s_bSDelayBusy = true;
-	EnableInterrupt(state);
 
 	// A low power timer first, from the last one as the application timers
 	// usually start at DevNo 0. A high frequency timer otherwise, from the
@@ -181,60 +274,33 @@ bool sDelay(uint32_t Seconds)
 	{
 		success = SDelayTimerInit(TimerGetHighFreqDevNo(), TimerGetHighFreqDevCount(), 1, false, &startUs);
 	}
-
 	if (success)
 	{
-		remaining = (uint64_t)Seconds * 1000000000ULL;
-		actual = (uint64_t)startUs * 1000ULL;
-		remaining -= actual < remaining ? actual : remaining;
-#if defined(__arm__) || defined(__ICCARM__)
-		// Light sleep, the timer keeps running
-		scr = SDELAY_SCR;
-		SDELAY_SCR = scr & ~(SDELAY_SCR_SLEEPDEEP | SDELAY_SCR_SLEEPONEXIT);
-#endif
-		while (success && remaining != 0U)
-		{
-			ns = SDELAY_PART_SEC * 1000000000ULL;
-			if (remaining < ns)
-			{
-				ns = remaining;
-			}
-			s_bSDelayDone = false;
-			actual = nsTimerEnableTrigger(&s_SDelayTimer, 0, ns, TIMER_TRIG_TYPE_SINGLE,
-				SDelayTimerHandler, nullptr);
-			success = actual != 0U;
-			// A narrow counter can fit only part of the requested interval.
-			// Treat rounding within one timer tick as the full interval.
-			remaining -= actual < ns && ns - actual > s_SDelayTimer.nsPeriod ? actual : ns;
+		success = SDelayRun(Seconds, startUs);
+	}
+	SDelayRelease();
 
-			// With the interrupts masked a pending timer interrupt still ends
-			// the wait, its handler runs once they are on again. No interrupt
-			// is lost between the check and the wait.
-			state = DisableInterrupt();
-			while (success && !s_bSDelayDone)
-			{
-#if defined(__arm__) || defined(__ICCARM__)
-				__DSB();
-#endif
-				__WFI();
-				EnableInterrupt(state);
-				state = DisableInterrupt();
-			}
-			EnableInterrupt(state);
-		}
-#if defined(__arm__) || defined(__ICCARM__)
-		SDELAY_SCR = scr;
-#endif
-		TimerDisableTrigger(&s_SDelayTimer, 0);
-		if (!TimerPowerOff(&s_SDelayTimer))
-		{
-			success = false;
-		}
+	return success;
+}
+
+bool sDelayTimer(int DevNo, uint32_t Seconds)
+{
+	uint32_t startUs;
+	bool success;
+
+	if (Seconds == 0U)
+	{
+		return true;
+	}
+	if (DevNo < 0 || DevNo >= TimerGetHighFreqDevNo() + TimerGetHighFreqDevCount() ||
+		!SDelayAcquire())
+	{
+		return false;
 	}
 
-	state = DisableInterrupt();
-	s_bSDelayBusy = false;
-	EnableInterrupt(state);
+	success = SDelayTimerInit(DevNo, 1, 1, DevNo < TimerGetHighFreqDevNo(), &startUs) &&
+		SDelayRun(Seconds, startUs);
+	SDelayRelease();
 
 	return success;
 }

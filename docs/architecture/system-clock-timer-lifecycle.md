@@ -91,9 +91,16 @@ library of a port whose `TimerInit` refuses a timer held by another
   interrupts masked so the timer interrupt cannot be lost between the check
   and the wait. A delay over 60 s is done in 60 s parts.
 - It calls `TimerPowerOff` at the end, the timer is free again.
-- The setup left, timer Init and power off, was under a millisecond in the
-  earlier Nordic runs, against 20 ms for 2 percent of `sDelay(1)`. There is
-  no per-timer correction.
+- The programmed time is also less the setup time of the timer, the
+  `nsSetup` field of `TimerDev_t`: the time the call takes besides the time
+  it programs, that is Init, compare setup, wake and power off. It differs
+  from one timer to another, and `sDelay` takes whichever timer is free. It
+  is a constant of each timer: the timer driver keeps it for each DevNo in a
+  const table, 0 until measured, and `TimerInit` sets it (rule 8 of the timer
+  section). It can be negative.
+- `sDelayTimer(DevNo, Seconds)` is the same delay on the DevNo given.
+  TimerTest uses it to time a 1 s delay on each timer, from the call to the
+  return, and prints the setup time to put in the table.
 
 ### RC oscillator calibration
 
@@ -350,6 +357,9 @@ prescaler for `Freq`:
    `TimerDev_t` can call Init again after Disable. A port also refuses a
    timer that a running radio stack uses directly. `sDelay` relies on this
    to take only a free timer.
+8. `TimerInit()` sets `nsSetup` of the `TimerDev_t` from a const table of
+   the timer driver, one value for each DevNo, in nanoseconds. TimerTest
+   measures the values. A timer not measured has 0.
 
 An explicit `ClkSrc` remains available for users who require a
 particular supported timer clock. Unsupported explicit selections fail
