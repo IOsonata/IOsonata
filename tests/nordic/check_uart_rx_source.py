@@ -31,7 +31,7 @@ class UartRxSourceChecks(unittest.TestCase):
         rx = rx.split("static void nRFUARTStopRx(", 1)[0]
         self.assertIn("if (pDev->bIntEn == false)", rx)
         self.assertNotIn("NRFX_UARTE_TASKS_STOPRX(dev->pDmaReg) = 1;", rx)
-        self.assertIn("dev->RxDmaSize", rx)
+        self.assertIn("nRFUARTPollRx(dev);", rx)
 
     def test_polling_dma_waits_for_full_buffer_completion(self):
         init = self.source.split("bool UARTInit(", 1)[1]

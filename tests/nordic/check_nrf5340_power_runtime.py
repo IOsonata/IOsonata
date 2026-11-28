@@ -79,8 +79,8 @@ class RuntimePowerChecks(unittest.TestCase):
 	def test_syslog_console(self):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertIn("SysLogInitNoTimer(SysLogGet(), &s_LogCfg", s)
-		self.assertIn('SysLogPrintf(SysLogGet(), "%s: %s', s)
-		self.assertIn("SYSLOG_MEMSIZE(16, 128)", s)
+		self.assertIn('SysLogPrintf(SysLogGet(), "%s%s", name, status)', s)
+		self.assertIn("SYSLOG_MEMSIZE(CORE_POWER_TEST_LOG_RECORDS, CORE_POWER_TEST_LOG_RECORD_LEN)", s)
 		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("CorePowerTestPut(", s)
 
@@ -88,16 +88,20 @@ class RuntimePowerChecks(unittest.TestCase):
 		s = SRC.read_text(encoding="utf-8")
 		self.assertIn("SysLogInitNoTimer(SysLogGet(), &s_LogCfg", s)
 		self.assertNotIn("CorePowerTestDrainLog", s)
-		self.assertNotIn("SysLogFlush(SysLogGet())", s)
-		self.assertIn("msDelay(10);", s)
-		self.assertIn("msDelay(100);", s)
+		# One flush, before the UART is left to finish ahead of a sleep.
+		self.assertEqual(s.count("SysLogFlush(SysLogGet())"), 1)
+		flush = s[s.index("static void PowerTestFlush(void)"):]
+		flush = flush[:flush.index("\n}\n")]
+		self.assertIn("(void)SysLogFlush(SysLogGet());", flush)
+		self.assertIn("msDelay(100);", flush)
 
 
 	def test_syslog_defers_tx_ready_during_active_flush(self):
 		impl = (ROOT / "src/syslog.cpp").read_text(encoding="utf-8")
 		host = (ROOT / "tests/bluetooth/host/syslog_tx_test.cpp").read_text(encoding="utf-8")
 		self.assertIn("s_bSysLogReadyDuringFlush = true;", impl)
-		self.assertIn("(pLog == SysLogGet() && s_bSysLogReadyDuringFlush)", impl)
+		self.assertRegex(impl, r"retry = sent < len && pLog == SysLogGet\(\) &&\s+s_bSysLogReadyDuringFlush;")
+		self.assertRegex(impl, r"next = sent >= len && pLog == SysLogGet\(\) &&\s+s_bSysLogReadyDuringFlush;")
 		self.assertIn("TestDeferredReadyDuringActiveFlush", host)
 		self.assertIn("s_NotifyReadyDuringTx = true;", host)
 
@@ -119,7 +123,7 @@ class RuntimePowerChecks(unittest.TestCase):
 		s = SRC.read_text(encoding="utf-8")
 		header = (ROOT / "include/syslog.h").read_text(encoding="utf-8")
 		impl = (ROOT / "src/syslog.cpp").read_text(encoding="utf-8")
-		self.assertIn(".EvtCallback = nullptr,", s)
+		self.assertIn(".EvtCB = nullptr,", s)
 		self.assertNotIn("CorePowerTestDrainLog();", s)
 		self.assertNotIn("SysLogUartEvent", s)
 		self.assertNotIn("SysLogUartEvent", header)
@@ -127,21 +131,29 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertNotIn('#include "coredev/uart.h"', header)
 		self.assertNotIn("UART_EVT", header)
 		self.assertNotIn("UARTDev_t", header)
-		self.assertIn("CFifoResv(pLog->hFifo)", impl)
+		# A record is formatted in private memory, then published whole.
+		self.assertNotIn("CFifoResv(", impl)
+		self.assertIn("pBlock = pLog->pFormatBuffer;", impl)
+		self.assertIn("uint8_t *pDst = CFifoPut(pLog->hFifo);", impl)
 
 
 	def test_console_uses_interrupt_driven_uarte(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn(".bIntMode = true,", s)
-		self.assertIn(".bDMAMode = true,", s)
+		self.assertIn("#define CORE_POWER_TEST_POLLING_CONSOLE 0", s)
+		self.assertIn(".bIntMode = !CORE_POWER_TEST_POLLING_CONSOLE,", s)
+		self.assertIn(".bDMAMode = !CORE_POWER_TEST_POLLING_CONSOLE,", s)
 		self.assertNotIn(".bIntMode = false,", s)
 		self.assertNotIn(".bDMAMode = false,", s)
 		self.assertNotIn("DeviceIntrfWaitTxComplete", s)
+		for core in ("nRF5340_App", "nRF5340_Net"):
+			board = (ROOT / "ARM/Nordic/nRF53" / core / "exemples/CorePowerTest/src/board.h").read_text(encoding="utf-8")
+			self.assertNotIn("CORE_POWER_TEST_POLLING_CONSOLE", board)
 
 	def test_console_uses_syslog_not_direct_uart_printf(self):
 		s = SRC.read_text(encoding="utf-8")
-		self.assertIn('SysLogPrintf(SysLogGet(), "%s: %s', s)
-		self.assertIn('SysLogPrintf(SysLogGet(), "CorePowerTest complete:', s)
+		self.assertIn('SysLogPrintf(SysLogGet(), "%s%s", name, status)', s)
+		self.assertIn('PowerTestPair("CorePowerTest complete: 0x"', s)
+		self.assertIn('SysLogPrintf(SysLogGet(), name "%08x" middle "%08x" end', s)
 		self.assertNotIn("SysLogUartEvent", s)
 		self.assertNotIn("s_Uart.printf(", s)
 		self.assertNotIn("s_Uart.Tx(", s)
@@ -167,7 +179,11 @@ class RuntimePowerChecks(unittest.TestCase):
 		self.assertIn("sent = dev->pDmaReg->TXD.AMOUNT;", s)
 		self.assertIn("memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);", s)
 		self.assertIn("dev->TxDmaLen = remaining;", s)
-		self.assertEqual(s.count("defined(NRF71_SERIES) || defined(NRF53_SERIES)"), 5)
+		# The partial transfer is kept inside the nRF53 guard
+		guard = "#if defined(NRF54L_SERIES) || defined(NRF71_SERIES) || defined(NRF53_SERIES)"
+		move = s.index("memmove(dev->TxDmaMem, dev->TxDmaMem + sent, remaining);")
+		block = s[s.rindex(guard, 0, move):move]
+		self.assertIn("#if defined(NRF53_SERIES)\n\t\tsent = dev->pDmaReg->TXD.AMOUNT;", block)
 		self.assertIn("NRFX_UARTE_TASKS_STARTTX(dev->pDmaReg) = 1;", s)
 
 	def test_board_describes_resources_not_test_modes(self):

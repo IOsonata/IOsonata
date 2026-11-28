@@ -236,10 +236,18 @@ class HfxoSourceChecks(unittest.TestCase):
                           "nrf_sdh_", "MpslInit", "#include \"nrf.h\"",
                           "NRF_CLOCK", "stm32", "SHCI_"):
             self.assertNotIn(forbidden, source)
-        wba = (ROOT / "ARM/ST/STM32WBAxx/src/system_stm32wbaxx.c").read_text(
+        # The clock request implementations of the ports that build
+        # HfxoTestBle. Only nRF52 builds it.
+        nrf = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(
             encoding="utf-8")
-        self.assertIn("bool SystemHighFreqClockEnable(void)", wba)
-        self.assertIn("void SystemHighFreqClockDisable(void)", wba)
+        self.assertIn("bool SystemHighFreqClockEnable(void)", nrf)
+        self.assertIn("void SystemHighFreqClockDisable(void)", nrf)
+        projects = sorted(p.parent.parent.relative_to(ROOT).as_posix()
+                          for p in ROOT.glob("ARM/**/exemples/HfxoTestBle/ioc/.project"))
+        self.assertEqual(projects, [
+            "ARM/Nordic/nRF52/nRF52832/exemples/HfxoTestBle",
+            "ARM/Nordic/nRF52/nRF52840/exemples/HfxoTestBle",
+        ])
 
     def test_ble_diagnostic_uses_no_application_clock_mode(self):
         source = (ROOT / "tests/nordic/hfxo_test_ble_vendor_diagnostic.cpp").read_text(
@@ -260,7 +268,7 @@ class HfxoSourceChecks(unittest.TestCase):
         build = (ROOT / "tests/nordic/build_managed_power_clock.py").read_text(
             encoding="utf-8")
         self.assertIn('root / "exemples/HfxoTestBle/ioc",', build)
-        self.assertIn('if configuration.endswith("_SDC"):', build)
+        self.assertIn('selected = sdc_projects if configuration.endswith("_SDC") else standard_projects', build)
         for target in ("nRF52832", "nRF52840"):
             project = (ROOT / "ARM/Nordic/nRF52" / target /
                        "exemples/HfxoTestBle/ioc/.cproject").read_text(
