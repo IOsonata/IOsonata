@@ -554,8 +554,7 @@ bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
 	}
 	divider = Mode == SYSTEM_POWER_MODE_LOW_POWER ? 1U : 0U;
 	state = DisableInterrupt();
-	if (s_PeriphSrcFreq == 0 || SYSTEM->SCKDIVCR_b.PCKB < divider ||
-		(s_HfUsers && SYSTEM->SCKDIVCR_b.ICK != divider))
+	if (s_PeriphSrcFreq == 0 || SYSTEM->SCKDIVCR_b.PCKB < divider)
 	{
 		EnableInterrupt(state);
 		return false;

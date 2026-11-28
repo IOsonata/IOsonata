@@ -1054,9 +1054,8 @@ inputs remain disabled during debugging.
 
 Startup selects the oscillator and sets ICLK and PCLKB. Peripheral clock
 requests return the actual frequency of the shared domain. LOW_POWER divides
-ICLK by two and keeps PCLKB unchanged. PERFORMANCE restores ICLK. A held HF
-clock request prevents a divider transition. Both transitions update the delay
-factors. Clock getters report zero for stopped sources and reserved dividers.
+ICLK by two and keeps PCLKB unchanged. PERFORMANCE restores ICLK. HF clock requests remain valid at either CPU speed. Both transitions update
+the delay factors. Clock getters report zero for stopped sources and reserved dividers.
 
 The timer driver numbers AGT0/1 first, followed by the paired TMR and six
 GPT channels. Disable keeps the timer configuration. PowerOff releases its

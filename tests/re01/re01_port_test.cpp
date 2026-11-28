@@ -216,13 +216,16 @@ static void clocks()
 	assert(SystemCoreClock == 48000000 && SystemPeriphClockGet(1) == 24000000);
 	assert(SystemHighFreqClockEnable() && SystemHighFreqClockEnable());
 	SystemHighFreqClockDisable();
-	assert(!SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
-	SystemHighFreqClockDisable();
 	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
 	assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER && SystemCoreClock == 24000000);
 	assert(FLASH->FLWT == 0 && SystemPeriphClockGet(1) == 24000000);
 	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
 	assert(SystemCoreClock == 48000000 && FLASH->FLWT == 1);
+	assert(SystemPeriphClockGet(1) == 24000000);
+	SystemHighFreqClockDisable();
+	SYSTEM->SCKDIVCR_b.PCKB = 0;
+	assert(!SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+	assert(SystemCoreClock == 48000000);
 	assert((SYSTEM->PRCR & 0xfU) == 2);
 
 }
