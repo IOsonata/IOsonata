@@ -1011,22 +1011,12 @@ static bool Sam4lConfigurationValid(const McuOsc_t *pOsc)
 static void Sam4lDelayUpdate(void)
 {
 #if defined(__SAM4LC8C__) || defined(__ATSAM4LC8C__)
-	// SAM4L Xplained Pro. The RC clock rate varies between boots.
-	if (SystemCoreClock >= 19804096UL && SystemCoreClock <= 39608192UL)
-	{
-		SystemMicroSecLoopCnt = CalcDelayFactor(SystemCoreClock,
-			19804096UL, 1414026UL, 39608192UL, 2828703UL);
-		SystemnsDelayFactor = CalcDelayFactor(SystemCoreClock,
-			19804096UL, 6599649UL, 39608192UL, 13201014UL);
-	}
-	else if (SystemCoreClock < 19804096UL)
-	{
-		(void)ArmDelayClockSetDivisors(SystemCoreClock, 14005468UL, 3000780UL);
-	}
-	else
-	{
-		(void)ArmDelayClockSetDivisors(SystemCoreClock, 14002244UL, 3000390UL);
-	}
+	// SAM4L Xplained Pro. The RC clock rate varies between boots: outside the
+	// two measured rates the cycles per loop of the nearest one are kept.
+	SystemMicroSecLoopCnt = CalcDelayFactor(SystemCoreClock,
+		19804096UL, 1414026UL, 39608192UL, 2828703UL);
+	SystemnsDelayFactor = CalcDelayFactor(SystemCoreClock,
+		19804096UL, 6599649UL, 39608192UL, 13201014UL);
 #else
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		(SAM4L_USDELAY_LOOP_CYCLES * 1000000UL), (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL));
