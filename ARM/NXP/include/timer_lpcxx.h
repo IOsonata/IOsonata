@@ -74,6 +74,9 @@ typedef struct {
 
 extern LpcTimer_t g_LpcTimer[];
 extern const int g_LpcTimerCount;
+// Setup time of a delay on each timer in nsec, g_LpcTimer order: TimerInit
+// sets it in TimerDev_t nsSetup. TimerTest prints the value of each timer.
+extern const int32_t g_LpcTimerSetup[];
 uint32_t LpcTimerBaseFreq(const LpcTimer_t *pDev);
 // Timer clock on with a peripheral reset. Called with interrupts disabled.
 void LpcTimerClockEnable(const LpcTimer_t *pDev);

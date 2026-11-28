@@ -635,6 +635,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	dev->bRunning = false;
 
 	pTimer->DevNo = pCfg->DevNo;
+	pTimer->nsSetup = g_LpcTimerSetup[pCfg->DevNo];
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;

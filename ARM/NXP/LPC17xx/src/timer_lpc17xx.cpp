@@ -48,6 +48,10 @@ LpcTimer_t g_LpcTimer[] = {
 };
 
 const int g_LpcTimerCount = sizeof(g_LpcTimer) / sizeof(g_LpcTimer[0]);
+
+// 0 until TimerTest measures them
+const int32_t g_LpcTimerSetup[sizeof(g_LpcTimer) / sizeof(g_LpcTimer[0])] = { 0 };
+
 static const int s_TimerPclk[] = {
 	LPC17_PCLK_TIMER0, LPC17_PCLK_TIMER1, LPC17_PCLK_TIMER2, LPC17_PCLK_TIMER3
 };

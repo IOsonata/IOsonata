@@ -47,6 +47,9 @@ LpcTimer_t g_LpcTimer[] = {
 
 const int g_LpcTimerCount = sizeof(g_LpcTimer) / sizeof(g_LpcTimer[0]);
 
+// 0 until TimerTest measures them
+const int32_t g_LpcTimerSetup[sizeof(g_LpcTimer) / sizeof(g_LpcTimer[0])] = { 0 };
+
 uint32_t LpcTimerBaseFreq(const LpcTimer_t *pDev)
 {
 	(void)pDev;
