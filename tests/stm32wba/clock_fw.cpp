@@ -66,6 +66,9 @@ extern "C" void ClkTestDoneHook(void)
 }
 
 extern "C" uint32_t SystemCoreClock;
+// Delay loop count, defined by ResetEntry.c in the library
+extern "C" uint32_t SystemMicroSecLoopCnt;
+uint32_t SystemMicroSecLoopCnt = 1000000UL;
 
 static int s_R;
 

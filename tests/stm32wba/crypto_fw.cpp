@@ -94,8 +94,15 @@ extern "C" int main(void)
 	return 0;
 }
 
-// Minimal start: stack, data and bss, then main
+// Minimal start: stack, data and bss, the static constructors, then main.
+// The library startup runs the constructors through newlib _start.
 extern "C" uint32_t _sidata, _sdata, _edata, _sbss, _ebss, _estack;
+extern "C" void (*__init_array_start[])(void);
+extern "C" void (*__init_array_end[])(void);
+// The handle the static destructors register with, from the start files
+extern "C" void *__dso_handle;
+
+void *__dso_handle = nullptr;
 
 extern "C" void ResetHandler(void)
 {
@@ -108,6 +115,10 @@ extern "C" void ResetHandler(void)
 	for (uint32_t *dst = &_sbss; dst < &_ebss; )
 	{
 		*dst++ = 0;
+	}
+	for (void (**init)(void) = __init_array_start; init < __init_array_end; init++)
+	{
+		(*init)();
 	}
 	main();
 	while (1)

@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 WPAN = Path(os.environ.get('STM32_WPAN', str(ROOT.parent / 'stm32-mw-wpan')))
 if not (WPAN / 'link_layer/ll_cmd_lib/inc/os_wrapper.h').exists():
     WPAN = ROOT.parent / 'external/stm32-mw-wpan'
+if not (WPAN / 'link_layer/ll_cmd_lib/inc/os_wrapper.h').exists():
+    raise SystemExit('NOT RUN: set STM32_WPAN to the STM32CubeWBA STM32_WPAN middleware')
 source = (ROOT / 'ARM/ST/STM32WBAxx/src/bt_wba_platform.cpp').read_text()
 start = source.index('enum {\n\tBT_WBA_TMR_FREE')
 end = source.index('// Random number generator.', start)

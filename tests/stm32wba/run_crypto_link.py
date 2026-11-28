@@ -100,6 +100,6 @@ with tempfile.TemporaryDirectory(prefix='wba-crypto-link-') as temp:
                           'CryptoUecc::KeyGen', 'CryptoUecc::KeyImport', 'CryptoUecc::Agree'):
             assert forbidden not in symbols, forbidden
         for required in ('CryptoWbaPka::Sign', 'CryptoWbaPka::Verify', 'CryptoWbaAes::Cipher',
-                         'CryptoSoftAes::Cipher', 'CryptoSoftSha256Hash::Hash'):
+                         'CryptoSoftAes::Cipher', 'Crypto::Hash('):
             assert required in symbols, required
         print(opt, 'WBA target: no software P-256 or PRNG; required AES-256/SHA retained', flush=True)

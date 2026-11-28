@@ -1042,7 +1042,7 @@ def main():
                     errors.append(f'seed {seed}: {line.strip()}')
             if result != 0:
                 errors.append(f'seed {seed}: the test returned {result}')
-            if 'engines construct' not in text:
+            if 'crypto and reference objects initialize' not in text:
                 errors.append(f'seed {seed}: no test output')
             for v in env.viol[:10]:
                 errors.append(f'seed {seed}: model violation: {v}')

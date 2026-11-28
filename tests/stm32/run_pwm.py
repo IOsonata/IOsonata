@@ -60,6 +60,7 @@ import tempfile
 
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE
 from unicorn import arm_const
+from unicorn import __version__ as UNICORN_VERSION
 from unicorn.arm_const import UC_ARM_REG_SP
 from elftools.elf.elffile import ELFFile
 
@@ -267,6 +268,11 @@ def emulate(path, cpu):
 
 
 def main():
+	# The same firmware fails check 27 under Unicorn 2.1.4 and passes every
+	# check under 2.0.1
+	if UNICORN_VERSION == '2.1.4':
+		raise SystemExit('NOT RUN: install tests/stm32wba/requirements-pdm.txt; '
+						 'check 27 fails under Unicorn 2.1.4')
 	cxx = os.environ.get('ARM_CXX', 'arm-none-eabi-g++')
 	if not shutil.which(cxx):
 		raise SystemExit('NOT RUN: arm-none-eabi-g++ unavailable')

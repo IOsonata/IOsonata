@@ -10,6 +10,13 @@ ENTRY(ResetHandler)
 SECTIONS
 {
 	.isr_vector : { KEEP(*(.isr_vector)) } > FLASH
+	/* Before .text, whose .init* would take these sections */
+	.init_array : {
+		__init_array_start = .;
+		KEEP(*(SORT(.init_array.*)))
+		KEEP(*(.init_array))
+		__init_array_end = .;
+	} > FLASH
 	.text : { *(.text*) *(.rodata*) *(.init*) *(.fini*) . = ALIGN(4); } > FLASH
 	.ARM.exidx : { *(.ARM.exidx*) } > FLASH
 	_sidata = LOADADDR(.data);
