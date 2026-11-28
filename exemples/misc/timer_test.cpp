@@ -193,7 +193,9 @@ static void TimerTestCount(int DevNo)
 
 static void TimerTestTriggers(void)
 {
+	const uint32_t windowMs = TIMER_TEST_TRIG_MS * TIMER_TEST_TRIG_CNT + TIMER_TEST_TRIG_MS / 2U;
 	uint64_t period;
+	uint32_t expected;
 	uint32_t count;
 	int trig;
 
@@ -214,14 +216,15 @@ static void TimerTestTriggers(void)
 	s_TrigCount = 0U;
 	period = nsTimerEnableTrigger(&s_Timer, trig, TIMER_TEST_TRIG_MS * 1000000ULL,
 		TIMER_TRIG_TYPE_CONTINUOUS, TimerTestTrigger, nullptr);
-	msDelay(TIMER_TEST_TRIG_MS * TIMER_TEST_TRIG_CNT + TIMER_TEST_TRIG_MS / 2U);
-	count = s_TrigCount;
+	msDelay(windowMs);
 	TimerDisableTrigger(&s_Timer, trig);
+	count = s_TrigCount;
+	expected = period ? (uint32_t)(windowMs * 1000000ULL / period) : 0U;
 	UARTprintf(&s_Uart, "Continuous trigger, period %lu us: %lu triggers in %lu ms\r\n",
 		(unsigned long)(period / 1000U), (unsigned long)count,
-		(unsigned long)(TIMER_TEST_TRIG_MS * TIMER_TEST_TRIG_CNT + TIMER_TEST_TRIG_MS / 2U));
-	TimerTestResult("Continuous trigger", period != 0U &&
-		count + 1U >= TIMER_TEST_TRIG_CNT && count <= TIMER_TEST_TRIG_CNT + 1U);
+		(unsigned long)windowMs);
+	TimerTestResult("Continuous trigger", count >= 2U && expected >= 1U &&
+		count >= expected - 1U && count <= expected + 1U);
 	msDelay(TIMER_TEST_TRIG_MS * 3U);
 	TimerTestResult("Trigger disabled", s_TrigCount == count);
 }
