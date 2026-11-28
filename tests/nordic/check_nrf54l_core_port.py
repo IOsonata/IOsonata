@@ -201,12 +201,15 @@ class Nrf54lCorePort(unittest.TestCase):
     def test_lm20_managed_projects_use_their_target_variant(self):
         # nRF54LM20A and nRF54LM20B are separate targets. Every managed
         # project of a target defines that target's MCU and no other.
+        inventories = {}
         for variant, other in (("A", "B"), ("B", "A")):
             base = ROOT / ("ARM/Nordic/nRF54/nRF54LM20" + variant)
             own = 'value="NRF54LM20%s_XXAA"' % variant
             foreign = 'value="NRF54LM20%s_XXAA"' % other
             projects = sorted(base.glob("exemples/*/ioc/.cproject"))
-            self.assertEqual(len(projects), 40)
+            inventories[variant] = {p.parents[1].name for p in projects}
+            self.assertGreaterEqual(len(projects), 41)
+            self.assertIn("TimerTest", inventories[variant])
             projects.append(base / "lib/ioc/.cproject")
             for path in projects:
                 with self.subTest(project=str(path.relative_to(ROOT))):
@@ -219,6 +222,7 @@ class Nrf54lCorePort(unittest.TestCase):
             # Four managed library configs, each with C and C++ definitions.
             library = (base / "lib/ioc/.cproject").read_text()
             self.assertEqual(library.count(own), 8)
+        self.assertSetEqual(inventories["A"], inventories["B"])
         self.assertFalse((ROOT / "ARM/Nordic/nRF54/nRF54LM20x").exists())
 
     def test_nrf54l15_managed_example_library_paths_match_configuration(self):
@@ -258,7 +262,6 @@ class Nrf54lCorePort(unittest.TestCase):
         for variant in ("A", "B"):
             base = ROOT / ("ARM/Nordic/nRF54/nRF54LM20" + variant)
             projects = sorted(base.glob("exemples/*/ioc/.cproject"))
-            self.assertEqual(len(projects), 40)
             for path in projects:
                 source = path.read_text()
                 sections = list(re.finditer(
@@ -266,6 +269,8 @@ class Nrf54lCorePort(unittest.TestCase):
                     r'core.configurationDataProvider"[^>]*name="([^"]+)"',
                     source))
                 self.assertGreaterEqual(len(sections), 2, str(path))
+                if path.parents[1].name in ("UsbCdcLoopback", "UsbCdcPrbsTx", "UsbIsoLoopback"):
+                    self.assertTrue({"Debug", "Release"} <= {m.group(1) for m in sections}, path)
                 for i, match in enumerate(sections):
                     config = match.group(1)
                     end = sections[i + 1].start() if i + 1 < len(sections) else len(source)
@@ -274,12 +279,12 @@ class Nrf54lCorePort(unittest.TestCase):
                         r'lib/ioc/(Debug(?:_SDC)?|Release(?:_SDC)?)',
                         section)
                     expected = "Release" if config.startswith("Release") else "Debug"
+                    self.assertTrue(library_paths, (path, config))
                     for linked in library_paths:
                         with self.subTest(project=str(path.relative_to(ROOT)),
                                           config=config, linked=linked):
                             self.assertTrue(linked.startswith(expected))
-                    if library_paths:
-                        self.assertIn("IOsonata_nRF54LM20" + variant, section)
+                    self.assertIn("IOsonata_nRF54LM20" + variant, section)
 
     def test_lm20a_default_startup_restored_after_64mhz_validation(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()

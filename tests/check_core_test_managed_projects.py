@@ -2,11 +2,25 @@
 """Verify generic CoreClockTest/CorePowerTest Eclipse project migration."""
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class CoreTestProjects(unittest.TestCase):
+    def check_build_paths(self, cproject, project_name):
+        configs = ET.fromstring(cproject).findall(".//storageModule[@moduleId='cdtBuildSystem']/configuration")
+        self.assertTrue(configs, project_name)
+        for config in configs:
+            name = config.attrib["name"]
+            builders = config.findall(".//builder")
+            self.assertTrue(builders, (project_name, name))
+            for builder in builders:
+                self.assertIn(builder.get("buildPath"), (
+                    "${ProjDirPath}/" + name,
+                    "${workspace_loc:/" + project_name + "}/" + name,
+                ), (project_name, name))
+
     def test_legacy_managed_projects_removed(self):
         for old in ("ClockDemo", "PowerOffDemo"):
             found = list(ROOT.glob("ARM/**/exemples/" + old + "/ioc/.project"))
@@ -31,7 +45,7 @@ class CoreTestProjects(unittest.TestCase):
                     self.assertIn("<name>" + name + "</name>", project)
                     self.assertIn("exemples/misc/" + source, project)
                     self.assertIn("src/" + source, project)
-                    self.assertIn("${workspace_loc:/" + name + "}", cproject)
+                    self.check_build_paths(cproject, name)
                     self.assertNotIn("ClockDemo", project + cproject)
                     self.assertNotIn("PowerOffDemo", project + cproject)
 
@@ -49,7 +63,7 @@ class CoreTestProjects(unittest.TestCase):
                 self.assertIn("<name>TimerTest</name>", project)
                 self.assertIn("exemples/misc/timer_test.cpp", project)
                 self.assertIn("src/timer_test.cpp", project)
-                self.assertIn("${workspace_loc:/TimerTest}", cproject)
+                self.check_build_paths(cproject, "TimerTest")
                 self.assertNotIn("CoreClockTest", project + cproject + board)
                 self.assertNotIn("core_clock_test", project + cproject)
                 self.assertNotIn("CORE_CLOCK_TEST", board)
