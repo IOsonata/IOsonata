@@ -135,8 +135,8 @@ extern uint32_t SystemMicroSecLoopCnt;
 
 // CPU clock after reset is OSC8M divided by 8
 
-// Frequencies of generators 0 and 1, set by the clock setup. Kept in .data:
-// the C startup clears .bss after SystemInit.
+// Frequencies of generators 0 and 1, set by the clock setup. Generator 0
+// starts at the CPU clock after reset.
 static uint32_t s_GenFreq[2] = { SAMD_OSC8M_FREQ / 8UL, 0U };
 static uint32_t s_HfUsers;
 static SYSTEM_POWER_MODE s_PowerMode;
@@ -155,20 +155,20 @@ uint32_t SystemnsDelayFactor = 1000000UL;
 #endif
 
 #if SAMD_CLOCK_DIAGNOSTICS
-// The frequencies of the DFLL48M and the FDPLL96M come from their registers:
-// the C startup clears .bss after SystemInit, a variable set there is lost.
-// The startup stage and line are kept in .data for the same reason.
-__attribute__((section(".data"))) static volatile uint32_t s_SamdStartupError;
+// The frequencies of the DFLL48M and the FDPLL96M come from their registers.
+
+// Startup stage of the first failure
+static volatile uint32_t s_SamdStartupError;
 
 // Source line of the failure. The compiler can merge the calls: the
 // debugger then shows one line for all of them, this one is exact.
-__attribute__((section(".data"))) static volatile uint32_t s_SamdStartupLine;
+static volatile uint32_t s_SamdStartupLine;
 
 // All the failures in order, stage << 16 | source line: the first one is
 // also in s_SamdStartupError and s_SamdStartupLine, the next ones are the
 // steps run after it
 #define SAMD_STARTUP_LOG_LEN	4U
-__attribute__((section(".data"))) static volatile uint32_t s_SamdStartupLog[SAMD_STARTUP_LOG_LEN];
+static volatile uint32_t s_SamdStartupLog[SAMD_STARTUP_LOG_LEN];
 
 // Clock registers at the end of the startup:
 // [0] CLKCTRL DFLL48M channel, [1] CLKCTRL FDPLL96M channel,
@@ -176,7 +176,7 @@ __attribute__((section(".data"))) static volatile uint32_t s_SamdStartupLog[SAMD
 // [6] GCLK STATUS, [7] PCLKSR, [8] OSC8M, [9] OSC32K, [10] DFLLCTRL,
 // [11] DPLLSTATUS << 8 | DPLLCTRLA
 #define SAMD_STARTUP_REG_LEN	12U
-__attribute__((section(".data"))) static volatile uint32_t s_SamdStartupReg[SAMD_STARTUP_REG_LEN];
+static volatile uint32_t s_SamdStartupReg[SAMD_STARTUP_REG_LEN];
 
 // Failure of a startup step, the caller returns false
 static bool SamdStartupFailed(uint32_t Error, uint32_t Line)
