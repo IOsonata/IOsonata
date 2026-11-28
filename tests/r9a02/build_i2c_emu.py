@@ -26,8 +26,6 @@ sources = [port + '/src/i2c_r9a02.cpp', port + '/src/i2c_sau_r9a02.cpp', port + 
            port + '/R9A02G021/lib/src/system_r9a02.c', port + '/R9A02G021/lib/src/Vectors_R9A02.c',
            'RISCV/src/ResetEntry.c', 'RISCV/src/iatomic.c', 'src/coredev/i2c.cpp', 'src/device_intrf.cpp']
 sources += [port + '/src/dtc_r9a02.cpp']
-if args.llvm:
-    sources += [port + '/R9A02G021/lib/src/start_llvm.c']
 sources = [root / p for p in sources] + [tests / 'i2c_fixture.cpp']
 objects = []
 for i, source in enumerate(sources):

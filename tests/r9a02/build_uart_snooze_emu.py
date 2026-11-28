@@ -26,8 +26,6 @@ sources = [port + '/src/uart_r9a02.cpp', port + '/src/sau_r9a02.cpp', port + '/s
            port + '/R9A02G021/lib/src/Vectors_R9A02.c', 'RISCV/src/ResetEntry.c', 'RISCV/src/iatomic.c',
            'src/coredev/uart.cpp', 'src/device_intrf.cpp', 'src/cfifo.c']
 sources += [port + '/src/dtc_r9a02.cpp', port + '/src/uarta_r9a02.cpp']
-if args.llvm:
-    sources += [port + '/R9A02G021/lib/src/start_llvm.c']
 sources = [root / p for p in sources] + [tests / 'uart_snooze_fixture.cpp']
 objects = []
 for i, source in enumerate(sources):

@@ -25,8 +25,6 @@ sources = [port + '/src/spi_r9a02.cpp', port + '/src/sau_r9a02.cpp', port + '/sr
            port + '/src/interrupt_r9a02.cpp', port + '/src/iopincfg_r9a02.c',
            port + '/R9A02G021/lib/src/system_r9a02.c', port + '/R9A02G021/lib/src/Vectors_R9A02.c',
            'RISCV/src/ResetEntry.c', 'src/coredev/spi.cpp', 'src/device_intrf.cpp']
-if args.llvm:
-    sources.append(port + '/R9A02G021/lib/src/start_llvm.c')
 sources = [root / p for p in sources] + [tests / 'spi_slave_fixture.cpp']
 objects = []
 for i, source in enumerate(sources):
