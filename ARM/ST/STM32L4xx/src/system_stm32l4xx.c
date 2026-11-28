@@ -73,7 +73,7 @@ SOFTWARE.
 #define VCO_FREQ_MIN		64000000
 #define VCO_FREQ_MAX		344000000
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated delay-loop iterations per second, defined in ResetEntry.c
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;

@@ -65,7 +65,7 @@ SOFTWARE.
 #define CLK_MIN						2660000
 #define CLK_MAX						8000000
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated delay-loop iterations per second, defined in ResetEntry.c
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK_MAX;
