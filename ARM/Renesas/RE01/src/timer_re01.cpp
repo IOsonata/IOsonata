@@ -71,6 +71,116 @@ RE01_TimerData_t g_Re01TimerData[RE01_TIMER_MAXCNT] = {
 	{.DevNo = 8, .pGptReg = (GPT320_Type*)GPT165, .IrqOvr = (IRQn_Type)-1},
 };
 
+static uint32_t s_TimerModuleGates;
+
+bool Re01TimerClockEnable(RE01_TimerData_t *pDev)
+{
+	uint32_t state = DisableInterrupt();
+	bool ready;
+
+	if (!pDev->ClockHeld)
+	{
+		pDev->ClockHeld = pDev->LowClock ? SystemLowFreqClockEnable() : SystemHighFreqClockEnable();
+	}
+	ready = pDev->ClockHeld;
+	EnableInterrupt(state);
+	return ready;
+}
+
+void Re01TimerClockDisable(RE01_TimerData_t *pDev)
+{
+	uint32_t state = DisableInterrupt();
+
+	if (pDev->ClockHeld)
+	{
+		if (pDev->LowClock)
+		{
+			SystemLowFreqClockDisable();
+		}
+		else
+		{
+			SystemHighFreqClockDisable();
+		}
+		pDev->ClockHeld = false;
+	}
+	EnableInterrupt(state);
+}
+
+static uint32_t TimerModuleMask(int DevNo)
+{
+	if (DevNo < RE01_TIMER_AGT_CNT)
+	{
+		return MSTP_MSTPCRD_MSTPD3_Msk >> DevNo;
+	}
+	if (DevNo == RE01_TIMER_AGT_CNT)
+	{
+		return MSTP_MSTPCRD_MSTPD1_Msk;
+	}
+
+	return DevNo < RE01_TIMER_GPT_DEVNO + 2 ? MSTP_MSTPCRD_MSTPD5_Msk : MSTP_MSTPCRD_MSTPD6_Msk;
+}
+
+static bool TimerRunning(const RE01_TimerData_t *pDev)
+{
+	if (pDev->DevNo < RE01_TIMER_AGT_CNT)
+	{
+		return (pDev->pAgtReg->AGTCR & AGT0_AGTCR_TSTART_Msk) != 0;
+	}
+	if (pDev->DevNo == RE01_TIMER_AGT_CNT)
+	{
+		return TMR1->TCCR != 0;
+	}
+
+	return (pDev->pGptReg->GTCR & GPT320_GTCR_CST_Msk) != 0;
+}
+
+static bool Re01TimerPowerOff(TimerDev_t *pTimer)
+{
+	uint32_t state = DisableInterrupt();
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	uint32_t mask;
+
+	if (dev == NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	mask = TimerModuleMask(dev->DevNo);
+	pTimer->Disable(pTimer);
+	for (int i = 0; i < pTimer->GetMaxTrigger(pTimer); i++)
+	{
+		pTimer->DisableTrigger(pTimer, i);
+	}
+	Re01UnregisterIntHandler(dev->IrqOvr);
+	dev->IrqOvr = (IRQn_Type)-1;
+	if (dev->DevNo < RE01_TIMER_AGT_CNT && !dev->WakeWasEnabled)
+	{
+		ICU->WUPEN &= ~(ICU_WUPEN_AGT0CAWUPEN_Msk >> dev->DevNo);
+	}
+	dev->pTimer = NULL;
+	pTimer->Freq = 0;
+	pTimer->nsPeriod = 0;
+	pTimer->Rollover = 0;
+	pTimer->LastCount = 0;
+
+	if (s_TimerModuleGates & mask)
+	{
+		for (int i = 0; i < RE01_TIMER_MAXCNT; i++)
+		{
+			if (g_Re01TimerData[i].pTimer && TimerModuleMask(i) == mask)
+			{
+				EnableInterrupt(state);
+				return true;
+			}
+		}
+		MSTP->MSTPCRD |= mask;
+		s_TimerModuleGates &= ~mask;
+	}
+	EnableInterrupt(state);
+	return true;
+}
+
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer == NULL || pCfg == NULL)
@@ -87,29 +197,32 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	RE01_TimerData_t *dev = &g_Re01TimerData[pCfg->DevNo];
 	uint32_t state = DisableInterrupt();
-	for (int i = 0; i < RE01_TIMER_MAXCNT; i++)
-	{
-		if (g_Re01TimerData[i].pTimer == pTimer && &g_Re01TimerData[i] != dev)
-		{
-			EnableInterrupt(state);
-			return false;
-		}
-	}
 	if (dev->pTimer && dev->pTimer != pTimer)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
-	if (dev->pTimer)
+	for (int i = 0; i < RE01_TIMER_MAXCNT; i++)
 	{
-		dev->pTimer->Disable(dev->pTimer);
-		for (int i = 0; i < dev->pTimer->GetMaxTrigger(dev->pTimer); i++)
+		if (g_Re01TimerData[i].pTimer == pTimer)
 		{
-			dev->pTimer->DisableTrigger(dev->pTimer, i);
+			if (TimerRunning(&g_Re01TimerData[i]))
+			{
+				EnableInterrupt(state);
+				return false;
+			}
+			Re01TimerPowerOff(pTimer);
+			break;
 		}
-		Re01UnregisterIntHandler(dev->IrqOvr);
-		dev->IrqOvr = (IRQn_Type)-1;
 	}
+	uint32_t mask = TimerModuleMask(dev->DevNo);
+	s_TimerModuleGates |= MSTP->MSTPCRD & mask;
+	MSTP->MSTPCRD &= ~mask;
+	dev->LowClock = dev->DevNo < RE01_TIMER_AGT_CNT &&
+		(pCfg->ClkSrc == TIMER_CLKSRC_DEFAULT || pCfg->ClkSrc == TIMER_CLKSRC_LFRC ||
+		 pCfg->ClkSrc == TIMER_CLKSRC_LFXTAL);
+	dev->WakeWasEnabled = dev->DevNo < RE01_TIMER_AGT_CNT &&
+		(ICU->WUPEN & (ICU_WUPEN_AGT0CAWUPEN_Msk >> dev->DevNo));
 	dev->pTimer = pTimer;
 	dev->BaseFreq = 0;
 	memset(dev->CC, 0, sizeof(dev->CC));
@@ -132,20 +245,10 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	{
 		result = Re01GptInit(dev, pCfg);
 	}
+	pTimer->PowerOff = Re01TimerPowerOff;
 	if (!result)
 	{
-		dev->pTimer->Disable(dev->pTimer);
-		for (int i = 0; i < dev->pTimer->GetMaxTrigger(dev->pTimer); i++)
-		{
-			dev->pTimer->DisableTrigger(dev->pTimer, i);
-		}
-		Re01UnregisterIntHandler(dev->IrqOvr);
-		dev->IrqOvr = (IRQn_Type)-1;
-		pTimer->Freq = 0;
-		pTimer->nsPeriod = 0;
-		pTimer->Rollover = 0;
-		pTimer->LastCount = 0;
-		dev->pTimer = NULL;
+		Re01TimerPowerOff(pTimer);
 	}
 	EnableInterrupt(state);
 	return result;

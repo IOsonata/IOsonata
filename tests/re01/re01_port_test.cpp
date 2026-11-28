@@ -175,34 +175,24 @@ static void clocks()
 	assert(FLASH->FLWT == 0x5A);
 	assert(SYSTEM->SCKDIVCR == ((2UL << SYSTEM_SCKDIVCR_ICK_Pos) | (3UL << SYSTEM_SCKDIVCR_PCKB_Pos)));
 	SYSTEM->PRCR = 0xA502;
-	assert(SystemPeriphClockSet(0, 64000000) == 64000000);
-	assert(SystemPeriphClockSet(1, 64000000) == 32000000);
-	assert((SYSTEM->PRCR & 0xF) == 2);
-	assert(SystemPeriphClockSet(0, 16000000) == 16000000);
-	assert(SystemPeriphClockGet(1) <= 16000000);
 	uint32_t div = SYSTEM->SCKDIVCR;
 	assert(SystemPeriphClockSet(-1, 1000) == 0);
 	assert(SystemPeriphClockSet(2, 1000) == 0);
-	assert(SystemPeriphClockSet(0, 0) == 0);
-	assert(SystemPeriphClockSet(1, 1) == 1000000);
-	div = SYSTEM->SCKDIVCR;
-	assert(SYSTEM->SCKDIVCR == div);
+	assert(SystemPeriphClockSet(0, 64000000) == 16000000);
+	assert(SystemPeriphClockSet(1, 1) == 8000000);
 	MSTP->MSTPCRB &= ~MSTP_MSTPCRB_MSTPB27_Msk;
-	uint32_t wait = FLASH->FLWT;
-	assert(SystemPeriphClockSet(0, 64000000) == 0);
-	assert(SYSTEM->SCKDIVCR == div && FLASH->FLWT == wait);
-	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 2000000));
+	assert(SystemPeriphClockSet(0, 0) == 16000000);
+	assert(SYSTEM->SCKDIVCR == div && FLASH->FLWT == 0x5A);
 	MSTP->MSTPCRB = 0xffffffffU;
 	*(volatile uint8_t *)&SYSTEM->PWSTF = SYSTEM_PWSTF_ALLPWONM_Msk;
-	assert(SystemCoreClockSelect(OSC_TYPE_RC, 2000000));
-	assert(SystemCoreClock == 2000000 && (SYSTEM->PRCR & 0xfU) == 2);
-	SYSTEM->LOCOCR = 1;
+	g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
+	g_McuOsc.CoreOsc.Freq = 2000000;
+	g_McuOsc.LowPwrOsc.Type = OSC_TYPE_XTAL;
 	SYSTEM->SOSCCR = 1;
-	assert(SystemLowFreqClockSelect(OSC_TYPE_RC, 32768));
-	assert(SYSTEM->LOCOCR == 0 && SYSTEM->SOSCCR == 1);
-	assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768));
-	assert(SYSTEM->LOCOCR == 0 && SYSTEM->SOSCCR == 0);
-	assert(!SystemLowFreqClockSelect(OSC_TYPE_TCXO, 32768));
+	SystemInit();
+	assert(SystemCoreClock == 2000000 && SYSTEM->SOSCCR == 0);
+	g_McuOsc.LowPwrOsc.Type = OSC_TYPE_RC;
+	SYSTEM->LOCOCR = 1;
 	SYSTEM->RSTSR0 = SYSTEM_RSTSR0_DPSRSTF_Msk;
 	SYSTEM->DPSIER0 = 15;
 	SYSTEM->DPSIER1 = 0x33;
@@ -212,6 +202,8 @@ static void clocks()
 	SYSTEM->DPSBYCR = 0xc0;
 	SYSTEM->SNZCR = 0x80;
 	SystemInit();
+	assert(SYSTEM->LOCOCR == 0 && SystemLowFreqClockEnable());
+	SystemLowFreqClockDisable();
 	assert(SYSTEM->DPSIER0 == 0 && SYSTEM->DPSIER1 == 0);
 	assert(SYSTEM->DPSIFR0 == 4 && SYSTEM->DPSIFR1 == 0x20);
 	assert(SYSTEM->RSTSR0 == SYSTEM_RSTSR0_DPSRSTF_Msk);
@@ -222,6 +214,17 @@ static void clocks()
 	SYSTEM->SCKDIVCR = 1UL << SYSTEM_SCKDIVCR_PCKB_Pos;
 	SystemCoreClockUpdate();
 	assert(SystemCoreClock == 48000000 && SystemPeriphClockGet(1) == 24000000);
+	assert(SystemHighFreqClockEnable() && SystemHighFreqClockEnable());
+	SystemHighFreqClockDisable();
+	assert(!SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+	SystemHighFreqClockDisable();
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+	assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER && SystemCoreClock == 24000000);
+	assert(FLASH->FLWT == 0 && SystemPeriphClockGet(1) == 24000000);
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+	assert(SystemCoreClock == 48000000 && FLASH->FLWT == 1);
+	assert((SYSTEM->PRCR & 0xfU) == 2);
+
 }
 
 static void icuAndGpio()
@@ -317,23 +320,10 @@ static void icuAndGpio()
 	restore();
 	assert(countRoutes() == 0);
 	IOPinConfig(1, 5, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
-	assert(SystemWakePin(1, 5, IOPINSENSE_LOW_TRANSITION));
-	assert(SystemWakePin(1, 5, IOPINSENSE_HIGH_TRANSITION));
-	assert(!SystemWakePin(2, 5, IOPINSENSE_LOW_TRANSITION));
-	assert(!SystemWakePin(2, 5, IOPINSENSE_DISABLE));
-	assert(!IOPinEnableInterrupt(8, 1, 1, 5, IOPINSENSE_TOGGLE, hook, &a));
-	pfs = *(volatile uint32_t *)(PFS_BASE + (16 + 5) * 4);
-	IOPinConfig(1, 5, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-	IOPinSetSense(1, 5, IOPINSENSE_TOGGLE);
-	assert(*(volatile uint32_t *)(PFS_BASE + (16 + 5) * 4) == pfs);
-	assert(SystemWakePin(1, 5, IOPINSENSE_DISABLE));
-	assert((ICU->WUPEN & (1U << 8)) == 0 && countRoutes() == 0);
-	assert(IOPinEnableInterrupt(8, 1, 1, 5, IOPINSENSE_TOGGLE, hook, &a));
-	assert(!SystemWakePin(1, 5, IOPINSENSE_LOW_TRANSITION));
-	assert(!SystemWakePin(1, 5, IOPINSENSE_DISABLE));
+	assert(IOPinEnableInterrupt(8, 1, 1, 5, IOPINSENSE_LOW_TRANSITION, hook, &a));
+	assert(!IOPinEnableInterrupt(8, 1, 2, 5, IOPINSENSE_HIGH_TRANSITION, hook, &a));
 	IOPinDisableInterrupt(8);
-	assert(!SystemWakePin(-1, 0, IOPINSENSE_LOW_TRANSITION));
-	assert(!SystemWakePin(1, 5, IOPINSENSE_TOGGLE));
+	assert((ICU->WUPEN & (1U << 8)) == 0 && countRoutes() == 0);
 
 	const int deepPins[4][2] = {{4, 11}, {2, 7}, {4, 10}, {4, 9}};
 	for (unsigned i = 0; i < 4; i++)
@@ -345,30 +335,27 @@ static void icuAndGpio()
 		SYSTEM->DPSIER0 = other;
 		SYSTEM->DPSIEGR0 = other;
 		IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
-		assert(SystemWakePin(port, pin, IOPINSENSE_LOW_TRANSITION));
+		assert(IOPinEnableInterrupt(i, 1, port, pin, IOPINSENSE_LOW_TRANSITION, hook, &a));
 		assert(SYSTEM->DPSIER0 == (other | (1U << i)) && SYSTEM->DPSIEGR0 == other);
-		assert(SystemWakePin(port, pin, IOPINSENSE_HIGH_TRANSITION));
+		assert(IOPinEnableInterrupt(i, 1, port, pin, IOPINSENSE_HIGH_TRANSITION, hook, &a));
 		assert(SYSTEM->DPSIEGR0 == (other | (1U << i)) && SYSTEM->PRCR == 0xa509);
-		assert(SystemWakePin(port, pin, IOPINSENSE_DISABLE));
+		IOPinDisableInterrupt(i);
 		assert(SYSTEM->DPSIER0 == other && SYSTEM->DPSIEGR0 == other);
 		SYSTEM->DPSIER0 = 1U << i;
-		assert(!SystemWakePin(port, pin, IOPINSENSE_LOW_TRANSITION));
-		assert(!SystemWakePin(port, pin, IOPINSENSE_DISABLE));
+		assert(IOPinEnableInterrupt(i, 1, port, pin, IOPINSENSE_LOW_TRANSITION, hook, &a));
+		IOPinDisableInterrupt(i);
 		assert(SYSTEM->DPSIER0 == (1U << i) && countRoutes() == 0);
 		SYSTEM->DPSIER0 = 0;
-		assert(SystemWakePin(port, pin, IOPINSENSE_LOW_TRANSITION));
+		assert(IOPinEnableInterrupt(i, 1, port, pin, IOPINSENSE_LOW_TRANSITION, hook, &a));
 		IOPinDisable(port, pin);
 		assert(SYSTEM->DPSIER0 == 0 && countRoutes() == 0);
 	}
 	SYSTEM->DPSIEGR0 = 0;
 	SYSTEM->SYOCDCR = SYSTEM_SYOCDCR_DBGEN_Msk;
-	assert(!SystemWakePin(4, 11, IOPINSENSE_LOW_TRANSITION));
-	assert(!SystemWakePin(2, 7, IOPINSENSE_LOW_TRANSITION));
-	SYSTEM->SYOCDCR = 0;
-	IOPinConfig(1, 6, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
-	assert(SystemWakePin(1, 6, IOPINSENSE_LOW_TRANSITION));
+	assert(IOPinEnableInterrupt(0, 1, 4, 11, IOPINSENSE_HIGH_TRANSITION, hook, &a));
 	assert(SYSTEM->DPSIER0 == 0);
-	assert(SystemWakePin(1, 6, IOPINSENSE_DISABLE));
+	IOPinDisableInterrupt(0);
+	SYSTEM->SYOCDCR = 0;
 
 }
 
@@ -487,6 +474,8 @@ static void timers()
 	assert(t.EnableTrigger(&t, 0, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
 	assert(TMR01->TCORA == cmp && t.FindAvailTrigger(&t) == 0);
 	restore();
+	assert(!TimerInit(&t, &cfg));
+	t.Disable(&t);
 	assert(TimerInit(&t, &cfg)); // reinitialization releases compare routes
 	assert(countRoutes() == 1);
 	t.Disable(&t);
@@ -501,6 +490,7 @@ static void timers()
 	// Above the range: the closest, the highest
 	assert(a.SetFrequency(&a, UINT32_MAX) == 32768 && AGT0->AGTMR2_b.CKS == 0);
 	cfg.Freq = 100000000;
+	a.Disable(&a);
 	assert(TimerInit(&a, &cfg) && a.Freq == 32768);
 	cfg.Freq = 1000000;
 	assert(a.SetFrequency(&a, 1) == 256 && AGT0->AGTMR2_b.CKS == 7);
@@ -508,6 +498,7 @@ static void timers()
 	a.Reset(&a);
 	assert(AGT0->AGT == 0xFFFF && a.Rollover == 0 && a.GetTickCount(&a) == 0);
 	cfg.ClkSrc = TIMER_CLKSRC_HFRC; cfg.Freq = 24000000;
+	a.Disable(&a);
 	assert(TimerInit(&a, &cfg));
 	assert(AGT0->AGTMR1_b.TCK == 0 && a.Freq == 24000000);
 	assert(a.EnableTrigger(&a, 0, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 10000);
@@ -554,8 +545,9 @@ static void timers()
 	assert(a.EnableTrigger(&a, 1, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
 	AGT0->AGTCR |= AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk;
 	timerIrq(g_Re01TimerData[0].IrqMatch[0]);
-	assert(a.Freq == 0 && !a.Enable(&a) && (timerEvents[0] & TIMER_EVT_TRIGGER(1)));
+	assert(a.Freq != 0 && (timerEvents[0] & TIMER_EVT_TRIGGER(1)));
 	AGT0->AGTCR &= ~AGT0_AGTCR_TCSTF_Msk;
+	a.Disable(&a);
 	assert(TimerInit(&a, &cfg)); // the second callback survived first-callback failure
 	assert(a.EnableTrigger(&a, 0, 10000, TIMER_TRIG_TYPE_SINGLE, triggerRearm, &rearmed));
 	AGT0->AGTCR |= AGT0_AGTCR_TCMAF_Msk; timerIrq(g_Re01TimerData[0].IrqMatch[0]);
@@ -590,6 +582,12 @@ static void timers()
 	assert(overflowReads[1] == 0x10007 && b.GetTickCount(&b) == 0x10007);
 	cfg.ClkSrc = TIMER_CLKSRC_EXT;
 	assert(!TimerInit(&b, &cfg));
+	assert(TimerPowerOff(&b) && TimerPowerOff(&a) && TimerPowerOff(&t));
+	assert(!a.Enable(&a) && countRoutes() == 0);
+	assert(TimerInit(&t, &moved));
+	t.Disable(&t);
+	moved.DevNo = 1;
+	assert(TimerInit(&t, &moved) && TimerPowerOff(&t));
 	release();
 }
 
@@ -734,6 +732,7 @@ static void gptTimers()
 		assert(timer.FindAvailTrigger(&timer) == 0 && reg->GTCCRA == deadline);
 		restore();
 		assert(timer.EnableTrigger(&timer, 3, 10000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
+		timer.Disable(&timer);
 		assert(TimerInit(&timer, &cfg) && timer.FindAvailTrigger(&timer) == 0);
 		for (int i = 0; i < 4; i++) assert(dev.IrqMatch[i] == (IRQn_Type)-1 && *cmp[i] == 0);
 		timer.Disable(&timer);
@@ -744,7 +743,12 @@ static void gptTimers()
 	assert(timers[0].Enable(&timers[0]) && timers[1].Enable(&timers[1]));
 	GPT321->GTCNT = 42; timers[0].Disable(&timers[0]); timers[0].Reset(&timers[0]);
 	assert(GPT321->GTCR_b.CST && GPT321->GTCNT == 42);
-	timers[1].Disable(&timers[1]);
+	assert(TimerPowerOff(&timers[0]));
+	assert(!(MSTP->MSTPCRD & MSTP_MSTPCRD_MSTPD5_Msk));
+	for (int i = 1; i < RE01_TIMER_GPT_CNT; i++) assert(TimerPowerOff(&timers[i]));
+	assert(MSTP->MSTPCRD & MSTP_MSTPCRD_MSTPD5_Msk);
+	assert(MSTP->MSTPCRD & MSTP_MSTPCRD_MSTPD6_Msk);
+	assert(countRoutes() == 0);
 	release();
 }
 

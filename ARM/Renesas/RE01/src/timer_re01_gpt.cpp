@@ -205,7 +205,7 @@ static void Re01GptOverflowIRQHandler(int IntNo, void *pCtx)
 static bool Re01GptEnable(TimerDev_t *pTimer)
 {
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
-	if (dev == NULL)
+	if (dev == NULL || !Re01TimerClockEnable(dev))
 	{
 		return false;
 	}
@@ -219,6 +219,7 @@ static void Re01GptDisable(TimerDev_t *pTimer)
 	if (dev)
 	{
 		dev->pGptReg->GTCR &= ~GPT320_GTCR_CST_Msk;
+		Re01TimerClockDisable(dev);
 	}
 }
 
@@ -383,7 +384,6 @@ bool Re01GptInit(RE01_TimerData_t * const dev, const TimerCfg_t * const pCfg)
 	TimerDev_t *timer = dev->pTimer;
 	timer->DevNo = pCfg->DevNo;
 	timer->EvtHandler = pCfg->EvtHandler;
-	timer->PowerOff = NULL;
 	timer->Enable = Re01GptEnable;
 	timer->Disable = Re01GptDisable;
 	timer->Reset = Re01GptReset;
@@ -399,9 +399,6 @@ bool Re01GptInit(RE01_TimerData_t * const dev, const TimerCfg_t * const pCfg)
 	dev->BaseFreq = SystemPeriphClockGet(0); // PCLKA = ICLK; register bus uses PCLKB.
 	if (dev->BaseFreq == 0) return false;
 
-	uint32_t clkmask = dev->DevNo < RE01_TIMER_GPT_DEVNO + 2 ?
-		MSTP_MSTPCRD_MSTPD5_Msk : MSTP_MSTPCRD_MSTPD6_Msk;
-	MSTP->MSTPCRD &= ~clkmask;
 	GPT320_Type *reg = dev->pGptReg;
 	reg->GTWP = 0xA500UL;
 	reg->GTCR = 0;

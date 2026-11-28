@@ -38,26 +38,12 @@ SOFTWARE.
 static uint32_t s_ResetReason;
 static bool s_ResetRead;
 
-// IRQ event codes in each group of eight IELSR entries.
-static const uint8_t s_WakeGroup[10] = {0, 1, 2, 3, 4, 5, 6, 7, 0, 2};
-static const uint8_t s_WakeEvent[10] = {1, 1, 1, 1, 0x13, 0x12, 0x12, 0x13, 0x1e, 0x1f};
-
 // SystemSleep and SystemPowerOff below, with the wake pin and CCC timer
 // wakes SystemResetReason reports. No retention register or RAM retention.
 uint32_t SystemPowerCapabilitiesGet(void)
 {
 	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_SYSTEM_OFF |
-		   SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE;
-}
-
-bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
-{
-	return Mode == SYSTEM_POWER_MODE_PERFORMANCE;
-}
-
-SYSTEM_POWER_MODE SystemPowerModeGet(void)
-{
-	return SYSTEM_POWER_MODE_PERFORMANCE;
+		   SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE | SYSTEM_POWER_CAP_LOW_POWER;
 }
 
 uint32_t SystemResetReason(void)
@@ -114,35 +100,13 @@ void SystemSleep(void)
 	uint8_t power = SYSTEM->PWSTCR;
 	uint8_t ram = SYSTEM->RAMSDCR;
 	uint32_t tick = SysTick->CTRL;
-	uint32_t wake = 0;
-	volatile uint32_t *routes = &ICU->IELSR0;
 
 	// Boost cannot enter Software Standby. Keep an application's Snooze or
 	// DTC configuration intact by using ordinary Sleep in those cases.
 	bool deep = SYSTEM->PWSTF == SYSTEM_PWSTF_ALLPWONM_Msk &&
 		(SYSTEM->SNZCR & SYSTEM_SNZCR_SNZE_Msk) == 0 &&
 		(SYSTEM->MSTPCRA & SYSTEM_MSTPCRA_MSTPA22_Msk) != 0 &&
-		(ICU->WUPEN & ~0x3ffUL) == 0;
-	if (deep)
-	{
-		for (unsigned pin = 0; pin < 10; pin++)
-		{
-			if ((ICU->WUPEN & (1UL << pin)) == 0)
-			{
-				continue;
-			}
-			for (unsigned irq = 0; irq < 32; irq++)
-			{
-				unsigned group = irq & 7U;
-				if ((group == s_WakeGroup[pin] || (pin < 4 && group == pin + 4)) &&
-					(routes[irq] & ICU_IELSR0_IELS_Msk) == s_WakeEvent[pin])
-				{
-					wake |= 1UL << irq;
-				}
-			}
-		}
-		deep = (wake & NVIC->ISER[0]) != 0;
-	}
+		(ICU->WUPEN & 0x3ffUL) != 0 && (ICU->WUPEN & ~0x3ffUL) == 0;
 	if (SCB->ICSR & (SCB_ICSR_PENDSTSET_Msk | SCB_ICSR_PENDSVSET_Msk))
 	{
 		EnableInterrupt(state);

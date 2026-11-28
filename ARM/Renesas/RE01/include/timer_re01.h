@@ -78,6 +78,9 @@ typedef struct {
 	};
 	uint32_t BaseFreq;
 	uint8_t TmrClock;		//!< TMR1 source/divider retained across Disable/Enable
+	bool ClockHeld;
+	bool LowClock;
+	bool WakeWasEnabled;
 	uint32_t CC[RE01_TIMER_CC_MAXCNT];
 	uint32_t Deadline[RE01_TIMER_TRIG_MAXCNT];	//!< Count of the next trigger call (TMR, GPT), tick count (AGT, low 16 bits)
 	uint32_t Margin;		//!< Counts a compare must be ahead when a compare interrupt returns
@@ -95,6 +98,8 @@ typedef struct {
 extern "C" {
 #endif
 
+bool Re01TimerClockEnable(RE01_TimerData_t *pDev);
+void Re01TimerClockDisable(RE01_TimerData_t *pDev);
 bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const pCfg);
 bool Re01TmrInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const pCfg);
 bool Re01GptInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const pCfg);

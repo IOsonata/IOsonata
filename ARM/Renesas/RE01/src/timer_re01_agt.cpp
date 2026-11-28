@@ -228,7 +228,7 @@ static bool Re01AgtEnable(TimerDev_t * const pTimer)
 {
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
 
-	if (dev == NULL) return false;
+	if (dev == NULL || !Re01TimerClockEnable(dev)) return false;
 	dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
 
 	return true;
@@ -244,7 +244,11 @@ static void Re01AgtDisable(TimerDev_t * const pTimer)
 {
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
 
-	if (dev) dev->pAgtReg->AGTCR &= ~AGT0_AGTCR_TSTART_Msk;
+	if (dev)
+	{
+		dev->pAgtReg->AGTCR &= ~AGT0_AGTCR_TSTART_Msk;
+		Re01TimerClockDisable(dev);
+	}
 }
 
 /**
@@ -573,7 +577,6 @@ bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
 	pTimerData->pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimerData->pTimer->Disable = Re01AgtDisable;
-	pTimerData->pTimer->PowerOff = NULL;
 	pTimerData->pTimer->Enable = Re01AgtEnable;
 	pTimerData->pTimer->Reset = Re01AgtReset;
 	pTimerData->pTimer->GetTickCount = Re01AgtGetTickCount;
@@ -600,7 +603,6 @@ bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 		}
 	}
 
-	MSTP->MSTPCRD &= ~(0x8 >> pCfg->DevNo) ;
 
 	if (!Re01AgtStop(pTimerData))
 	{

@@ -186,7 +186,7 @@ static bool Re01TmrEnable(TimerDev_t * const pTimer)
 {
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
 
-	if (dev == NULL) return false;
+	if (dev == NULL || !Re01TimerClockEnable(dev)) return false;
 	// 16bits mode
 	TMR0->TCCR = TMR0_TCCR_CSS_Msk;
 	TMR1->TCCR = dev->TmrClock;
@@ -202,9 +202,12 @@ static bool Re01TmrEnable(TimerDev_t * const pTimer)
  */
 static void Re01TmrDisable(TimerDev_t * const pTimer)
 {
-	if (Re01TimerData(pTimer) == NULL) return;
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+
+	if (dev == NULL) return;
 	TMR0->TCCR = 0;
 	TMR1->TCCR = 0;
+	Re01TimerClockDisable(dev);
 }
 
 /**
@@ -507,7 +510,6 @@ bool Re01TmrInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
 	pTimerData->pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimerData->pTimer->Disable = Re01TmrDisable;
-	pTimerData->pTimer->PowerOff = NULL;
 	pTimerData->pTimer->Enable = Re01TmrEnable;
 	pTimerData->pTimer->Reset = Re01TmrReset;
 	pTimerData->pTimer->GetTickCount = Re01TmrGetTickCount;
@@ -519,7 +521,6 @@ bool Re01TmrInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	pTimerData->pTimer->DisableExtTrigger = Re01TmrDisableExtTrigger;
 	pTimerData->pTimer->EnableExtTrigger = Re01TmrEnableExtTrigger;
 
-	MSTP->MSTPCRD &= ~MSTP_MSTPCRD_MSTPD1_Msk;
 
 	if (pCfg->ClkSrc == TIMER_CLKSRC_EXT)
 	{

@@ -260,7 +260,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Runtime peripheral/PLL ownership and clock decoding checked; hardware pending |
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
-| RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Core/LF selectors, active-module checks and Boost exit implemented; hardware pending |
+| RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Startup oscillator setup, CPU divider modes and shared timer clocks implemented. Hardware validation pending |
 | ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; optional 160 MHz PLL profile and RTC/LP SRAM retention implemented, hardware validation pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
@@ -1035,14 +1035,10 @@ use ordinary Sleep. Both paths preserve the caller's interrupt mask, register
 protection, sleep settings and pending interrupts. Drivers still own stopping
 peripherals before Standby. The port does not enable a watchdog.
 
-`SystemWakePin()` uses the existing GPIO interrupt allocator for IRQ0 through
-IRQ9. It accepts rising or falling edges on the fixed interrupt pin mappings.
-An application GPIO handler or a pin already used for another function is not
-replaced. Reconfiguring the same wake pin changes its edge; disabling it
-releases only its own route. Disable wake before changing that pin's function.
-On the four dedicated Deep Standby pins, it also reserves the corresponding
-DPSIER0/DPSIEGR0 setting, preserving unrelated wake sources. Other IRQ pins
-remain usable for `SystemSleep()` only.
+Configure a GPIO interrupt with `IOPinAllocateInterrupt()` or
+`IOPinEnableInterrupt()`. Rising and falling edges on the four dedicated pins
+also enable Deep Standby wake. Toggle sensing uses the ordinary IRQ. Disabling
+the interrupt releases the wake setting that the GPIO driver enabled.
 
 | Deep Standby source | Pin |
 | --- | --- |
@@ -1051,21 +1047,19 @@ remain usable for `SystemSleep()` only.
 | IRQ2-DS | P4.10 |
 | IRQ3-DS | P4.9 |
 
-P4.11 and P2.7 share debug functions and are refused while debug is enabled.
+P4.11 and P2.7 share debug functions. Their dedicated Deep Standby wake
+inputs remain disabled during debugging.
 
-Startup no longer uses `goto`. Core-clock changes share the startup sequence
-and preserve a live MOCO fallback when oscillator setup fails. Frequency
-reporting returns zero for stopped or unready sources and reserved dividers.
-Runtime core/divider changes refuse enabled peripheral modules, CLKOUT and
-flash programming. Startup does not apply that runtime module check. Core RC
-and divider requests select the nearest supported frequency; PCLKB remains at
-or below ICLK and 32 MHz. External oscillator descriptors must describe a real
-8-32 MHz input. Applications own retiming SysTick and software delays after a
-runtime clock change. Selecting an internal core clock at 32 MHz or below
-now exits Boost through MOCO, with PLL and HOCO stopped before the transition.
-Changing only a divider does not exit Boost.
-The LF selector starts LOCO or SOSC without stopping a source used by RTC/AGT;
-TCXO selection is unsupported.
+Startup selects the oscillator and sets ICLK and PCLKB. Peripheral clock
+requests return the actual frequency of the shared domain. LOW_POWER divides
+ICLK by two and keeps PCLKB unchanged. PERFORMANCE restores ICLK. A held HF
+clock request prevents a divider transition. Both transitions update the delay
+factors. Clock getters report zero for stopped sources and reserved dividers.
+
+The timer driver numbers AGT0/1 first, followed by the paired TMR and six
+GPT channels. Disable keeps the timer configuration. PowerOff releases its
+interrupts and restores the module-stop bit when the last channel using the
+module powers off. TimerTest exercises all nine devices and sDelay.
 
 The new `CorePowerTest` has six package/configuration targets and uses the
 shared resume-on-interrupt demo, including static and stack RAM samples.

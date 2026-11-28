@@ -81,17 +81,10 @@ __WEAK McuOsc_t g_McuOsc = {
 };
 
 static uint32_t s_PeriphSrcFreq = 0;
+static uint32_t s_PeriphBusFreq;
 
-static bool Re01ClockIdle(void)
-{
-	// Running modules keep the source and dividers used by their drivers.
-	return (SYSTEM->MSTPCRA & SYSTEM_MSTPCRA_MSTPA22_Msk) != 0 &&
-		(MSTP->MSTPCRB & 0xfc4c0b60UL) == 0xfc4c0b60UL &&
-		(MSTP->MSTPCRC & 0x8640e403UL) == 0x8640e403UL &&
-		(MSTP->MSTPCRD & 0x105341ffUL) == 0x105341ffUL &&
-		(SYSTEM->CKOCR & SYSTEM_CKOCR_CKOEN_Msk) == 0 &&
-		FLASH->FENTRYR == 0;
-}
+static uint32_t s_HfUsers;
+static uint32_t s_LfUsers;
 
 static void SetFlashWaitState(uint32_t CoreFreq)
 {
@@ -350,6 +343,7 @@ void SystemCoreClockUpdate(void)
 	}
 
 	s_PeriphSrcFreq = SystemCoreClock;
+	s_PeriphBusFreq = SYSTEM->SCKDIVCR_b.PCKB <= 6 ? s_PeriphSrcFreq >> SYSTEM->SCKDIVCR_b.PCKB : 0;
 
 	SystemCoreClock = divider <= 6 ? SystemCoreClock >> divider : 0;
 
@@ -443,44 +437,7 @@ static bool Re01SetCoreClock(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return false;
 }
 
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	if ((ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL && ClkSrc != OSC_TYPE_TCXO) ||
-		(ClkSrc != OSC_TYPE_RC && (OscFreq < 8000000UL || OscFreq > 32000000UL)))
-	{
-		return false;
-	}
-	if (ClkSrc == OSC_TYPE_RC)
-	{
-		OscFreq = OscFreq <= 13000000UL ? 2000000UL :
-			(OscFreq <= 28000000UL ? 24000000UL :
-			(OscFreq <= 40000000UL ? 32000000UL :
-			(OscFreq <= 56000000UL ? 48000000UL : 64000000UL)));
-	}
-	uint32_t state = DisableInterrupt();
-	if (!Re01ClockIdle() || (SYSTEM->PWSTF &
-		(SYSTEM_PWSTF_ALLPWONM_Msk | SYSTEM_PWSTF_VBBM_Msk)) != SYSTEM_PWSTF_ALLPWONM_Msk)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	uint16_t protection = SYSTEM->PRCR & 0xfU;
-	SYSTEM->PRCR = 0xa503U | protection;
-	bool ready = Re01SetCoreClock(ClkSrc, OscFreq);
-	SYSTEM->PRCR = 0xa500U | protection;
-	SystemCoreClockUpdate();
-	SetFlashWaitState(SystemCoreClock);
-	if (SYSTEM->SCKSCR_b.CKSEL == SYSTEM_SCKSCR_CKSEL_HOCO ||
-		SYSTEM->SCKSCR_b.CKSEL == SYSTEM_SCKSCR_CKSEL_MOCO)
-	{
-		g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
-		g_McuOsc.CoreOsc.Freq = s_PeriphSrcFreq;
-	}
-	EnableInterrupt(state);
-	return ready;
-}
-
-bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+static bool Re01LowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	if (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL)
 	{
@@ -518,6 +475,106 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return ready;
 }
 
+// Startup keeps the configured oscillators running for the CPU and RTC.
+bool SystemHighFreqClockEnable(void)
+{
+	uint32_t state = DisableInterrupt();
+	bool ready = s_PeriphSrcFreq != 0 && s_HfUsers != UINT32_MAX;
+
+	if (ready)
+	{
+		s_HfUsers++;
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state = DisableInterrupt();
+
+	if (s_HfUsers)
+	{
+		s_HfUsers--;
+	}
+	EnableInterrupt(state);
+}
+
+bool SystemLowFreqClockEnable(void)
+{
+	uint32_t state = DisableInterrupt();
+	bool ready = g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC ?
+		SYSTEM->LOCOCR == 0 : SYSTEM->SOSCCR == 0;
+
+	ready = ready && s_LfUsers != UINT32_MAX;
+	if (ready)
+	{
+		s_LfUsers++;
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
+void SystemLowFreqClockDisable(void)
+{
+	uint32_t state = DisableInterrupt();
+
+	if (s_LfUsers)
+	{
+		s_LfUsers--;
+	}
+	EnableInterrupt(state);
+}
+
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	return 0;
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	return 0;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return SYSTEM->SCKDIVCR_b.ICK == 0 ? SYSTEM_POWER_MODE_PERFORMANCE : SYSTEM_POWER_MODE_LOW_POWER;
+}
+
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t state;
+	uint16_t protection;
+	uint32_t divider;
+	bool ready;
+
+	if (Mode != SYSTEM_POWER_MODE_PERFORMANCE && Mode != SYSTEM_POWER_MODE_LOW_POWER)
+	{
+		return false;
+	}
+	divider = Mode == SYSTEM_POWER_MODE_LOW_POWER ? 1U : 0U;
+	state = DisableInterrupt();
+	if (s_PeriphSrcFreq == 0 || SYSTEM->SCKDIVCR_b.PCKB < divider ||
+		(s_HfUsers && SYSTEM->SCKDIVCR_b.ICK != divider))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	protection = SYSTEM->PRCR & 0xfU;
+	SYSTEM->PRCR = 0xa501U | protection;
+	if (divider < SYSTEM->SCKDIVCR_b.ICK)
+	{
+		SetFlashWaitState(s_PeriphSrcFreq >> divider);
+	}
+	SYSTEM->SCKDIVCR_b.ICK = divider;
+	ready = SYSTEM->SCKDIVCR_b.ICK == divider;
+	SystemCoreClockUpdate();
+	SetFlashWaitState(SystemCoreClock);
+	SYSTEM->PRCR = 0xa500U | protection;
+	EnableInterrupt(state);
+	return ready;
+}
+
 void SystemInit(void)
 {
 	uint16_t protection = SYSTEM->PRCR & 0xfU;
@@ -535,7 +592,7 @@ void SystemInit(void)
 	}
 	(void)Re01SetCoreClock(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq);
 	SYSTEM->PRCR = 0xa500U | protection;
-	(void)SystemLowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq);
+	(void)Re01LowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq);
 	SystemCoreClockUpdate();
 	SetFlashWaitState(SystemCoreClock);
 }
@@ -572,98 +629,17 @@ uint32_t SystemPeriphClockGet(int Idx)
 	}
 	else if (Idx == 1)
 	{
-		uint32_t div = (SYSTEM->SCKDIVCR & SYSTEM_SCKDIVCR_PCKB_Msk) >> SYSTEM_SCKDIVCR_PCKB_Pos;
-		clk = div <= 6 ? s_PeriphSrcFreq >> div : 0;
+		clk = s_PeriphBusFreq;
 	}
 
 	return clk;
 }
 
-/**
- * @brief	Set peripheral clock (PCLK) frequency
- *
- * Most often the PCLK numbering starts from 1 (PCLK1, PCLK2,...).
- * Therefore the clock Idx parameter = 0 indicate PCK1, 1 indicate PCLK2
- *
- * @param	Idx  : Zero based peripheral clock number. Many processors can
- * 				   have more than 1 peripheral clock settings.
- * @param	Freq : Clock frequency in Hz.
- *
- * @return	Actual frequency set in Hz.
- * 			0 - Failed
- */
+// ICLK and PCLKB are shared. Peripheral drivers select their local divider.
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-	if ((Idx != 0 && Idx != 1) || Freq == 0 || s_PeriphSrcFreq == 0)
-	{
-		return 0;
-	}
-	if (Idx == 1 && Freq > 32000000UL)
-	{
-		Freq = 32000000UL;
-	}
-	uint32_t state = DisableInterrupt();
-	uint32_t reg = SYSTEM->SCKDIVCR;
-	uint32_t ick = (reg & SYSTEM_SCKDIVCR_ICK_Msk) >> SYSTEM_SCKDIVCR_ICK_Pos;
-	uint32_t pckb = (reg & SYSTEM_SCKDIVCR_PCKB_Msk) >> SYSTEM_SCKDIVCR_PCKB_Pos;
-	if (ick > 6 || pckb > 6)
-	{
-		EnableInterrupt(state);
-		return 0;
-	}
-	uint32_t div = 6;
-	uint32_t error = UINT32_MAX;
-	for (uint32_t candidate = Idx == 1 ? ick : 0; candidate <= 6; candidate++)
-	{
-		uint32_t rate = s_PeriphSrcFreq >> candidate;
-		if (Idx == 1 && rate > 32000000UL)
-		{
-			continue;
-		}
-		uint32_t difference = rate > Freq ? rate - Freq : Freq - rate;
-		if (difference < error)
-		{
-			error = difference;
-			div = candidate;
-		}
-	}
-	if (Idx == 0)
-	{
-		ick = div;
-		if (pckb < ick)
-		{
-			pckb = ick;
-		}
-	}
-	else
-	{
-		pckb = div < ick ? ick : div;
-	}
-	while (pckb < 6 && (s_PeriphSrcFreq >> pckb) > 32000000UL)
-	{
-		pckb++;
-	}
-	uint32_t next = (reg & ~(SYSTEM_SCKDIVCR_ICK_Msk | SYSTEM_SCKDIVCR_PCKB_Msk)) |
-		(ick << SYSTEM_SCKDIVCR_ICK_Pos) | (pckb << SYSTEM_SCKDIVCR_PCKB_Pos);
-	if (next != reg && !Re01ClockIdle())
-	{
-		EnableInterrupt(state);
-		return 0;
-	}
-	if ((s_PeriphSrcFreq >> ick) > SystemCoreClock)
-	{
-		SetFlashWaitState(s_PeriphSrcFreq >> ick);
-	}
-	uint16_t protection = SYSTEM->PRCR & 0xFU;
-	SYSTEM->PRCR = 0xA501U | protection;
-	SYSTEM->SCKDIVCR = next;
-	bool ready = SYSTEM->SCKDIVCR == next;
-	SYSTEM->PRCR = 0xA500U | protection;
-	SystemCoreClockUpdate();
-	SetFlashWaitState(SystemCoreClock);
-	uint32_t actual = SystemPeriphClockGet(Idx);
-	EnableInterrupt(state);
-	return ready ? actual : 0;
+	(void)Freq;
+	return SystemPeriphClockGet(Idx);
 }
 
 uint32_t SystemCoreClockGet()
