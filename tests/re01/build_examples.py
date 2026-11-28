@@ -79,7 +79,8 @@ common = ['ARM/src/ResetEntry.c', 'ARM/src/iatomic.c', 'src/cfifo.c',
           'src/syslog.cpp', 'src/semihost_intrf.cpp', 'ARM/src/semihost_arm.c']
 objects += [compile_source(root / p, Path(p).stem + '_generic') for p in common]
 examples = ['Blinky', 'TimerDemo', 'UartPrbsTxTest', 'PulseTrain',
-            'UartRetargetDemo', 'I2CMasterDemo', 'SPIMasterDemo', 'PowerOffDemo']
+            'UartRetargetDemo', 'I2CMasterDemo', 'SPIMasterDemo', 'CoreClockTest',
+            'CorePowerTest']
 for name in examples:
     project = root / 'ARM/Renesas/RE01/RE01_1500KB/exemples' / name / 'ioc'
     links = ET.parse(project / '.project').findall('.//linkedResources/link')

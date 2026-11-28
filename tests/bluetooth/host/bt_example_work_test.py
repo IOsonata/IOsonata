@@ -83,6 +83,13 @@ static void Drain() {
 		code += callback[:callback.index('{') + 1] + reset.group()
 		code += f' ++calls[{index}]; }}\n'
 		code += function(text, prefix + 'Que')
+	if 'ClockCheckEvt' in text:
+		# uart_ble also retries its HF clock request check, queued from a
+		# GATT write. The probe keeps the production pending reset.
+		code += 'static volatile bool s_bClockCheckPending;\n'
+		code += 'static bool s_bClockCheckQueued;\nstatic unsigned clockCalls;\n'
+		code += ('static void ClockCheckEvt(uint32_t, void *) { '
+				 's_bClockCheckQueued = false; s_bClockCheckPending = false; ++clockCalls; }\n')
 	code += function(text, 'AppCheckStatus')
 	code += 'int main() { assert(AppEvtHandlerInit(nullptr, 0));\n'
 	code += 'for (unsigned cycle = 1; cycle <= 3; ++cycle) { Fill();\n'
@@ -91,7 +98,12 @@ static void Drain() {
 	code += 'refill = true; Drain(); assert(checks && !AppEvtHandlerPending());\n'
 	for index, (prefix, handler) in enumerate(items):
 		code += f'assert(calls[{index}] == cycle && !s_b{prefix}Pending);\n'
-	code += '} assert(AppCheckStatus()); }\n'
+	code += '}\n'
+	if 'ClockCheckEvt' in text:
+		# A check refused by a full queue is queued again before sleep
+		code += ('Fill(); s_bClockCheckPending = true; s_bClockCheckQueued = false;\n'
+				 'Drain(); assert(clockCalls == 1 && !s_bClockCheckPending);\n')
+	code += 'assert(AppCheckStatus()); }\n'
 	cases.append((name + '_retry', code, []))
 
 usb = source('exemples/bluetooth/usb_cdc_ble_central.cpp')

@@ -140,36 +140,31 @@ void check(){
 }
 }
 namespace clock_request {
-#define SOFTDEVICE_PRESENT 1
-constexpr uint32_t NRF_SUCCESS=0,NRFX_USBD_XTAL_WAIT_LOOPS=3;
-constexpr uint32_t CLOCK_HFCLKSTAT_STATE_Msk=2,CLOCK_HFCLKSTAT_SRC_Msk=1;
-constexpr uint32_t CLOCK_HFCLKSTAT_SRC_Xtal=1,CLOCK_HFCLKSTAT_SRC_Pos=0;
-struct {uint32_t HFCLKSTAT,EVENTS_HFCLKSTARTED,TASKS_HFCLKSTART;} clock;
-auto *NRF_CLOCK=&clock;
-bool requestOK,pollOK,running;
-unsigned requested,released,polls;
-bool UsbdSdRunning(){return true;}
-uint32_t sd_clock_hfclk_request(){++requested;return requestOK?NRF_SUCCESS:1;}
-uint32_t sd_clock_hfclk_release(){++released;return NRF_SUCCESS;}
-uint32_t sd_clock_hfclk_is_running(uint32_t *value){
- ++polls;*value=running;return pollOK?NRF_SUCCESS:1;
-}
-bool UsbdWaitReady(const volatile uint32_t*,uint32_t,uint32_t){assert(false);return false;}
+// The controller holds the shared HF clock request of system_clock_nrfx.cpp
+// once, and only with a crystal or external oscillator.
+enum OSC_TYPE {OSC_TYPE_RC,OSC_TYPE_XTAL,OSC_TYPE_TCXO};
+OSC_TYPE oscType;
+bool enableOK;
+unsigned enables,disables;
+OSC_TYPE GetHighFreqOscType(){return oscType;}
+bool SystemHighFreqClockEnable(){++enables;return enableOK;}
+void SystemHighFreqClockDisable(){++disables;}
+static bool s_bUsbdXtalHeld=false;
 '''
-code += function('UsbdXtalRequest')
+code += function('UsbdXtalRequest') + '\n' + function('UsbdXtalRelease')
 code += r'''
-#undef SOFTDEVICE_PRESENT
 void check(){
- for(unsigned request=0;request<2;++request)
- for(unsigned poll=0;poll<2;++poll)
- for(unsigned run=0;run<2;++run){
-  requestOK=request;pollOK=poll;running=run;requested=released=polls=0;
-  const bool success=request && poll && run;
-  assert(UsbdXtalRequest()==success && requested==1);
-  assert(released==unsigned(request && !success));
-  assert(polls==(request?(poll && !run?NRFX_USBD_XTAL_WAIT_LOOPS:1):0));
+ for(unsigned type=0;type<3;++type)
+ for(unsigned ok=0;ok<2;++ok){
+  oscType=OSC_TYPE(type);enableOK=ok;enables=disables=0;s_bUsbdXtalHeld=false;
+  const bool held=type!=OSC_TYPE_RC && ok;
+  assert(UsbdXtalRequest()==held && enables==unsigned(type!=OSC_TYPE_RC));
+  // Held once: a second request does not enable the clock again
+  assert(UsbdXtalRequest()==held && enables==unsigned(type!=OSC_TYPE_RC)*(held?1:2));
+  UsbdXtalRelease();UsbdXtalRelease();
+  assert(disables==unsigned(held) && !s_bUsbdXtalHeld);
  }
- puts("PASS: SoftDevice clock request releases on poll error or timeout, but not on success or request failure");
+ puts("PASS: the controller holds the HF clock request once, only with a crystal, and releases it once");
 }
 }
 '''

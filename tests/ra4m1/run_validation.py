@@ -159,12 +159,15 @@ def check_ioc():
         for language in ('c', 'cpp'):
             paths = options[prefix+language+'.compiler.include.paths'].findall('listOptionValue')
             assert all('tests/ra4m1' not in v.attrib['value'] for v in paths)
-        # The standard layout excludes its srcx/includex folders. No linked
-        # source may be excluded from the build.
+        # The standard layout excludes its srcx/includex folders. The RA4M1
+        # library also leaves out the network sources and the SysTick timer,
+        # which its timer table does not use. No other linked source may be
+        # excluded from the build.
         for e in cfg.findall('.//sourceEntries/entry'):
             for x in filter(None, e.attrib.get('excluding', '').split('|')):
-                assert x in ('srcx', 'includex'), x
-                assert not any(n == x or n.startswith(x+'/') for n in source_names), x
+                assert x in ('srcx', 'includex', 'src/net', 'src/timer_systick.cpp'), x
+                if x in ('srcx', 'includex'):
+                    assert not any(n == x or n.startswith(x+'/') for n in source_names), x
     assert names == {'Debug','Release'}
     wizard = json.loads((project/'wizard.json').read_text())
     assert wizard['lib'] == 'IOsonata_RA4M1' and wizard['mcu'] == 'RA4M1'
@@ -246,7 +249,15 @@ def main():
     probe = BUILD/'probe.o'
     run([clang,*flags,'-mfloat-abi=soft','-Os',*includes,'-c',HERE/'link_probe.c','-o',probe])
     objects.append(probe)
-    base=[linker,'-T',TARGET/'ldscript/gcc_ra4m1.ld','--gc-sections',*objects]
+    # The system file divides 64-bit values in ArmDelayClockSetDivisors, from
+    # the compiler runtime as in a firmware link
+    libgcc = os.environ.get('ARM_LIBGCC')
+    if not libgcc and shutil.which('arm-none-eabi-gcc'):
+        libgcc = subprocess.run(['arm-none-eabi-gcc', '-mcpu=cortex-m4', '-mthumb', '-mfloat-abi=soft',
+                                 '-print-libgcc-file-name'], capture_output=True, text=True).stdout.strip()
+    if not libgcc or not Path(libgcc).is_file():
+        raise SystemExit('Install arm-none-eabi-gcc or set ARM_LIBGCC to its soft float libgcc.a')
+    base=[linker,'-T',TARGET/'ldscript/gcc_ra4m1.ld','--gc-sections',*objects,libgcc]
     image=BUILD/'link_probe.elf'
     run([*base,'-Map='+str(BUILD/'link_probe.map'),'-o',image]); check_image(image)
     image=BUILD/'custom_memory.elf'
@@ -256,7 +267,7 @@ def main():
               '-o',BUILD/'must_not_link.elf'],expect=False)
     assert 'overlap' in text or 'overflow' in text
     print('PASS: impossible RAM reservation rejected by linker')
-    run([linker,'-T',TARGET/'ldscript/gcc_ra4m1.ld',objects[0],objects[2],objects[3],probe,
+    run([linker,'-T',TARGET/'ldscript/gcc_ra4m1.ld',objects[0],objects[2],objects[3],probe,libgcc,
          '-o',BUILD/'must_not_link.elf'],expect=False)
     print('PASS: missing vector/option object rejected by linker')
     archive = BUILD/'libIOsonata_RA4M1_probe.a'
@@ -264,7 +275,7 @@ def main():
     run([ar, 'rcs', archive, *objects[:-1]])
     image = BUILD/'archive_probe.elf'
     run([linker, '-T', TARGET/'ldscript/gcc_ra4m1.ld', '--gc-sections',
-         probe, archive, '-Map='+str(BUILD/'archive_probe.map'), '-o', image])
+         probe, archive, libgcc, '-Map='+str(BUILD/'archive_probe.map'), '-o', image])
     check_image(image)
     print('PASS: static archive extraction without whole-archive; strong IEL override retained')
     check_ioc()

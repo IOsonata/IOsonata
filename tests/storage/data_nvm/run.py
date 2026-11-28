@@ -124,7 +124,7 @@ class Model:
 
 
 def build(out, ra, opt):
-    target = 'ARM/Renesas/RA4M1' if ra else 'ARM/ST/STM32L1xx'
+    target = 'ARM/Renesas/RA4/RA4M1' if ra else 'ARM/ST/STM32L1xx'
     cpu = ['-mcpu=cortex-m4', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard'] if ra else ['-mcpu=cortex-m3', '-mfloat-abi=soft']
     flags = cpu + ['-mthumb', opt, '-std=gnu++23', '-fno-exceptions', '-fno-rtti', '-ffunction-sections', '-fdata-sections', '-D__PROGRAM_START', '-DRA4M1' if ra else '-DSTM32L152xE']
     flags += ['-I' + str(ROOT / p) for p in ['include', 'ARM/include', 'ARM/CMSIS/Core/Include', target + '/include', 'ARM/ST/include']]
