@@ -21,6 +21,12 @@ class VideoLibraryProjects(unittest.TestCase):
         for project in projects:
             with self.subTest(project=str(project.relative_to(ROOT))):
                 tree = ET.parse(project)
+                names = [link.findtext("name") or ""
+                         for link in tree.findall(".//linkedResources/link")]
+                if not any(name.startswith("include/") for name in names):
+                    # Port library with only its startup and bus drivers,
+                    # no device categories (ESP32-C2, C5, C61)
+                    continue
                 links = {}
                 for link in tree.findall(".//linkedResources/link"):
                     name = link.findtext("name")
@@ -63,8 +69,11 @@ class VideoLibraryProjects(unittest.TestCase):
         tree = ET.parse(project)
         paths = [node.get("Include", "").replace("\\", "/")
                  for node in tree.iter()]
+        # The Windows library has the video headers only. The ArduCAM Mega
+        # driver is not built on Windows.
         for name in VIDEO_FILES:
-            self.assertEqual(sum(path.endswith(name) for path in paths), 1, name)
+            count = 0 if name.startswith("src/") else 1
+            self.assertEqual(sum(path.endswith(name) for path in paths), count, name)
 
     def test_macos_xcode_project(self):
         project = ROOT / "OSX/lib/IOsonata_OSX.xcodeproj/project.pbxproj"

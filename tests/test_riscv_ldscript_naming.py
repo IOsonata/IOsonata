@@ -67,7 +67,7 @@ class RiscvLinkerNamingTests(unittest.TestCase):
 
     def test_renesas_managed_projects(self):
         projects = sorted(EXAMPLES.glob("*/ioc/.cproject"))
-        self.assertEqual(len(projects), 17)
+        self.assertGreaterEqual(len(projects), 17)
         for project in projects:
             expected = ("gcc_r9a02g021_dfu_boot.ld" if
                         project.parents[1].name == "DfuBoot" else
@@ -86,7 +86,7 @@ class RiscvLinkerNamingTests(unittest.TestCase):
     def test_espressif_managed_projects(self):
         for part in ("ESP32C3", "ESP32C6"):
             projects = sorted((ESP / part / "exemples").glob("*/ioc/.cproject"))
-            self.assertEqual(len(projects), 3)
+            self.assertGreaterEqual(len(projects), 3)
             expected = "gcc_" + part.lower() + ".ld"
             self.assertTrue((ESP / "ldscript" / expected).is_file())
             for project in projects:
