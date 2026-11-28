@@ -90,8 +90,8 @@ the stack with complementary patterns that change each cycle. It checks
 them immediately after `SystemSleep()` returns, before enabling the UART.
 Each wake prints `SRAM sample PASS: 128 static + 128 stack bytes` or
 `SRAM sample FAIL`. A failure stops the demo after draining the UART.
-This checks only those 256 bytes; it is not a full-SRAM test. The sample
-has compiled and linked for D11 and D21 but has not yet run on hardware.
+This checks only those 256 bytes; it is not a full-SRAM test. The static
+and stack RAM checks passed on both Xplained Pro boards.
 
 With Arm GCC 15.2.1 at the projects' size optimization, the D11 linked
 image uses 15,022 bytes for text plus initialized data, with 1,296 bytes
@@ -107,8 +107,10 @@ Hardware result reported November 15, 2026: SAMD11 Xplained Pro SW0/PA14
 woke CorePowerTest from Standby five consecutive times. The resume counter
 advanced from 0x00000001 through 0x00000005, followed by another Standby
 entry. This validates repeated resume and counter continuity for that
-firmware. SAMD21 hardware wake, full SRAM testing and sleep-current
-measurements remain pending.
+firmware. On the SAMD21 Xplained Pro, CorePowerTest passed all 30 checks,
+including three RTC wakes and three SW0 wakes from Standby. The CPU and
+peripheral clocks, UART rate, and static and stack RAM checks passed after
+each wake. Full SRAM testing and sleep-current measurements remain pending.
 
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
 configuration asking for it fails init), USB host mode, PWM (the TCC are
