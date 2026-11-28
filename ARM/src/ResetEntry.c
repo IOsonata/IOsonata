@@ -62,10 +62,14 @@ extern void __iar_data_init3(void);
 extern void _call_main(void);
 #endif
 
-extern void _start(void);
+//extern void _start(void);	// Not called, see the end of ResetEntry
 extern void _rtos_start(void);
 extern int main (void);
 extern void __libc_init_array(void);
+#if !defined(__ARMCC_VERSION) && !defined(__ICCARM__)
+// Defined only in a build with semihosting (rdimon)
+extern void initialise_monitor_handles(void) __attribute__((weak));
+#endif
 extern void SystemInit(void);
 extern void SystemCoreClockUpdate(void);
 extern uint32_t SystemCoreClock;
@@ -133,11 +137,6 @@ void ResetEntry (void)
 	SystemInit();
 
 	/*
-	 * Call C++ library initialization
-	 */
-//	__libc_init_array();
-
-	/*
 	 * Now memory has been initialized
 	 * Update core clock data
 	 */
@@ -155,7 +154,24 @@ void ResetEntry (void)
 	   //__iar_program_start();
 	   _call_main();
 #else
-	_start();
+	// Do not call the C library start code (_start, _mainCRTStartup in
+	// newlib) here:
+	//
+	//	_start();
+	//
+	// It clears .bss a second time before it runs the C++ static
+	// constructors and main. .data and .bss are already initialized above
+	// and SystemInit has since stored the clock rates and startup state in
+	// .bss variables: _start would set them back to 0 and the clock
+	// functions would then return 0 Hz. Do here what _start does after its
+	// .bss clear: open the semihosting handles of a semihosting build
+	// (rdimon), run the C++ static constructors, then call main.
+	if (initialise_monitor_handles)
+	{
+		initialise_monitor_handles();
+	}
+	__libc_init_array();
+	main();
 #endif
 #endif
 #else

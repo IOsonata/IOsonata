@@ -26,7 +26,9 @@ Boot sequence:
 
   6. SystemCoreClockUpdate() recomputes the global clock periods.
 
-  7. _start (libc) runs constructors and calls main().
+	7. __libc_init_array() runs the C++ static constructors, then main() is
+		called. The C library start code, _start, is not used: it clears .bss
+		again, which would lose what SystemInit stored.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 20, 2025
@@ -86,7 +88,9 @@ extern unsigned long __global_pointer$;
 /* Forward declarations */
 extern void SystemInit(void);
 extern void SystemCoreClockUpdate(void);
-extern void _start(void);
+//extern void _start(void);	// Not called, see the end of ResetEntryInit
+extern void __libc_init_array(void);
+extern int main(void);
 
 __attribute__((noreturn, used)) void ResetEntryInit(void);
 
@@ -165,7 +169,19 @@ void ResetEntryInit(void)
 	SystemInit();
 	SystemCoreClockUpdate();
 
-	_start();
+	// Do not call the C library start code here:
+	//
+	//	_start();
+	//
+	// It clears .bss a second time before it runs the C++ static
+	// constructors and main. .data and .bss are already initialized above
+	// and SystemInit has since stored the clock rates and startup state in
+	// .bss variables: _start would set them back to 0 and the clock
+	// functions would then return 0 Hz. Do here what _start does after its
+	// .bss clear: run the C++ static constructors, then call main. In a
+	// semihosting build the semihosting setup is one of the constructors.
+	__libc_init_array();
+	main();
 
 	// Loop forever if main returns
 	while (1) { }
