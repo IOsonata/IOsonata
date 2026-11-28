@@ -134,6 +134,8 @@ static uint32_t s_Lpc546xxAudioPllFreq = 0;
 
 // Main clock set by the clock setup, the 12 MHz FRO after reset
 static uint32_t s_Lpc546xxMainFreq = CLK_FRO_12MHZ;
+static uint32_t s_HfUsers;
+static SYSTEM_POWER_MODE s_PowerMode;
 
 static bool Lpc546xxCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
 
@@ -424,6 +426,7 @@ void SystemInit(void)
 	{
 		Lpc546xxCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ);
 	}
+	s_PowerMode = SYSTEM_POWER_MODE_PERFORMANCE;
 }
 
 /**
@@ -557,6 +560,102 @@ void SystemCoreClockUpdate(void)
 	SystemCoreClock = s_Lpc546xxMainFreq / ((SYSCON->AHBCLKDIV & 0xFFUL) + 1UL);
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		16000000UL, (LPC546XX_NSDELAY_LOOP_CLK * 1000000UL));
+}
+
+bool SystemHighFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = DisableInterrupt();
+	ready = s_HfUsers != UINT32_MAX && s_Lpc546xxMainFreq != 0U;
+	if (ready)
+	{
+		s_HfUsers++;
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (s_HfUsers != 0U)
+	{
+		s_HfUsers--;
+	}
+	EnableInterrupt(state);
+}
+
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}
+
+// The low frequency oscillator is the RTC crystal, powered and checked by the
+// RTC driver. No driver of this port takes a clock from this request.
+bool SystemLowFreqClockEnable(void)
+{
+	return false;
+}
+
+void SystemLowFreqClockDisable(void)
+{
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	return 0U;
+}
+
+/**
+ * @brief	CPU running mode.
+ *
+ * LOW_POWER divides the main clock by two with AHBCLKDIV: the CPU, the AHB
+ * clock, CTIMER0 to 2 and SysTick run at half the frequency. The Flexcomm
+ * function clocks and CTIMER3 and 4 are on the 12 MHz FRO and do not change.
+ * The flash access time follows the CPU clock. The core voltage stays at the
+ * level of the PLL output, which still drives the divider.
+ */
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t state;
+	uint32_t div;
+	uint32_t freq;
+
+	if (__get_IPSR() != 0U || s_Lpc546xxMainFreq == 0U ||
+		(Mode != SYSTEM_POWER_MODE_PERFORMANCE && Mode != SYSTEM_POWER_MODE_LOW_POWER))
+	{
+		return false;
+	}
+	div = Mode == SYSTEM_POWER_MODE_LOW_POWER ? 1U : 0U;
+	freq = s_Lpc546xxMainFreq / (div + 1U);
+	state = DisableInterrupt();
+	if (Mode != s_PowerMode)
+	{
+		// The longer flash access before the faster clock, after the slower one
+		if (Mode == SYSTEM_POWER_MODE_PERFORMANCE)
+		{
+			Lpc546xxSetFlashTime(freq);
+		}
+		SYSCON->AHBCLKDIV = div;
+		if (Mode == SYSTEM_POWER_MODE_LOW_POWER)
+		{
+			Lpc546xxSetFlashTime(freq);
+		}
+		SystemCoreClockUpdate();
+		s_PowerMode = Mode;
+	}
+	EnableInterrupt(state);
+	return true;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return s_PowerMode;
 }
 
 /* ----------------------------------------------------------------------------

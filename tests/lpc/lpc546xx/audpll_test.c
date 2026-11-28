@@ -428,6 +428,50 @@ static void TestCoreClock(void)
 		assert(SystemCoreClock == s_Lpc546xxMainFreq / (div + 1U));
 	}
 	SYSCON->AHBCLKDIV = 0;
+	SystemCoreClockUpdate();
+
+	// Clock requests count the users of the core clock. The RTC crystal is
+	// not a clock the drivers request.
+	SystemHighFreqClockDisable();
+	assert(SystemHighFreqClockEnable());
+	assert(SystemHighFreqClockEnable());
+	SystemHighFreqClockDisable();
+	SystemHighFreqClockDisable();
+	assert(SystemHighFreqClockEnable());
+	SystemHighFreqClockDisable();
+	assert(SystemHighFreqClockStartTime() == 0);
+	assert(!SystemLowFreqClockEnable());
+	SystemLowFreqClockDisable();
+	assert(SystemLowFreqClockStartTime() == 0);
+
+	// LOW_POWER halves the AHB clock with the flash access time for it, the
+	// core voltage stays. PERFORMANCE restores both.
+	{
+		uint32_t perf = SystemCoreClock;
+		uint32_t flash = SYSCON->FLASHCFG;
+		uint32_t vd[6];
+
+		memcpy(vd, (const void *)LPC546XX_VD_LEVEL, sizeof(vd));
+		assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+		assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+		assert(SystemCoreClock == perf && SYSCON->AHBCLKDIV == 0);
+		assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+		assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER);
+		assert(SYSCON->AHBCLKDIV == 1 && SystemCoreClock == perf / 2U);
+		assert(SystemPeriphClockGet(0) == perf / 2U);
+		assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock * 1000000ULL) / 16000000U);
+		assert((SYSCON->FLASHCFG & SYSCON_FLASHCFG_FLASHTIM_MASK) < (flash & SYSCON_FLASHCFG_FLASHTIM_MASK));
+		assert(memcmp(vd, (const void *)LPC546XX_VD_LEVEL, sizeof(vd)) == 0);
+		assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+		assert(SYSCON->AHBCLKDIV == 1);
+		assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+		assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+		assert(SYSCON->AHBCLKDIV == 0 && SystemCoreClock == perf);
+		assert(SYSCON->FLASHCFG == flash);
+		assert(!SystemPowerModeSet((SYSTEM_POWER_MODE)2));
+		assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE && SYSCON->AHBCLKDIV == 0);
+	}
+
 	SYSCON->SYSPLLSTAT = 0;
 	assert(!Lpc546xxCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
 	assert(SystemCoreClock == CLK_FRO_12MHZ && s_Lpc546xxMainFreq == CLK_FRO_12MHZ);
@@ -438,7 +482,7 @@ static void TestCoreClock(void)
 	assert(!Lpc546xxCoreClockSelect(OSC_TYPE_XTAL, 25000001));
 	assert(!Lpc546xxCoreClockSelect((OSC_TYPE)99, 12000000));
 	assert(memcmp(s_Before, (const void *)MAP_BASE, MAP_SIZE) == 0);
-	printf("core clock setup and failure: PASS\n");
+	printf("core clock setup, clock requests, running modes and failure: PASS\n");
 }
 
 int main(void)

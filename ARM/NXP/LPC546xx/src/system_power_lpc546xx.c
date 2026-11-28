@@ -46,20 +46,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 static bool s_ResetRead;
 static uint32_t s_ResetReason;
 
+// SystemSleep wakes on an interrupt set up through its driver, a pin
+// interrupt of iopincfg.h included. SystemPowerOff wakes by RESET or an RTC
+// event. The running modes are in system_LPC546xx.c.
 uint32_t SystemPowerCapabilitiesGet(void)
 {
 	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_SYSTEM_OFF |
-		   SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE | SYSTEM_POWER_CAP_RET_REG;
-}
-
-bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
-{
-	return Mode == SYSTEM_POWER_MODE_PERFORMANCE;
-}
-
-SYSTEM_POWER_MODE SystemPowerModeGet(void)
-{
-	return SYSTEM_POWER_MODE_PERFORMANCE;
+		   SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE | SYSTEM_POWER_CAP_RET_REG |
+		   SYSTEM_POWER_CAP_LOW_POWER;
 }
 
 uint32_t SystemResetReason(void)
@@ -93,15 +87,6 @@ uint32_t SystemResetReason(void)
 	}
 	EnableInterrupt(state);
 	return s_ResetReason;
-}
-
-bool SystemWakePin(int PortNo, int PinNo, int Sense)
-{
-	// Deep power-down wakes through RESET or an application-configured RTC.
-	(void)PortNo;
-	(void)PinNo;
-	(void)Sense;
-	return false;
 }
 
 void SystemPowerOff(void)
