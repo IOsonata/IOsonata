@@ -1,7 +1,7 @@
 /*--------------------------------------------------------------------------
 File   : clock17_link_test.c
 
-Desc   : C and C++ callers for the LPC17xx public clock APIs
+Desc   : C and C++ callers for the LPC17xx public clock functions
 
 Copyright (c) 2026 I-SYST inc. MIT License.
 ----------------------------------------------------------------------------*/
@@ -28,13 +28,9 @@ int main(void)
 	assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_RC);
 	assert(g_McuOsc.CoreOsc.Freq == 4000000U);
 	assert(g_McuOsc.CoreOsc.Accuracy == 123);
-	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 0));
 	assert(SystemCoreClockGet() == 4000000U);
 	assert(SystemPeriphClockGet(-1) == 0);
 	assert(SystemPeriphClockSet(-1, UINT32_MAX) == 0);
-	// Both entry points must link from the public header without local declarations.
-	assert(SystemSetCoreClock(120000000, -1) == 0);
-	assert(SystemCoreClockSet(120000000, 0) == 0);
 
 	result = TestClock17Run();
 	assert(SystemCoreClockGet() == SystemCoreClock);

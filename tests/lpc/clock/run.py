@@ -48,8 +48,8 @@ if args.target != '17':
                 subprocess.run([exe], check=True, timeout=5)
 
 if args.target != '11':
-    # Decode LPC17xx clocks using the real system source and vendor peripheral types.
-    # Unused startup/setter sections are discarded; no PLL transitions are simulated.
+    # LPC17xx clocks from the stored clock, the test includes the real system source.
+    # Unused startup sections are discarded; no PLL transitions are simulated.
     for opt in ['-O0', '-O2']:
         with tempfile.TemporaryDirectory() as tmp:
             exe = str(Path(tmp) / 'clock17_test')
@@ -63,11 +63,10 @@ if args.target != '11':
                             '-I' + str(root / 'ARM/include'),
                             '-I' + str(root / 'ARM/NXP/LPC17xx/Include'),
                             str(root / 'tests/lpc/clock/clock17_test.c'),
-                            str(root / 'ARM/NXP/LPC17xx/src/system_LPC17xx.c'),
                             '-o', exe], check=True)
             subprocess.run([exe], check=True)
 
-    # Compile the LPC17xx source and register fixture as C; link public C/C++ callers.
+    # Compile the LPC17xx register fixture as C; link public C/C++ callers.
     variants = [
         ['-DLPC1769'],
         ['-DLPC1759', '-DTEST_CLOCK_LIMIT=120000000'],
@@ -93,15 +92,22 @@ if args.target != '11':
                             '-c', str(root / 'ARM/NXP/LPC17xx/src/system_LPC17xx.c'),
                             '-o', obj], check=True)
             # ResetEntry.c owns SystemRamStart; a second strong definition breaks firmware linking.
-            symbols = subprocess.check_output(['nm', '--defined-only', obj], text=True)
-            assert not any(line.split()[-1] == 'SystemRamStart'
-                           for line in symbols.splitlines() if line.split())
+            # The clock sources are set up once in SystemInit.
+            symbols = [line.split()[-1] for line in
+                       subprocess.check_output(['nm', '--defined-only', obj], text=True).splitlines()
+                       if line.split()]
+            for name in ['SystemRamStart', 'SystemCoreClockSelect', 'SystemLowFreqClockSelect',
+                         'SystemCoreClockSet', 'SystemSetCoreClock', 'SystemConnectPLL1',
+                         'GetSysClk', 'SystemClkFreq']:
+                assert name not in symbols, name
+            # The fixture includes the system source to reach the startup functions.
             subprocess.run(['gcc', '-std=gnu17', *flags, '-Dmain=TestClock17Run',
+                            '-include', str(root / 'tests/lpc/clock/flash17_shim.h'),
                             '-c', str(root / 'tests/lpc/clock/flash17_test.c'),
                             '-o', fixture], check=True)
             for compiler, standard in [('gcc', '-std=gnu17'), ('g++', '-std=c++17')]:
                 exe = str(Path(tmp) / 'clock17_link_test')
                 subprocess.run([compiler, standard, *flags, '-Wl,--gc-sections',
                                 str(root / 'tests/lpc/clock/clock17_link_test.c'),
-                                obj, fixture, '-o', exe], check=True)
+                                fixture, '-o', exe], check=True)
                 subprocess.run([exe], check=True, timeout=10)

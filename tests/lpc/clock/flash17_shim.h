@@ -16,9 +16,3 @@ void TestClockWaitCycle(void);
 #undef __NOP
 #define __NOP() TestClockWaitCycle()
 
-extern LPC_WDT_TypeDef g_TestWdt;
-extern LPC_DAC_TypeDef g_TestDac;
-#undef LPC_WDT
-#define LPC_WDT (&g_TestWdt)
-#undef LPC_DAC
-#define LPC_DAC (&g_TestDac)

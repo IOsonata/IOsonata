@@ -38,9 +38,9 @@ SOFTWARE.
 #include <string.h>
 #include "flash17_shim.h"
 #include "coredev/system_core_clock.h"
+// The startup clock functions are private to the source
+#include "../../../ARM/NXP/LPC17xx/src/system_LPC17xx.c"
 
-LPC_WDT_TypeDef g_TestWdt;
-LPC_DAC_TypeDef g_TestDac;
 uint32_t SystemMicroSecLoopCnt;
 TestScb_t g_TestScb;
 void (* const __Vectors[])(void) = {0};
@@ -60,14 +60,6 @@ static unsigned s_ConnectSeen;
 static unsigned s_ConnectWait;
 static uint32_t s_Primask;
 static unsigned s_InterruptRestores;
-static int s_UsbModel = 1;
-static int s_CheckUsbStop;
-static int s_BlockUsbStop;
-static uint32_t s_UsbPreviousCfg;
-static uint32_t s_UsbPreviousCon;
-static unsigned s_UsbStopWait;
-static unsigned s_UsbFailure;
-static unsigned s_UsbWait;
 static unsigned s_CpuStopMode;
 static unsigned s_CpuStopWait;
 static uint32_t s_CpuPreviousStatus;
@@ -86,10 +78,8 @@ static const uint32_t s_ExternalInputs[] = {
 	1000000, 4000000, 12000000, 15000000, 15000001, 25000000
 };
 static const int s_InvalidInputs[] = {
-	0, -1, INT_MIN, 1, 32767, 32769, 999999, 25000001, INT_MAX
+	0, -1, INT_MIN, 1, 32767, 32768, 32769, 999999, 25000001, INT_MAX
 };
-static const uint32_t s_UsbInputs[] = {12000000, 16000000, 24000000};
-static const uint32_t s_UsbInvalidInputs[] = {0, 32768, 4000000, 10000000, 20000000, 25000000};
 // Input Hz, requested CPU Hz, expected USB divider (7 is the retained sentinel).
 static const uint32_t s_UsbDividerCases[][3] = {
 	{12000000, 72000000, 5},
@@ -99,33 +89,26 @@ static const uint32_t s_UsbDividerCases[][3] = {
 	{12000000, 84000000, 7},
 	{12000000, 1000000, 7},
 	{12000000, 12345678, 7},
-	{4000000, 120000000, 7},
-	{32768, 72007680, 7}
+	{4000000, 120000000, 7}
 };
 static const uint32_t s_SettleCases[][3] = {
-	{32768, 72007680, 50},
-	{32768, 71999488, 100},
 	{25000000, 100000000, 4167}
-};
-// Independent exhaustive oracle uses the hardware's supported RTC values.
-static const uint16_t s_RtcM[] = {
-	4272, 4395, 4578, 4725, 4807, 5127, 5188, 5400, 5493, 5859,
-	6042, 6075, 6104, 6409, 6592, 6750, 6836, 6866, 6958, 7050,
-	7324, 7425, 7690, 7813, 7935, 8057, 8100, 8545, 8789, 9155,
-	9613, 10254, 10376, 10986, 11719, 12085, 12207, 12817, 13184, 13672,
-	13733, 13916, 14099, 14420, 14648, 15381, 15564, 15625, 15869, 16113,
-	16479, 17578, 18127, 18311, 19226, 19775, 20508, 20599, 20874, 21149,
-	21973, 23071, 23438, 23804, 24170
 };
 #ifdef TEST_CLOCK_LIMIT
 static const uint32_t s_LimitRequests[] = {99000000, 100000000, 101000000, 120000000, UINT32_MAX};
 #endif
 static const uint32_t s_ClosestCases[][2] = {
 	{4000000, 0}, {4000000, UINT32_MAX}, {4000000, 12345678},
-	{4000000, 1000000}, {12000000, 12345678}, {25000000, UINT32_MAX},
-	{32768, 72000000}, {32768, 1}, {32768, 123456789}
+	{4000000, 1000000}, {12000000, 12345678}, {25000000, UINT32_MAX}
 };
-extern uint32_t SystemClkFreq;
+
+// Startup clock setup at a CPU rate: a 4 MHz input is the IRC, any other
+// input the main oscillator
+static uint32_t TestClockSet(uint32_t CoreFreq, int ClkFreq)
+{
+	return Lpc17CoreClockSet(CoreFreq, (uint32_t)ClkFreq,
+		ClkFreq == (int)IRC_FREQ ? CLKSRCSEL_IRC : CLKSRCSEL_MAIN, true);
+}
 
 uint32_t TestGetPrimask(void)
 {
@@ -179,47 +162,7 @@ LPC_SC_TypeDef *TestSystemRegs(void)
 		assert(s_CpuStopWait < 2000000U);
 	}
 
-	if (s_UsbModel)
-	{
-		uint32_t usbstatus = s_Regs.PLL1CFG | ((s_Regs.PLL1CON & 3U) << 8);
-
-		if ((s_Regs.PLL1CON & 1U) != 0)
-		{
-			s_UsbWait++;
-			assert(s_UsbWait < 2000000U);
-			if (s_UsbFailure == 1)
-			{
-				assert((s_Regs.PLL1CON & 2U) == 0);
-			}
-			else
-			{
-				usbstatus |= 1U << 10;
-			}
-			if (s_UsbFailure == 2)
-			{
-				usbstatus &= ~(1U << 9);
-			}
-		}
-		if (s_CheckUsbStop)
-		{
-			if (s_Regs.PLL1CFG != s_UsbPreviousCfg)
-			{
-				assert(s_UsbPreviousCon == 0);
-				assert(!s_BlockUsbStop);
-			}
-			s_UsbPreviousCfg = s_Regs.PLL1CFG;
-			s_UsbPreviousCon = s_Regs.PLL1CON;
-			if (s_BlockUsbStop && s_Regs.PLL1CON == 0)
-			{
-				s_UsbStopWait++;
-				assert(s_UsbStopWait < 2000000U);
-				usbstatus |= 3U << 8;
-			}
-		}
-		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &usbstatus, sizeof(usbstatus));
-	}
-
-	if (s_Regs.PLL0FEED == 0xAA || s_Regs.PLL1FEED == 0xAA)
+	if (s_Regs.PLL0FEED == 0xAA)
 	{
 		assert(s_Primask == 1);
 	}
@@ -308,17 +251,7 @@ static void CheckClosest(uint32_t Input, uint32_t Request)
 
 	if (s_Regs.PLL0CON == 3)
 	{
-		int supported = m >= 6 && m <= 512;
-
-		if (Input == 32768)
-		{
-			supported = 0;
-			for (unsigned i = 0; i < sizeof(s_RtcM) / sizeof(s_RtcM[0]); i++)
-			{
-				supported |= m == s_RtcM[i];
-			}
-		}
-		assert(supported && n <= 32);
+		assert(m >= 6 && m <= 512 && n <= 32);
 		numerator = (uint64_t)Input * 2U * m;
 		denominator *= n;
 		assert(numerator >= 275000000ULL * n);
@@ -338,11 +271,9 @@ static void CheckClosest(uint32_t Input, uint32_t Request)
 	}
 	for (uint32_t pre = 1; pre <= 32; pre++)
 	{
-		unsigned count = Input == 32768 ? sizeof(s_RtcM) / sizeof(s_RtcM[0]) : 507;
-
-		for (unsigned i = 0; i < count; i++)
+		for (unsigned i = 0; i < 507; i++)
 		{
-			uint32_t mul = Input == 32768 ? s_RtcM[i] : i + 6U;
+			uint32_t mul = i + 6U;
 			uint64_t num = (uint64_t)Input * 2U * mul;
 
 			if (num < 275000000ULL * pre || num > 550000000ULL * pre)
@@ -383,7 +314,7 @@ int main(void)
 		s_FailPllLock = 1;
 		s_PllWait = 0;
 		s_Regs.USBCLKCFG = 7;
-		assert(SystemCoreClockSet(s_BypassCases[i][1], s_BypassCases[i][0]) == s_BypassCases[i][1]);
+		assert(TestClockSet(s_BypassCases[i][1], s_BypassCases[i][0]) == s_BypassCases[i][1]);
 		assert(s_Regs.PLL0CON == 0);
 		assert(s_Regs.CCLKCFG + 1U == s_BypassCases[i][0] / s_BypassCases[i][1]);
 		assert(s_Regs.USBCLKCFG == 7);
@@ -412,7 +343,7 @@ int main(void)
 		assert(s_Regs.PLL0CON == 0);
 		assert(s_Regs.CCLKCFG == 0);
 		assert(SystemCoreClock == 4000000);
-		assert(SystemClkFreq == 4000000);
+		assert(s_Lpc17CclkIn == 4000000);
 		assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_RC);
 		assert(g_McuOsc.CoreOsc.Freq == 4000000);
 		assert(GetHighFreqOscAcc() == 10000);
@@ -433,7 +364,7 @@ int main(void)
 	s_OscReadyAfter = 4;
 	SystemInit();
 	assert(s_Regs.CLKSRCSEL == CLKSRCSEL_MAIN);
-	assert(SystemClkFreq == 12000000);
+	assert(s_Lpc17CclkIn == SystemCoreClock * (s_Regs.CCLKCFG + 1U));
 	assert(GetHighFreqOscAcc() == 20);
 	assert(GetHighFreqLoadCap() == 120);
 	CheckClosest(12000000, CORE_FREQ);
@@ -444,7 +375,7 @@ int main(void)
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_OscWait = 0;
 		s_OscReadyAfter = 4;
-		assert(SystemCoreClockSelect(OSC_TYPE_TCXO, s_ExternalInputs[i]));
+		assert(Lpc17CoreClockSelect(OSC_TYPE_TCXO, s_ExternalInputs[i]));
 		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_MAIN);
 		assert((s_Regs.SCS & 0x70U) == (s_ExternalInputs[i] > 15000000U ? 0x70U : 0x60U));
 		assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO);
@@ -457,11 +388,11 @@ int main(void)
 	g_McuOsc.CoreOsc.Freq = 12000000;
 	SystemInit();
 	assert(s_Regs.CLKSRCSEL == CLKSRCSEL_MAIN);
-	assert(SystemClkFreq == 12000000);
+	assert(s_Lpc17CclkIn == SystemCoreClock * (s_Regs.CCLKCFG + 1U));
 	assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO);
 	CheckClosest(12000000, CORE_FREQ);
 
-	// Runtime IRC selection must not retain an external oscillator's metadata.
+	// IRC selection must not retain an external oscillator's metadata.
 	// A descriptor already describing IRC may contain application calibration.
 	for (unsigned previous = OSC_TYPE_RC; previous <= OSC_TYPE_TCXO; previous++)
 	{
@@ -475,10 +406,10 @@ int main(void)
 		saved = g_McuOsc;
 		s_FailPllLock = 1;
 		s_PllWait = 0;
-		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+		assert(!Lpc17CoreClockSelect(OSC_TYPE_RC, 4000000));
 		assert(memcmp(&saved, &g_McuOsc, sizeof(saved)) == 0);
 		s_FailPllLock = 0;
-		assert(SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+		assert(Lpc17CoreClockSelect(OSC_TYPE_RC, 4000000));
 		assert(GetHighFreqOscType() == OSC_TYPE_RC);
 		assert(GetHighFreqOscFreq() == 4000000);
 		assert(GetHighFreqOscAcc() == (previous == OSC_TYPE_RC ? 123U : 10000U));
@@ -493,7 +424,7 @@ int main(void)
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_OscWait = 0;
 		s_OscReadyAfter = 4;
-		assert(SystemCoreClockSelect(crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC, 4000000));
+		assert(Lpc17CoreClockSelect(crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC, 4000000));
 		assert(s_Regs.CLKSRCSEL == (crystal ? CLKSRCSEL_MAIN : CLKSRCSEL_IRC));
 		assert(g_McuOsc.CoreOsc.Type == (crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC));
 		assert(g_McuOsc.CoreOsc.Freq == 4000000);
@@ -504,26 +435,26 @@ int main(void)
 		McuOsc_t desc = g_McuOsc;
 
 		memcpy(&before, &s_Regs, sizeof(before));
-		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 12000000));
-		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 32768));
-		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, UINT32_MAX));
-		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, 999999));
-		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, 25000001));
-		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, UINT32_MAX));
-		assert(!SystemCoreClockSelect((OSC_TYPE)99, 4000000));
+		assert(!Lpc17CoreClockSelect(OSC_TYPE_RC, 12000000));
+		assert(!Lpc17CoreClockSelect(OSC_TYPE_XTAL, 32768));
+		assert(!Lpc17CoreClockSelect(OSC_TYPE_XTAL, UINT32_MAX));
+		assert(!Lpc17CoreClockSelect(OSC_TYPE_TCXO, 999999));
+		assert(!Lpc17CoreClockSelect(OSC_TYPE_TCXO, 25000001));
+		assert(!Lpc17CoreClockSelect(OSC_TYPE_TCXO, UINT32_MAX));
+		assert(!Lpc17CoreClockSelect((OSC_TYPE)99, 4000000));
 		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
 		assert(memcmp(&desc, &g_McuOsc, sizeof(desc)) == 0);
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_OscReadyAfter = 0;
-		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000));
+		assert(!Lpc17CoreClockSelect(OSC_TYPE_XTAL, 12000000));
 		assert(memcmp(&desc, &g_McuOsc, sizeof(desc)) == 0);
 		s_OscWait = 0;
-		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, 12000000));
+		assert(!Lpc17CoreClockSelect(OSC_TYPE_TCXO, 12000000));
 		assert(memcmp(&desc, &g_McuOsc, sizeof(desc)) == 0);
 		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_IRC);
 		s_OscWait = 0;
 		s_OscReadyAfter = 4;
-		assert(SystemCoreClockSelect(OSC_TYPE_TCXO, 12000000));
+		assert(Lpc17CoreClockSelect(OSC_TYPE_TCXO, 12000000));
 		assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO);
 	}
 
@@ -536,7 +467,7 @@ int main(void)
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_OscWait = 0;
 		s_OscReadyAfter = 4;
-		assert(SystemCoreClockSet(request, input) != 0);
+		assert(TestClockSet(request, input) != 0);
 		CheckClosest(input, request);
 	}
 
@@ -548,7 +479,7 @@ int main(void)
 		uint32_t expected = s_LimitRequests[i] > TEST_CLOCK_LIMIT ? TEST_CLOCK_LIMIT : s_LimitRequests[i];
 
 		memset(&s_Regs, 0, sizeof(s_Regs));
-		assert(SystemCoreClockSet(s_LimitRequests[i], 4000000) == expected);
+		assert(TestClockSet(s_LimitRequests[i], 4000000) == expected);
 	}
 	puts("LPC17xx device speed limit and closest selection: PASS");
 	return 0;
@@ -560,7 +491,7 @@ int main(void)
 		s_Regs.USBCLKCFG = i == 1 ? 5U : 7U;
 		s_OscWait = 0;
 		s_OscReadyAfter = 4;
-		assert(SystemCoreClockSet(s_UsbDividerCases[i][1], s_UsbDividerCases[i][0]) != 0);
+		assert(TestClockSet(s_UsbDividerCases[i][1], s_UsbDividerCases[i][0]) != 0);
 		assert(s_Regs.USBCLKCFG == s_UsbDividerCases[i][2]);
 		if (i < 3)
 		{
@@ -586,7 +517,7 @@ int main(void)
 				s_SettleCycles = 0;
 				s_UnreliablePllLock = missing;
 				s_Primask = mask;
-				assert(SystemCoreClockSet(s_SettleCases[i][1], s_SettleCases[i][0]) == s_SettleCases[i][1]);
+				assert(TestClockSet(s_SettleCases[i][1], s_SettleCases[i][0]) == s_SettleCases[i][1]);
 				assert(s_SettleCycles == s_SettleCases[i][2]);
 				assert(s_Primask == mask);
 				s_UnreliablePllLock = 0;
@@ -599,14 +530,14 @@ int main(void)
 	{
 		LPC_SC_TypeDef before;
 		uint32_t core = SystemCoreClock;
-		uint32_t source = SystemClkFreq;
+		uint32_t source = s_Lpc17CclkIn;
 		uint32_t delay = SystemMicroSecLoopCnt;
 
 		memcpy(&before, &s_Regs, sizeof(before));
-		assert(SystemCoreClockSet(120000000, s_InvalidInputs[i]) == 0);
+		assert(TestClockSet(120000000, s_InvalidInputs[i]) == 0);
 		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
 		assert(SystemCoreClock == core);
-		assert(SystemClkFreq == source);
+		assert(s_Lpc17CclkIn == source);
 		assert(SystemMicroSecLoopCnt == delay);
 	}
 
@@ -619,7 +550,7 @@ int main(void)
 		s_Regs.FLASHCFG = 0xA500003AU;
 		s_Unsafe = 0;
 		s_Checks = 0;
-		rate = SystemCoreClockSet(s_Rates[i], 4000000);
+		rate = TestClockSet(s_Rates[i], 4000000);
 		assert(rate == s_Rates[i]);
 		if (rate == 99000000)
 		{
@@ -661,7 +592,7 @@ int main(void)
 			s_OscWait = 0;
 			s_OscReadyAfter = delay;
 			s_EarlyClockChange = 0;
-			assert(SystemCoreClockSet(120000000, input) == 120000000);
+			assert(TestClockSet(120000000, input) == 120000000);
 			assert(s_Unsafe == 0);
 			assert(s_Regs.SCS == (input == 12000000 ? 0x60U : 0x70U));
 			if (s_EarlyClockChange != 0)
@@ -672,7 +603,7 @@ int main(void)
 			assert(s_OscWait == delay);
 		}
 	}
-	// Main oscillator inputs below the IRC rate are not the RTC source.
+	// Main oscillator inputs below the IRC rate select MAIN.
 	for (unsigned input = 1000000; input <= 3000000; input += 1000000)
 	{
 		memset(&s_Regs, 0, sizeof(s_Regs));
@@ -681,7 +612,7 @@ int main(void)
 		s_OscWait = 0;
 		s_OscReadyAfter = 4;
 		s_EarlyClockChange = 0;
-		assert(SystemCoreClockSet(120000000, input) == 120000000);
+		assert(TestClockSet(120000000, input) == 120000000);
 		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_MAIN);
 		assert(s_Regs.SCS == 0x60U);
 		assert(s_OscWait == 4);
@@ -694,12 +625,12 @@ int main(void)
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_Regs.FLASHCFG = 0x303AU;
 		SystemCoreClock = 4000000;
-		SystemClkFreq = 4000000;
+		s_Lpc17CclkIn = 4000000;
 		SystemMicroSecLoopCnt = 7;
 		s_OscWait = 0;
 		s_OscReadyAfter = 0;
 		s_EarlyClockChange = 0;
-		assert(SystemCoreClockSet(120000000, input) == 0);
+		assert(TestClockSet(120000000, input) == 0);
 		assert(s_OscWait != 0);
 		assert(s_EarlyClockChange == 0);
 		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_IRC);
@@ -708,17 +639,17 @@ int main(void)
 		assert(s_Regs.PLL0CON == 0);
 		assert(s_Regs.FLASHCFG == 0x503AU);
 		assert(SystemCoreClock == 4000000);
-		assert(SystemClkFreq == 4000000);
+		assert(s_Lpc17CclkIn == 4000000);
 		assert(SystemMicroSecLoopCnt == 7);
 
 		// A later ready indication permits a successful retry.
 		s_OscWait = 0;
 		s_OscReadyAfter = 4;
 		s_Unsafe = 0;
-		assert(SystemCoreClockSet(120000000, input) == 120000000);
+		assert(TestClockSet(120000000, input) == 120000000);
 		assert(s_EarlyClockChange == 0);
 		assert(s_Unsafe == 0);
-		assert(SystemClkFreq == input);
+		assert(s_Lpc17CclkIn == SystemCoreClock * (s_Regs.CCLKCFG + 1U));
 	}
 	// Lock failure leaves the CPU on the selected input through its divider.
 	for (unsigned input = 4000000; input <= 12000000; input += 8000000)
@@ -734,14 +665,14 @@ int main(void)
 		s_PllWait = 0;
 		s_FailPllLock = 1;
 		s_Unsafe = 0;
-		assert(SystemCoreClockSet(120000000, input) == 0);
+		assert(TestClockSet(120000000, input) == 0);
 		assert(s_PllWait != 0);
 		assert(s_Regs.PLL0CON == 1);
 		assert(s_Regs.CCLKCFG == 3);
 		assert(s_Regs.USBCLKCFG == 9);
 		assert(s_Regs.FLASHCFG == 0x503AU);
 		assert(SystemCoreClock == input / 4);
-		assert(SystemClkFreq == input);
+		assert(s_Lpc17CclkIn == input);
 		assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock * 1000000ULL) / 16000000U);
 		assert(s_Unsafe == 0);
 		s_FailPllLock = 0;
@@ -757,163 +688,31 @@ int main(void)
 		s_ConnectSeen = 0;
 		s_ConnectWait = 0;
 		s_Unsafe = 0;
-		assert(SystemCoreClockSet(120000000, 4000000) == 0);
+		assert(TestClockSet(120000000, 4000000) == 0);
 		assert(s_ConnectSeen != 0);
 		assert(s_Regs.PLL0CON == 1);
 		assert(s_Regs.PLL0FEED == 0x55);
 		assert(s_Regs.USBCLKCFG == 9);
 		assert(s_Regs.FLASHCFG == 0x503AU);
-		assert(SystemCoreClock == (stuck ? 120000000U : 1000000U));
-		assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock * 1000000ULL) / 16000000U);
+		// A connection not cancelled leaves the CPU clock unknown
+		assert(SystemCoreClock == (stuck ? 0U : 1000000U));
+		assert(s_Lpc17CclkIn == (stuck ? 0U : 4000000U));
+		if (!stuck)
+		{
+			assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock * 1000000ULL) / 16000000U);
+		}
 		assert(s_Unsafe == 0);
 		s_FailPllConnect = 0;
 	}
-	// UM10360 table 21: supported RTC multipliers with MSEL bit 12 set.
-	memset(&s_Regs, 0, sizeof(s_Regs));
-	s_Regs.FLASHCFG = 0x303AU;
-	s_Unsafe = 0;
-	assert(SystemCoreClockSet(72007680, 32768) == 72007680);
-	assert(s_Regs.PLL0CFG == 4394U);
-	assert(s_Regs.CCLKCFG == 3U);
-	assert(s_Unsafe == 0);
-
-	memset(&s_Regs, 0, sizeof(s_Regs));
-	s_Regs.FLASHCFG = 0x303AU;
-	s_Unsafe = 0;
-	assert(SystemCoreClockSet(84000768, 32768) == 84000768);
-	assert(s_Regs.PLL0CFG == 5126U);
-	assert(s_Regs.CCLKCFG == 3U);
-	assert(s_Unsafe == 0);
-
 	// Both PLL feed paths preserve enabled and already-disabled IRQ state.
 	for (uint32_t mask = 0; mask <= 1; mask++)
 	{
-		uint32_t status = 7U << 8;
-
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_Primask = mask;
 		s_InterruptRestores = 0;
-		assert(SystemCoreClockSet(120000000, 4000000) == 120000000);
+		assert(TestClockSet(120000000, 4000000) == 120000000);
 		assert(s_Primask == mask);
 		assert(s_InterruptRestores == 5);
-
-		memset(&s_Regs, 0, sizeof(s_Regs));
-		s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
-		s_Regs.SCS = 0x60;
-		SystemClkFreq = 12000000;
-		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &status, sizeof(status));
-		s_InterruptRestores = 0;
-		SystemConnectPLL1();
-		assert(s_Primask == mask);
-		assert(s_InterruptRestores == 5);
-	}
-	// PLL1 needs exactly 48 MHz output and P=2 for its 192 MHz CCO.
-	for (unsigned i = 0; i < sizeof(s_UsbInputs) / sizeof(s_UsbInputs[0]); i++)
-	{
-		uint32_t status = 7U << 8;
-
-		memset(&s_Regs, 0, sizeof(s_Regs));
-		s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
-		s_Regs.SCS = 0x60;
-		SystemClkFreq = s_UsbInputs[i];
-		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &status, sizeof(status));
-		SystemConnectPLL1();
-		assert(s_Regs.PLL1CFG == ((48000000U / s_UsbInputs[i] - 1U) | 0x20U));
-		assert(s_Regs.PLL1CON == 3);
-	}
-
-	for (unsigned i = 0; i < sizeof(s_UsbInvalidInputs) / sizeof(s_UsbInvalidInputs[0]); i++)
-	{
-		LPC_SC_TypeDef before;
-		uint32_t status = 7U << 8;
-
-		memset(&s_Regs, 0, sizeof(s_Regs));
-		s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
-		s_Regs.SCS = 0x60;
-		SystemClkFreq = s_UsbInvalidInputs[i];
-		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &status, sizeof(status));
-		TestSystemRegs();
-		memcpy(&before, &s_Regs, sizeof(before));
-		SystemConnectPLL1();
-		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
-	}
-
-	// A valid frequency alone is insufficient without a known, ready MAIN source.
-	for (unsigned source = 0; source < 3; source++)
-	{
-		LPC_SC_TypeDef before;
-
-		memset(&s_Regs, 0, sizeof(s_Regs));
-		s_Regs.CLKSRCSEL = source;
-		s_Regs.SCS = source == CLKSRCSEL_MAIN ? 0 : 0x60;
-		SystemClkFreq = 12000000;
-		TestSystemRegs();
-		memcpy(&before, &s_Regs, sizeof(before));
-		SystemConnectPLL1();
-		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
-	}
-	// PLL1 failures must return with the USB PLL disabled, allowing a retry.
-	for (unsigned i = 0; i < sizeof(s_UsbInputs) / sizeof(s_UsbInputs[0]); i++)
-	{
-		for (unsigned failure = 1; failure <= 2; failure++)
-		{
-			memset(&s_Regs, 0, sizeof(s_Regs));
-			s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
-			s_Regs.SCS = 0x60;
-			s_Regs.USBCLKCFG = 9;
-			SystemClkFreq = s_UsbInputs[i];
-			SystemCoreClock = 72000000;
-			s_Primask = failure - 1;
-			s_UsbModel = 1;
-			s_UsbFailure = failure;
-			s_UsbWait = 0;
-			SystemConnectPLL1();
-			assert(s_UsbWait != 0);
-			assert(s_Regs.PLL1CON == 0);
-			assert(s_Regs.PLL1FEED == 0x55);
-			assert(s_Regs.USBCLKCFG == 9);
-			assert(SystemCoreClock == 72000000);
-			assert(s_Primask == failure - 1);
-
-			s_UsbFailure = 0;
-			s_UsbWait = 0;
-			SystemConnectPLL1();
-			assert(s_Regs.PLL1CON == 3);
-			assert((s_Regs.PLL1STAT & (7U << 8)) == (7U << 8));
-			assert(s_Primask == failure - 1);
-			s_UsbModel = 0;
-		}
-	}
-	// Reconfigure an already enabled/connected USB PLL only after shutdown.
-	for (unsigned blocked = 0; blocked < 2; blocked++)
-	{
-		for (uint32_t mask = 0; mask <= 1; mask++)
-		{
-			memset(&s_Regs, 0, sizeof(s_Regs));
-			s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
-			s_Regs.SCS = 0x60;
-			s_Regs.PLL1CON = 3;
-			s_Regs.PLL1CFG = 0x22;
-			SystemClkFreq = 12000000;
-			s_Primask = mask;
-			s_UsbModel = 1;
-			s_UsbFailure = 0;
-			s_UsbWait = 0;
-			s_CheckUsbStop = 1;
-			s_BlockUsbStop = blocked;
-			s_UsbPreviousCon = s_Regs.PLL1CON;
-			s_UsbPreviousCfg = s_Regs.PLL1CFG;
-			s_UsbStopWait = 0;
-			SystemConnectPLL1();
-			assert(s_Primask == mask);
-			assert(s_Regs.PLL1CFG == (blocked ? 0x22U : 0x23U));
-			assert(s_Regs.PLL1CON == (blocked ? 0U : 3U));
-			if (blocked)
-			{
-				assert(s_UsbStopWait != 0);
-			}
-			s_CheckUsbStop = 0;
-		}
 	}
 	// An active CPU PLL must disconnect before disable or configuration changes.
 	for (unsigned mode = 1; mode <= 3; mode++)
@@ -927,20 +726,20 @@ int main(void)
 			s_Regs.PLL0CFG = 19;
 			s_Regs.PLL0CON = 3;
 			s_Regs.USBCLKCFG = 9;
-			SystemClkFreq = 16000000;
+			s_Lpc17CclkIn = 16000000;
 			SystemCoreClock = 80000000;
 			s_Primask = mask;
 			s_CpuStopMode = mode;
 			s_CpuStopWait = 0;
 			s_CpuStopDone = 0;
 			s_CpuPreviousStatus = 3U << 24;
-			assert(SystemCoreClockSet(120000000, 4000000) ==
+			assert(TestClockSet(120000000, 4000000) ==
 				(mode == 1 ? 120000000U : 0U));
 			assert(s_Primask == mask);
 			if (mode == 1)
 			{
 				assert(s_CpuStopDone);
-				assert(SystemClkFreq == 4000000);
+				assert(s_Lpc17CclkIn == SystemCoreClock * (s_Regs.CCLKCFG + 1U));
 				assert(s_Regs.PLL0CON == 3);
 			}
 			else
@@ -948,90 +747,25 @@ int main(void)
 				assert(!s_CpuStopDone);
 				assert(s_Regs.PLL0CON == (mode == 2 ? 1U : 0U));
 				assert(s_Regs.USBCLKCFG == 9);
-				assert(SystemClkFreq == 16000000);
-				assert(SystemCoreClock == (mode == 2 ? 80000000U : 2000000U));
-				assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock * 1000000ULL) / 16000000U);
+				// PLL0 did not acknowledge: the CPU clock is not known
+				assert(s_Lpc17CclkIn == 0);
+				assert(SystemCoreClock == 0);
 				assert(s_Regs.FLASHCFG == 0x503A);
 			}
 			s_CpuStopMode = 0;
 		}
 	}
-	// The legacy API takes selectors, not oscillator frequencies.
-	for (int selector = CLKSRCSEL_IRC; selector <= CLKSRCSEL_RTC; selector++)
-	{
-		uint32_t target = selector == CLKSRCSEL_RTC ? 72007680U : 120000000U;
-
-		memset(&s_Regs, 0, sizeof(s_Regs));
-		s_OscWait = 0;
-		s_OscReadyAfter = 4;
-		assert(SystemSetCoreClock(target, selector) == target);
-		assert(s_Regs.CLKSRCSEL == (uint32_t)selector);
-		assert(SystemClkFreq == (selector == CLKSRCSEL_IRC ? 4000000U :
-			(selector == CLKSRCSEL_MAIN ? 16000000U : 32768U)));
-	}
-	{
-		LPC_SC_TypeDef before;
-		uint32_t core = SystemCoreClock;
-		uint32_t source = SystemClkFreq;
-
-		memcpy(&before, &s_Regs, sizeof(before));
-		assert(SystemSetCoreClock(120000000, -1) == 0);
-		assert(SystemSetCoreClock(120000000, 3) == 0);
-		assert(SystemSetCoreClock(120000000, 16000000) == 0);
-		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
-		assert(SystemCoreClock == core);
-		assert(SystemClkFreq == source);
-	}
 	memset(&s_Regs, 0, sizeof(s_Regs));
 	s_Regs.SCS = 0x60;
 	s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
-	assert(SystemCoreClockSet(24000000, 24000000) == 0);
+	assert(TestClockSet(24000000, 24000000) == 0);
 	assert(s_Regs.SCS == 0x60 && s_Regs.FLASHCFG == 0);
 	s_Regs.CLKSRCSEL = CLKSRCSEL_IRC;
 	s_OscWait = 0;
 	s_OscReadyAfter = 4;
-	assert(SystemCoreClockSet(24000000, 24000000) == 24000000);
+	assert(TestClockSet(24000000, 24000000) == 24000000);
 	assert((s_Regs.SCS & 0x70U) == 0x70U);
 
-	// Enabled peripheral users must be refused without clock register writes.
-	for (unsigned bit = 0; bit < 32; bit++)
-	{
-		if (bit == 0 || bit == 5 || bit == 9 || bit == 11 || bit == 15 ||
-			bit == 20 || bit == 28)
-		{
-			continue;
-		}
-		memset(&s_Regs, 0, sizeof(s_Regs));
-		s_Regs.PCONP = 1U << bit;
-		(void)TestSystemRegs();
-		LPC_SC_TypeDef before = s_Regs;
-
-		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
-		assert(SystemCoreClockSet(4000000, 4000000) == 0);
-		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
-	}
-	memset(&s_Regs, 0, sizeof(s_Regs));
-	g_TestWdt.WDMOD = 1;
-	g_TestWdt.WDCLKSEL = 1;
-	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
-	g_TestWdt.WDMOD = 0;
-	g_TestDac.DACCTRL = 4;
-	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
-	g_TestDac.DACCTRL = 0;
-	s_Regs.CLKOUTCFG = 1U << 8;
-	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
-	s_Regs.CLKOUTCFG = 0;
-	s_Regs.PLL1CON = 1;
-	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
-	memset(&s_Regs, 0, sizeof(s_Regs));
-	s_Regs.PCONP = 1U << 31;
-	SystemConnectPLL1();
-	assert(s_Regs.PLL1CON == 0 && s_Regs.PLL1FEED == 0);
-	memset(&s_Regs, 0, sizeof(s_Regs));
-	s_Regs.PCONP = (1U << 9) | (1U << 15);
-	assert(SystemCoreClockSet(4000000, 4000000) == 4000000);
-	assert(!SystemLowFreqClockSelect(OSC_TYPE_RC, 32768));
-	assert(!SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768));
 	printf("LPC17xx flash timing and oscillator wait: %u errors\n", errors);
 	return errors != 0;
 }
