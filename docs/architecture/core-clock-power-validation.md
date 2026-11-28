@@ -79,11 +79,25 @@ SAM4LSxC and SAM4E16E. It uses `UARTprintf` and does not fit the 16 KB
 SAMD11D14AM.
 
 Hardware runs, Nov. 27, 2026, reported by the maintainer: validated on the
-SAMD11 (CoreClockTest, there is no TimerTest project), SAMD21, SAM4L and
-nRF52840. On SAM D and SAM4L the TimerTest Disable and Enable check found
-the TC and TCC counts lost across Disable and Enable, fixed in 3020ba575
-and 8158ceee0 before these runs. nRF5340, nRF54L, nRF91 and SAM4E are not
-run yet.
+SAMD11 (CoreClockTest, there is no TimerTest project), SAMD21, SAM4L,
+nRF52840 and nRF52832. On SAM D and SAM4L the TimerTest Disable and Enable
+check found the TC and TCC counts lost across Disable and Enable, fixed in
+3020ba575 and 8158ceee0 before these runs. nRF5340, nRF54L, nRF91 and SAM4E
+are not run yet.
+
+nRF52832 TimerTest, 0 failures, 3 RTC and 5 TIMER:
+
+| sDelay(1) | Time | From 1 s |
+| --- | --- | --- |
+| First call, LFXO stopped | 1,002,612 us | +2,612 us |
+| LF clock held running | 1,000,030 us | +30 us |
+| Every RTC held, a TIMER used | 1,000,071 us | +71 us |
+
+The first call was 1,262,331 us before the clock start time was subtracted.
+The RTC counts over 200 ms were 200,012 to 200,043 us against TIMER0 at
+199,999 us. The 10 ms continuous trigger fired 10 times in 105 ms on every
+timer, with a period of 10,009 us on the RTC (the closest 32,768 Hz tick)
+and 10,000 us on the TIMER.
 
 ## TimerDemo
 
