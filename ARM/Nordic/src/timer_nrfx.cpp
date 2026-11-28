@@ -73,6 +73,11 @@ extern "C" bool nrf_sdh_is_enabled(void);
 #pragma weak nrf_sdh_is_enabled
 #endif
 
+// Setup time of a delay on each timer in nsec, DevNo order: TimerInit sets
+// it in TimerDev_t nsSetup. TimerTest prints the value of each timer. The
+// values depend on the MCU, 0 until measured.
+static const int32_t s_nRFxTimerSetup[TIMER_NRFX_RTC_MAX + TIMER_NRFX_HF_MAX] = { 0 };
+
 #if defined(NRF52_SERIES) || defined(NRF52805_XXAA) || \
 	defined(NRF52810_XXAA) || defined(NRF52811_XXAA) || \
 	defined(NRF52820_XXAA) || defined(NRF52832_XXAA) || \
@@ -193,6 +198,8 @@ static bool nRFxTimerStackHeld(int DevNo)
 
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
+	bool success;
+
 	if (pTimer == NULL || pCfg == NULL || nRFxTimerStackHeld(pCfg->DevNo))
 	{
 		return false;
@@ -201,13 +208,22 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX)
 	{
 #if defined(NRF54L_SERIES) || defined(NRF71_SERIES)
-		return nRFxGrtcInit(pTimer, pCfg);
+		success = nRFxGrtcInit(pTimer, pCfg);
 #else
-		return nRFxRtcInit(pTimer, pCfg);
+		success = nRFxRtcInit(pTimer, pCfg);
 #endif
 	}
+	else
+	{
+		success = nRFxTimerInit(pTimer, pCfg);
+	}
+	if (success)
+	{
+		// DevNo -1 selects a low power timer, pTimer->DevNo is the one taken
+		pTimer->nsSetup = s_nRFxTimerSetup[pTimer->DevNo];
+	}
 
-	return nRFxTimerInit(pTimer, pCfg);
+	return success;
 }
 
 int TimerGetLowFreqDevCount()
