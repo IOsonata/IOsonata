@@ -82,8 +82,8 @@ Hardware runs, Nov. 27, 2026, reported by the maintainer: validated on the
 SAMD11 (CoreClockTest, there is no TimerTest project), SAMD21, SAM4L,
 nRF52840 and nRF52832. On SAM D and SAM4L the TimerTest Disable and Enable
 check found the TC and TCC counts lost across Disable and Enable, fixed in
-3020ba575 and 8158ceee0 before these runs. nRF5340, nRF54L, nRF91 and SAM4E
-are not run yet.
+3020ba575 and 8158ceee0 before these runs. The SAMD11 also passed separate
+TC1, TC2 and TCC0 resume checks and the one- and two-second sDelay checks.
 
 nRF52832 TimerTest, 0 failures, 3 RTC and 5 TIMER:
 
@@ -98,6 +98,28 @@ The RTC counts over 200 ms were 200,012 to 200,043 us against TIMER0 at
 199,999 us. The 10 ms continuous trigger fired 10 times in 105 ms on every
 timer, with a period of 10,009 us on the RTC (the closest 32,768 Hz tick)
 and 10,000 us on the TIMER.
+
+### Additional Nordic hardware runs
+
+Each run below finished with zero TimerTest failures. The last three columns
+give the signed error in microseconds for a one-second delay. A positive
+value means the delay ran long.
+
+| Board and core | Commit | LF / HF timers | First call (us) | LF clock running (us) | All LF timers held (us) |
+| --- | --- | --- | ---: | ---: | ---: |
+| nRF5340 Audio DK, application | `4e5f27ac4` | 2 / 3 | +2,045 | -337 | +96 |
+| nRF5340 Audio DK, network | `4e5f27ac4` | 2 / 3 | -276 | -283 | +192 |
+| IBK-nRF54L15 | `4e5f27ac4` | 4 / 7 | -110 | -131 | +400 |
+| nRF54LM20A DK | `4e5f27ac4` | 4 / 7 | +35 | +10 | +894 |
+| nRF9160 DK | `3a69e3751` | 2 / 3 | +3,572 | +184 | +150 |
+| nRF91x1 DK | `3a69e3751` | 2 / 3 | +4,206 | +186 | +150 |
+
+On the IBK-nRF54L15, a separate 64 MHz CoreClockTest run verified the
+compiled-in delay factors with calibration disabled. For 100 ms, usDelay
+measured 99,994 us, msDelay 99,993 us and nsDelay 100,000 us. The run
+finished with zero failures. Commit `3a69e3751` includes those factors.
+
+The nRF54LM20B and SAM4E16E still lack board runs.
 
 ## TimerDemo
 
@@ -130,7 +152,3 @@ substitute for automated, pass/fail checks in CoreClockTest.
 - Hardware runs establish behavior only for the tested target/core,
   configuration, and build. Do not generalize one MCU's calibrated
   delay factors or clock support to another MCU.
-
-Existing successful nRF52832 and nRF5340 CoreClockTest timings remain valid
-for their reported scope. The expanded timer trigger checks have not yet
-been run on hardware and must pass before signoff.
