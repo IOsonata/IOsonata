@@ -78,6 +78,13 @@ TimerTest projects exist for the Nordic targets, SAMD21, SAM4LCxC,
 SAM4LSxC and SAM4E16E. It uses `UARTprintf` and does not fit the 16 KB
 SAMD11D14AM.
 
+Hardware runs, Nov. 27, 2026, reported by the maintainer: validated on the
+SAMD11 (CoreClockTest, there is no TimerTest project), SAMD21, SAM4L and
+nRF52840. On SAM D and SAM4L the TimerTest Disable and Enable check found
+the TC and TCC counts lost across Disable and Enable, fixed in 3020ba575
+and 8158ceee0 before these runs. nRF5340, nRF54L, nRF91 and SAM4E are not
+run yet.
+
 ## TimerDemo
 
 TimerDemo is a user-facing educational example for learning the generic
