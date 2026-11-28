@@ -201,6 +201,7 @@ static void R9a02MtimerIRQHandler(int IntNo, void *pCtx)
 		{
 			dev->bTrigEn = false;
 			R9a02MtimecmpWrite(UINT64_MAX);
+			R9a02CoreIntEnable(R9A02_CLIC_ID_MTIP, false);
 		}
 	}
 
@@ -332,6 +333,7 @@ static void R9a02MtimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 
 	dev->bTrigEn = false;
 	R9a02MtimecmpWrite(UINT64_MAX);
+	R9a02CoreIntEnable(R9A02_CLIC_ID_MTIP, false);
 
 	EnableInterrupt(state);
 }
@@ -377,6 +379,9 @@ static uint64_t R9a02MtimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, 
 	dev->pTrigCtx = pContext;
 	dev->Deadline = R9a02MtimeRead() + ticks;
 	dev->bTrigEn = true;
+	// The interrupt is on only while the trigger is armed. SystemSleep then
+	// uses Software Standby when no machine timer trigger is armed.
+	R9a02CoreIntEnable(R9A02_CLIC_ID_MTIP, true);
 	R9a02MtimecmpWrite(dev->Deadline);
 
 	EnableInterrupt(state);
@@ -836,6 +841,7 @@ static bool R9a02MtimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const 
 		EnableInterrupt(state);
 		return false;
 	}
+	R9a02CoreIntEnable(R9A02_CLIC_ID_MTIP, false);
 	dev->bTrigEn = false;
 	R9a02MtimecmpWrite(UINT64_MAX);
 	R9A02_CPU_AUX_MACTCR = R9A02_MACTCR_ENABLE;

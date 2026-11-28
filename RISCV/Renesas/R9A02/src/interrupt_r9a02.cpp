@@ -415,6 +415,35 @@ void R9a02UnregisterCoreIntHandler(uint32_t ClicId)
 	EnableInterrupt(state);
 }
 
+void R9a02CoreIntEnable(uint32_t ClicId, bool bEnable)
+{
+	R9a02IntHook_t *hook = R9a02CoreHook(ClicId);
+	uintptr_t state;
+
+	if (hook == nullptr)
+	{
+		return;
+	}
+
+	state = DisableInterrupt();
+
+	if (hook->Handler != nullptr)
+	{
+		if (bEnable)
+		{
+			// A request latched while the input was off is dropped
+			ClicClearPending(R9A02_CLIC_CTRL_BASE, ClicId);
+			CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, ClicId) = 1U;
+		}
+		else
+		{
+			CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, ClicId) = 0U;
+		}
+	}
+
+	EnableInterrupt(state);
+}
+
 // Level pins are acknowledged after the owner has handled the level. Keep
 // this return path separate so pulse events can tail-call their handler
 // without saving a hook, generation and register address across every IRQ.

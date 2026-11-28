@@ -173,6 +173,8 @@ interrupt and returns the slot number (or -1). Drivers keep the slot number
 for `R9a02UnregisterIntHandler` and `R9a02ClearPendingInt`. The ICU IR flag
 is cleared before the handler, except for a low-level pin IRQ, cleared after.
 `R9a02RegisterCoreIntHandler` does the same for MSIP and MTIP.
+`R9a02CoreIntEnable` turns a registered MSIP or MTIP input off and on. The
+timer driver keeps MTIP on only while the machine timer trigger is armed.
 
 `R9a02RouteEvent(EvtId)` routes an event to an IELSR slot with its CLIC
 interrupt off. The polling drivers read its IR flag with `R9a02EventFlag` and

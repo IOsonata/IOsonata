@@ -990,8 +990,10 @@ channels 0 through 7. A disabled channel keeps its prescaler until PowerOff.
 The last channel to power off restores the TAU module gate if the timer
 driver started the module.
 
-An armed machine timer uses ordinary Sleep. With an enabled ICU wake source
-and Snooze off, SystemSleep can use Software Standby. The application prepares
+The machine timer cannot end Software Standby. Its driver turns the MTIP
+interrupt on only while its trigger is armed, and SystemSleep uses ordinary
+Sleep while MTIP is on. With an enabled ICU wake source and Snooze off,
+SystemSleep can use Software Standby. The application prepares
 its peripherals before the call. The port temporarily masks non-wake CLIC
 interrupts for Software Standby and restores their enables on return, as
 required by Renesas TN-RIS-A0001B/E. Explicit Snooze entry for UART, SPI and

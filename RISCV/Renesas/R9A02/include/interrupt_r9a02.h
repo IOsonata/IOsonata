@@ -195,6 +195,16 @@ bool R9a02RegisterCoreIntHandler(uint32_t ClicId, int Prio, R9a02IRQHandler_t pH
 /// @param	ClicId	: R9A02_CLIC_ID_MTIP or R9A02_CLIC_ID_MSIP
 void R9a02UnregisterCoreIntHandler(uint32_t ClicId);
 
+/// @brief	Turn the CLIC input of the machine timer or machine software
+/// 		interrupt on or off.
+///
+/// The handler stays registered. Turning the input on drops a request
+/// latched by the CLIC while it was off.
+///
+/// @param	ClicId	: R9A02_CLIC_ID_MTIP or R9A02_CLIC_ID_MSIP
+/// @param	bEnable	: true to turn the input on
+void R9a02CoreIntEnable(uint32_t ClicId, bool bEnable);
+
 /// @brief	Trap and interrupt setup, called by SystemInit.
 ///
 /// Sets mtvec, mtvt, cliccfg and NMIADDR, disables every CLIC input and
