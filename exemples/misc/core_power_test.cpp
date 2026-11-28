@@ -132,7 +132,7 @@ static volatile uint32_t * const s_DropRam = (volatile uint32_t *)POWER_DEMO_RAM
 #endif
 
 #if CORE_POWER_TEST_POLLING_CONSOLE
-static void PowerTestPut(const char *pText)
+static void PowerTestText(const char *pText)
 {
 	uint8_t c;
 
@@ -142,6 +142,9 @@ static void PowerTestPut(const char *pText)
 		while (UARTTx(&s_Uart, &c, 1) != 1)
 		{
 		}
+		// In polling mode each write services TX. Allow one 8N1 frame
+		// before submitting the next byte so none remain queued at sleep.
+		usDelay((10000000UL + UART_BAUDRATE - 1U) / UART_BAUDRATE);
 	}
 }
 
@@ -156,30 +159,18 @@ static void PowerTestHex(uint32_t Value)
 		digits[i] = "0123456789abcdef"[Value & 15U];
 		Value >>= 4;
 	}
-	PowerTestPut(digits);
-}
-
-static void PowerTestText(const char *pText)
-{
-	uint8_t dummy;
-
-	PowerTestPut(pText);
-	// Poll the UART until the last queued byte reaches the transmitter.
-	while (CFifoUsed(s_Uart.hTxFifo) != 0)
-	{
-		UARTRx(&s_Uart, &dummy, 1);
-	}
+	PowerTestText(digits);
 }
 
 static void PowerTestStatus(const char *pName, const char *pStatus)
 {
-	PowerTestPut(pName);
+	PowerTestText(pName);
 	PowerTestText(pStatus);
 }
 
 static void PowerTestValue(const char *pName, uint32_t Value)
 {
-	PowerTestPut(pName);
+	PowerTestText(pName);
 	PowerTestHex(Value);
 	PowerTestText("\r\n");
 }
@@ -187,9 +178,9 @@ static void PowerTestValue(const char *pName, uint32_t Value)
 static void PowerTestPair(const char *pName, uint32_t First, const char *pMiddle,
                           uint32_t Second, const char *pEnd)
 {
-	PowerTestPut(pName);
+	PowerTestText(pName);
 	PowerTestHex(First);
-	PowerTestPut(pMiddle);
+	PowerTestText(pMiddle);
 	PowerTestHex(Second);
 	PowerTestText(pEnd);
 }
@@ -200,6 +191,15 @@ static void PowerTestPair(const char *pName, uint32_t First, const char *pMiddle
 #define PowerTestPair(name, first, middle, second, end) \
 	SysLogPrintf(SysLogGet(), name "%08x" middle "%08x" end, (unsigned)(first), (unsigned)(second))
 #endif
+
+static void PowerTestFlush(void)
+{
+#if !CORE_POWER_TEST_POLLING_CONSOLE
+	(void)SysLogFlush(SysLogGet());
+#endif
+	// Leave interrupts enabled while the UART finishes transmitting.
+	msDelay(100);
+}
 
 static void CorePowerTestResult(const char *pName, bool Pass)
 {
@@ -218,24 +218,6 @@ static void CorePowerTestUnsupported(const char *pName)
 
 static void CorePowerTestSummary(void)
 {
-#if !CORE_POWER_TEST_POLLING_CONSOLE
-	uint32_t logRejected;
-	uint32_t uartUnaccepted;
-	int logPending;
-	int uartPending;
-
-	// Snapshot transport backpressure independently from the test assertions.
-	// TxDropCnt counts unaccepted UART submissions (which SysLog may retry);
-	// it is not proof that a byte was lost on the physical wire.
-	logRejected = __atomic_load_n(&SysLogGet()->hFifo->DropCnt, __ATOMIC_RELAXED);
-	uartUnaccepted = s_Uart.TxDropCnt;
-	logPending = CFifoUsed(SysLogGet()->hFifo);
-	uartPending = CFifoUsed(s_Uart.hTxFifo);
-	SysLogPrintf(SysLogGet(),
-		"LogDiag fifo=0x%08x uartfifo=0x%08x evicted=0x%08x uartRejected=0x%08x\r\n",
-		(unsigned)logPending, (unsigned)uartPending,
-		(unsigned)logRejected, (unsigned)uartUnaccepted);
-#endif
 	PowerTestPair("CorePowerTest complete: 0x", s_Failures, " failures, 0x", s_Checks, " checks\r\n");
 }
 
@@ -328,12 +310,12 @@ static void CorePowerTestRunningMode(uint32_t Caps)
 		return;
 	}
 	// Let UART finish pending output before changing the CPU power mode.
-	msDelay(100);
+	PowerTestFlush();
 	ok = SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER);
 	reduced = SystemCoreClockGet();
 	CorePowerTestResult("Reduced CPU power mode", ok &&
 		SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER && reduced <= before);
-	msDelay(100);
+	PowerTestFlush();
 	ok = SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);
 	CorePowerTestResult("CPU performance restoration", ok &&
 		SystemCoreClockGet() == before &&
@@ -357,7 +339,7 @@ static bool CorePowerTestTimedWake(void)
 	}
 	PowerTestText("Entering Standby; automatic timer wake\r\n");
 	// Allow queued UART DMA transfers to finish before entering sleep.
-	msDelay(100);
+	PowerTestFlush();
 	state = DisableInterrupt();
 	s_TimerWoke = false;
 	start = TimerGetMicrosecond(&s_WakeTimer);
@@ -401,7 +383,7 @@ static bool CorePowerTestButtonWake(void)
 		}
 		s_ButtonWoke = false;
 		PowerTestText("Entering Standby; press wake button\r\n");
-		msDelay(100);
+		PowerTestFlush();
 		state = DisableInterrupt();
 		if (!s_ButtonWoke)
 		{
@@ -672,7 +654,7 @@ int main(void)
 		}
 #endif
 		// Keep interrupts enabled while UART sends the final message.
-		msDelay(100);
+		PowerTestFlush();
 		SystemPowerOff();
 		CorePowerTestResult("System OFF returned unexpectedly", false);
 		CorePowerTestSummary();
