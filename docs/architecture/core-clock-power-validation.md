@@ -96,6 +96,10 @@ msDelay 99,991 us and nsDelay 99,997 us. At 39,586,432 Hz they were 99,997,
 14,003,369 for usDelay and 3,000,390 and 3,000,690 for nsDelay, are within
 0.02 percent of the ones in the code. 0 failures.
 
+SAMD11 Xplained Pro after e8cfe4baa, calibration off: the same times as the
+run above, 99,995, 100,011 and 100,000 us at 48 MHz and 99,995, 100,016 and
+99,994 us at 24 MHz, as both rates are measured points. 0 failures.
+
 ## TimerTest coverage
 
 `exemples/misc/timer_test.cpp`, the TimerTest project of each target, tests
