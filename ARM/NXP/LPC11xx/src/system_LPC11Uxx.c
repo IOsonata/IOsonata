@@ -49,6 +49,8 @@ Modified by          Date              Description
 
 #define LPC11_CLOCK_WAIT_MAX		100000U
 #define LPC11_WDTOSC_ACCURACY		400000U			// ppm, +/-40 percent
+#define LPC11_FLASH_1CLK_MAX		20000000UL		// Flash access in 1 system clock
+#define LPC11_FLASH_2CLK_MAX		40000000UL		// Flash access in 2 system clocks
 
 __WEAK McuOsc_t g_McuOsc = {
 	{OSC_TYPE_XTAL, 12000000, 20},
@@ -70,6 +72,12 @@ static const uint32_t s_WdtOscFreq[] = {
 	3000000, 3250000, 3500000, 3750000,
 	4000000, 4200000, 4400000, 4600000,
 };
+
+static uint32_t s_HfUsers;
+static uint32_t s_LfUsers;
+static uint32_t s_LfFreq;				// Watchdog oscillator started by SystemInit
+static uint32_t s_PerformanceDiv;		// SYSAHBCLKDIV set by SystemInit
+static SYSTEM_POWER_MODE s_PowerMode;
 
 // CPU clock from the main clock the clock setup set and the AHB divider
 void SystemCoreClockUpdate(void)
@@ -321,6 +329,7 @@ static void Lpc11LowFreqInit(void)
 	uint32_t rate;
 	uint32_t diff;
 
+	s_LfFreq = 0;
 	if (g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC || g_McuOsc.LowPwrOsc.Freq == 0)
 	{
 		return;
@@ -347,12 +356,15 @@ static void Lpc11LowFreqInit(void)
 	LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_WDTOSC_PD;
 	g_McuOsc.LowPwrOsc.Freq = best;
 	g_McuOsc.LowPwrOsc.Accuracy = LPC11_WDTOSC_ACCURACY;
+	s_LfFreq = best;
 }
 
 void SystemInit(void)
 {
 	Lpc11CoreClockInit();
 	Lpc11LowFreqInit();
+	s_PerformanceDiv = LPC_SYSCON->SYSAHBCLKDIV & 0xffU;
+	s_PowerMode = SYSTEM_POWER_MODE_PERFORMANCE;
 }
 
 /**
@@ -387,4 +399,128 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 uint32_t SystemCoreClockGet(void)
 {
 	return SystemCoreClock;
+}
+
+bool SystemHighFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = DisableInterrupt();
+	ready = s_HfUsers != UINT32_MAX && SystemMainClkFreq != 0U;
+	if (ready)
+	{
+		s_HfUsers++;
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (s_HfUsers != 0U)
+	{
+		s_HfUsers--;
+	}
+	EnableInterrupt(state);
+}
+
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}
+
+// The watchdog oscillator, when g_McuOsc.LowPwrOsc gave SystemInit a frequency
+bool SystemLowFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = DisableInterrupt();
+	ready = s_LfUsers != UINT32_MAX && s_LfFreq != 0U;
+	if (ready)
+	{
+		s_LfUsers++;
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
+void SystemLowFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = DisableInterrupt();
+	if (s_LfUsers != 0U)
+	{
+		s_LfUsers--;
+	}
+	EnableInterrupt(state);
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}
+
+// Flash access time for a system clock frequency. FLASHCFG is in the flash
+// controller, its clock was enabled by the clock setup.
+static void Lpc11FlashTime(uint32_t Freq)
+{
+	uint32_t tim;
+
+	tim = Freq <= LPC11_FLASH_1CLK_MAX ? 0U : (Freq <= LPC11_FLASH_2CLK_MAX ? 1U : 2U);
+	LPC_FLASHCTRL->FLASHCFG = (LPC_FLASHCTRL->FLASHCFG & ~3U) | tim;
+}
+
+/**
+ * @brief	CPU running mode.
+ *
+ * LOW_POWER doubles SYSAHBCLKDIV: the CPU, AHB and APB clocks, and the timers
+ * and the SysTick on them, run at half the frequency. The UART, SSP and USB
+ * clocks come from the main clock through their own dividers and do not
+ * change. The flash access time follows the system clock.
+ */
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t state;
+	uint32_t div;
+	uint32_t freq;
+
+	if (__get_IPSR() != 0U ||
+		(Mode != SYSTEM_POWER_MODE_PERFORMANCE && Mode != SYSTEM_POWER_MODE_LOW_POWER) ||
+		s_PerformanceDiv == 0U || s_PerformanceDiv > 0x7fU)
+	{
+		return false;
+	}
+	div = Mode == SYSTEM_POWER_MODE_LOW_POWER ? s_PerformanceDiv << 1 : s_PerformanceDiv;
+	freq = SystemMainClkFreq / div;
+	state = DisableInterrupt();
+	if (Mode != s_PowerMode)
+	{
+		// The longer flash access before the faster clock, after the slower one
+		if (Mode == SYSTEM_POWER_MODE_PERFORMANCE)
+		{
+			Lpc11FlashTime(freq);
+		}
+		LPC_SYSCON->SYSAHBCLKDIV = div;
+		if (Mode == SYSTEM_POWER_MODE_LOW_POWER)
+		{
+			Lpc11FlashTime(freq);
+		}
+		SystemCoreClockUpdate();
+		s_PowerMode = Mode;
+	}
+	EnableInterrupt(state);
+	return true;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return s_PowerMode;
 }

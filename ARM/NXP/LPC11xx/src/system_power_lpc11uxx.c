@@ -34,7 +34,6 @@ Modified by          Date              Description
 
 #include "LPC11Uxx.h"
 #include "coredev/system_core_clock.h"
-#include "coredev/iopincfg.h"
 #include "coredev/interrupt.h"
 
 #define LPC11_PCON_DPDFLAG	(1U << 11)
@@ -42,20 +41,14 @@ Modified by          Date              Description
 static bool s_ResetRead;
 static uint32_t s_ResetReason;
 
+// SystemSleep wakes on an interrupt set up through its driver, a pin
+// interrupt of iopincfg.h included. SystemPowerOff wakes by PIO0_16, falling
+// edge. The running modes are in system_LPC11Uxx.c.
 uint32_t SystemPowerCapabilitiesGet(void)
 {
 	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_SYSTEM_OFF |
-		   SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE | SYSTEM_POWER_CAP_RET_REG;
-}
-
-bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
-{
-	return Mode == SYSTEM_POWER_MODE_PERFORMANCE;
-}
-
-SYSTEM_POWER_MODE SystemPowerModeGet(void)
-{
-	return SYSTEM_POWER_MODE_PERFORMANCE;
+		   SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE | SYSTEM_POWER_CAP_RET_REG |
+		   SYSTEM_POWER_CAP_LOW_POWER;
 }
 
 uint32_t SystemResetReason(void)
@@ -99,13 +92,6 @@ uint32_t SystemResetReason(void)
 	}
 	EnableInterrupt(state);
 	return s_ResetReason;
-}
-
-bool SystemWakePin(int PortNo, int PinNo, int Sense)
-{
-	// UM10462: PIO0_16 is permanently the falling-edge Deep power-down wake.
-	// It needs an external pull-up. Neither disabling it nor reversing it is supported.
-	return PortNo == 0 && PinNo == 16 && Sense == IOPINSENSE_LOW_TRANSITION;
 }
 
 void SystemPowerOff(void)

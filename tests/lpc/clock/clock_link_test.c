@@ -257,5 +257,79 @@ int main(void)
 	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_WDT;
 	SystemCoreClockUpdate();
 	assert(SystemCoreClock == 48000000);
-	puts("LPC11Uxx SystemInit clock setup, IRC fallback and watchdog oscillator: PASS");
+	// Shared clock requests count the users of clocks SystemInit started
+	ResetModel(true, true);
+	SetCore(OSC_TYPE_XTAL, 12000000, false);
+	g_McuOsc.LowPwrOsc.Type = OSC_TYPE_RC;
+	g_McuOsc.LowPwrOsc.Freq = 0;
+	SystemInit();
+	SystemHighFreqClockDisable();
+	assert(SystemHighFreqClockEnable());
+	assert(SystemHighFreqClockEnable());
+	SystemHighFreqClockDisable();
+	SystemHighFreqClockDisable();
+	assert(SystemHighFreqClockEnable());
+	SystemHighFreqClockDisable();
+	assert(SystemHighFreqClockStartTime() == 0);
+	// No watchdog oscillator without a low frequency descriptor
+	assert(!SystemLowFreqClockEnable());
+	SystemLowFreqClockDisable();
+	g_McuOsc.LowPwrOsc.Freq = 32768;
+	SystemInit();
+	assert(SystemLowFreqClockEnable());
+	assert(SystemLowFreqClockEnable());
+	SystemLowFreqClockDisable();
+	SystemLowFreqClockDisable();
+	SystemLowFreqClockDisable();
+	assert(SystemLowFreqClockEnable());
+	SystemLowFreqClockDisable();
+	assert(SystemLowFreqClockStartTime() == 0);
+
+	// Running modes: LOW_POWER doubles SYSAHBCLKDIV, the flash access time
+	// follows the system clock, nothing else changes
+	{
+		static const struct { OSC_TYPE Type; uint32_t Freq; bool SysLock; uint32_t Div; } cases[] = {
+			{ OSC_TYPE_XTAL, 12000000, true, 2 },	// 96 MHz PLL output
+			{ OSC_TYPE_TCXO, 24000000, true, 2 },	// 96 MHz PLL output
+			{ OSC_TYPE_XTAL, 12000000, false, 1 },	// 12 MHz IRC, no PLL
+		};
+		uint8_t before[sizeof(LPC_SYSCON_Type)];
+
+		for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+		{
+			uint32_t perf;
+
+			ResetModel(cases[i].SysLock, true);
+			SetCore(cases[i].Type, cases[i].Freq, false);
+			SystemInit();
+			perf = SystemCoreClock;
+			assert(LPC_SYSCON->SYSAHBCLKDIV == cases[i].Div);
+			assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+			assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+			assert(SystemCoreClock == perf);
+			memcpy(before, s_Regs, sizeof(before));
+			assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+			assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER);
+			assert(LPC_SYSCON->SYSAHBCLKDIV == cases[i].Div * 2U);
+			assert(SystemCoreClock == perf / 2U && SystemCoreClockGet() == perf / 2U);
+			assert(SystemPeriphClockGet(0) == perf / 2U);
+			assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock * 1000000ULL) / 16000000U);
+			assert(LPC_FLASHCTRL->FLASHCFG == (0xa5a50000U | (perf / 2U > 20000000U ? 1U : 0U)));
+			LPC_SYSCON->SYSAHBCLKDIV = cases[i].Div;
+			assert(memcmp(before, s_Regs, sizeof(before)) == 0);
+			LPC_SYSCON->SYSAHBCLKDIV = cases[i].Div * 2U;
+			assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+			assert(LPC_SYSCON->SYSAHBCLKDIV == cases[i].Div * 2U);
+			assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+			assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+			assert(LPC_SYSCON->SYSAHBCLKDIV == cases[i].Div);
+			assert(SystemCoreClock == perf);
+			assert(LPC_FLASHCTRL->FLASHCFG == (0xa5a50000U | (perf > 40000000U ? 2U : (perf > 20000000U ? 1U : 0U))));
+			assert(memcmp(before, s_Regs, sizeof(before)) == 0);
+			assert(!SystemPowerModeSet((SYSTEM_POWER_MODE)2));
+			assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+			assert(memcmp(before, s_Regs, sizeof(before)) == 0);
+		}
+	}
+	puts("LPC11Uxx SystemInit clock setup, IRC fallback, watchdog oscillator, clock requests and running modes: PASS");
 }

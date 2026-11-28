@@ -10,6 +10,8 @@
 #define __IOM volatile
 #define __STATIC_INLINE static inline
 #define __WEAK __attribute__((weak))
+// A host test runs in thread mode
+static inline uint32_t __get_IPSR(void) { return 0U; }
 void NVIC_ClearPendingIRQ(IRQn_Type IRQn);
 void NVIC_SetPendingIRQ(IRQn_Type IRQn);
 void NVIC_SetPriority(IRQn_Type IRQn, uint32_t Priority);
