@@ -35,8 +35,7 @@ typedef struct {
 
 #define ARM_DELAY_CAL_LOOPS	8192U
 
-// Measured cycles for ARM_DELAY_CAL_LOOPS iterations. The fallback uses
-// documented per-target assembly-loop cycles until measurement succeeds.
+// Cycles of ARM_DELAY_CAL_LOOPS iterations, measured by ArmDelayCalibrate.
 typedef struct {
 	uint32_t UsCycles;
 	uint32_t NsCycles;
@@ -72,27 +71,6 @@ static inline bool ArmDelayClockUpdate(ArmDelayCalibration_t *pCal, uint32_t Cpu
 	pCal->CpuHz = CpuHz;
 
 	return true;
-}
-
-// Per-target documented loop-cycle fallback.
-// Each clock owner invokes this once and calls ArmDelayClockUpdate whenever
-// the CPU clock changes. Reinitialization clears an earlier measurement.
-static inline bool ArmDelayClockInit(ArmDelayCalibration_t *pCal,
-	uint32_t CpuHz, uint32_t UsLoopCycles, uint32_t NsLoopCycles)
-{
-	if (pCal == NULL || UsLoopCycles == 0U || NsLoopCycles == 0U ||
-		UsLoopCycles > UINT32_MAX / ARM_DELAY_CAL_LOOPS ||
-		NsLoopCycles > UINT32_MAX / ARM_DELAY_CAL_LOOPS)
-	{
-		return false;
-	}
-
-	pCal->UsCycles = UsLoopCycles * ARM_DELAY_CAL_LOOPS;
-	pCal->NsCycles = NsLoopCycles * ARM_DELAY_CAL_LOOPS;
-	pCal->CpuHz = 0U;
-	pCal->Measured = false;
-
-	return ArmDelayClockUpdate(pCal, CpuHz);
 }
 
 // Generic factor calculation using a target's existing loop divisors in

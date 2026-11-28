@@ -75,7 +75,8 @@ class ArmClockDelayUpdates(unittest.TestCase):
 	def test_measured_cost_is_cached_for_frequency_changes(self):
 		source = HELPER.read_text(encoding="utf-8")
 		start = source.index("static inline bool ArmDelayClockUpdate(")
-		end = source.index("static inline bool ArmDelayClockInit(", start)
+		end = source.index("static inline bool ArmDelayClockSetDivisors(", start)
+		self.assertNotIn("ArmDelayClockInit(", source)
 		clock_update = source[start:end]
 
 		self.assertIn("pCal->UsCycles", clock_update)
