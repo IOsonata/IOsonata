@@ -23,6 +23,7 @@ class Nrf52DelayCalibration(unittest.TestCase):
     def test_measured_nrf52832_factor_is_retained(self):
         self.assertIn("ArmDelayClockSetDivisors(SystemCoreClock,", self.system)
         self.assertIn("13001042UL, 3000240UL", self.system)
+        self.assertIn("13001174UL, 3000210UL", self.system)
         self.assertEqual(64000000 * 1000000 // 13001042, 4922682)
         self.assertEqual(64000000 * 1000000 // 3000240, 21331626)
         self.assertIn('#include "idelay.h"', self.system)

@@ -120,10 +120,10 @@ class Nrf91PowerClock(unittest.TestCase):
 	def test_nrf91_measured_delay_divisors(self):
 		# Measured on nRF9160 hardware with CoreClockTest at 64 MHz.
 		src = (ROOT / "ARM/Nordic/nRF91/src/system_nrf91.c").read_text(encoding="utf-8")
-		self.assertIn("16001600UL, 3000330UL", src)
+		self.assertIn("16001920UL, 3000270UL", src)
 		self.assertNotIn("16000000UL, 3000000UL", src)
-		self.assertEqual(64000000 * 1000000 // 16001600, 3999600)
-		self.assertEqual(64000000 * 1000000 // 3000330, 21330986)
+		self.assertEqual(64000000 * 1000000 // 16001920, 3999520)
+		self.assertEqual(64000000 * 1000000 // 3000270, 21331413)
 
 
 	def test_lfrc_rate_survives_timer_disable_enable(self):

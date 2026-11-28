@@ -51,11 +51,11 @@ class DelayCalibrationDwt(unittest.TestCase):
 			"ArmDelayCalibrationDwtAllowed"):
 			self.assertNotIn(forbidden, src)
 
-	def test_clock_changes_use_cached_factors(self):
+	def test_clock_changes_use_measured_factors(self):
 		app = APP.read_text(encoding="utf-8")
-		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U)", app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 22U, 3U)", app)
+		self.assertIn("SystemnsDelayFactor = CalcDelayFactor(cpuHz,", app)
+		self.assertIn("64000000UL, 2908624UL, 128000000UL, 6399488UL", app)
+		self.assertIn("64000000UL, 21330560UL, 128000000UL, 42664106UL", app)
 
 
 if __name__ == "__main__":

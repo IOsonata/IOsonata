@@ -50,6 +50,43 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
 Timer trigger modes, callbacks, rollover and device power-off belong in the
 timer tests. On SAM D, run `python3 tests/samd/run_timer.py` for those drivers.
 
+### CoreClockTest measurements used by the ports
+
+The table gives the measured microsecond and nanosecond loop divisors,
+in cycles per loop multiplied by one million. Ports that interpolate
+store the equivalent loop rates in iterations per second.
+These measurements came from CoreClockTest. TimerTest measures sDelay
+separately.
+
+| Target | CPU (Hz) | us divisor | ns divisor |
+| --- | ---: | ---: | ---: |
+| nRF52840 DK | 64,000,000 | 13,001,174 | 3,000,210 |
+| nRF5340 application | 64,000,000 | 22,003,531 | 3,000,390 |
+| nRF5340 application | 128,000,000 | 20,001,600 | 3,000,180 |
+| nRF5340 network | 64,000,000 | 23,003,229 | 3,000,329 |
+| nRF9160 DK and nRF91x1 DK | 64,000,000 | 16,001,920 | 3,000,270 |
+| SAMD11D14AM | 24,000,000 | 13,008,200 | 3,002,010 |
+| SAMD11D14AM | 48,000,000 | 13,004,165 | 3,000,990 |
+| SAM4LC8C | 19,804,096 | 14,005,468 | 3,000,780 |
+| SAM4LC8C | 39,608,192 | 14,002,244 | 3,000,390 |
+
+CoreClockTest also measured a 100 ms delay on each board with runtime
+calibration disabled. All seven targets reported zero failures. Times below
+are in microseconds.
+
+| Target | CPU (Hz) | usDelay | msDelay | nsDelay |
+| --- | ---: | ---: | ---: | ---: |
+| nRF52840 DK | 64,000,000 | 99,998 | 100,000 | 99,999 |
+| nRF5340 application | 128,000,000 | 99,998 | 100,000 | 100,000 |
+| nRF5340 application | 64,000,000 | 99,996 | 100,000 | 99,999 |
+| nRF5340 network | 64,000,000 | 99,996 | 100,001 | 100,000 |
+| nRF9160 DK | 64,000,000 | 99,997 | 100,000 | 100,000 |
+| nRF91x1 DK | 64,000,000 | 99,997 | 100,000 | 100,000 |
+| SAMD11D14AM | 48,000,000 | 99,995 | 100,011 | 100,000 |
+| SAMD11D14AM | 24,000,000 | 99,995 | 100,016 | 99,994 |
+| SAM4LC8C | 39,614,848 | 99,996 | 100,000 | 100,000 |
+| SAM4LC8C | 19,807,424 | 99,984 | 99,990 | 99,997 |
+
 ## TimerTest coverage
 
 `exemples/misc/timer_test.cpp`, the TimerTest project of each target, tests

@@ -60,23 +60,13 @@ uint32_t SystemCoreClockGet(void)
 	return SystemCoreClock;
 }
 
-static ArmDelayCalibration_t s_DelayCalibration;
-
 void SystemCoreClockUpdate(void)
 {
 	SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
 
-	if (s_DelayCalibration.UsCycles == 0U)
-	{
-		// The 32-byte-aligned countdown runs at approximately 3 CPU
-		// cycles per iteration. Two HF Timer measurements at 64 MHz
-		// gave 30,012 us for 100 ms using the former 6,398,912 factor.
-		// Preserve the measured 21,321,178 iterations/s correction.
-		if (ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U))
-		{
-			SystemnsDelayFactor = 21321178U;
-		}
-	}
+	// Audio DK, CoreClockTest at the fixed network-core rate.
+	(void)ArmDelayClockSetDivisors(__SYSTEM_CLOCK_DEFAULT,
+		23003229UL, 3000329UL);
 }
 
 void SystemInit(void)

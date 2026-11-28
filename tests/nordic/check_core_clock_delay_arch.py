@@ -23,23 +23,23 @@ class NordicDelayArchitecture(unittest.TestCase):
 				self.assertIn("void SystemCoreClockUpdate(void)", source)
 				self.assertTrue(
 					"ArmDelayClockSetDivisors(" in source or
-					"ArmDelayClockInit(" in source
+					"CalcDelayFactor(" in source
 				)
 				# All production clock-update paths only update loop factors.
 				# DWT calibration runs explicitly in the diagnostic.
 				self.assertNotIn("ArmDelayCalibrate(", source)
 
-	def test_nrf5340_frequency_switch_uses_cached_cost(self):
+	def test_nrf5340_frequency_switch_uses_measured_factors(self):
 		app = (ROOT / NRF[1]).read_text(encoding="utf-8")
 		self.assertIn("NRF_CLOCK_NS->HFCLKCTRL", app)
 		self.assertIn("NRF_CLOCK_S->HFCLKCTRL", app)
-		self.assertIn("s_DelayCalibration.CpuHz != cpuHz", app)
-		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U)", app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 22U, 3U)", app)
+		self.assertIn("SystemMicroSecLoopCnt = CalcDelayFactor(cpuHz,", app)
+		self.assertIn("SystemnsDelayFactor = CalcDelayFactor(cpuHz,", app)
+		self.assertIn("64000000UL, 2908624UL, 128000000UL, 6399488UL", app)
+		self.assertIn("64000000UL, 21330560UL, 128000000UL, 42664106UL", app)
 		net = (ROOT / NRF[2]).read_text(encoding="utf-8")
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", net)
-		self.assertIn("SystemnsDelayFactor = 21321178U;", net)
+		self.assertIn("23003229UL, 3000329UL", net)
+		self.assertIn("ArmDelayClockSetDivisors(__SYSTEM_CLOCK_DEFAULT,", net)
 		self.assertNotIn("ArmDelayCalibrate(", net)
 
 	def test_dwt_calibration_uses_only_cpu_local_hardware(self):

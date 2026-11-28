@@ -331,6 +331,15 @@ static void CoreClockTestSharedClock(bool high)
 	}
 }
 
+// A CPU divider change can also change the console peripheral clock.
+static void CoreClockTestUpdateUartRate(void)
+{
+	if (s_Uart.DevIntrf.SetRate != nullptr)
+	{
+		UARTSetRate(&s_Uart, s_UartCfg.Rate);
+	}
+}
+
 // Exercise the generic CPU running mode API independently of sleep and
 // oscillator ownership. Unsupported low-power modes are reported as such.
 static void CoreClockTestPowerMode(void)
@@ -367,6 +376,7 @@ static void CoreClockTestPowerMode(void)
 		return;
 	}
 
+	CoreClockTestUpdateUartRate();
 	reduced = SystemCoreClockGet();
 	CoreClockTestPrint("CPU %u Hz (max %u)\r\n",
 		(unsigned)reduced, (unsigned)fastest);
@@ -378,6 +388,7 @@ static void CoreClockTestPowerMode(void)
 	CoreClockTestDelay(&s_DelayLow);
 	CoreClockTestFlush();
 	restoredOk = SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);
+	CoreClockTestUpdateUartRate();
 	restored = SystemCoreClockGet();
 	CoreClockTestResult("CPU restored",
 		restoredOk && SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE &&

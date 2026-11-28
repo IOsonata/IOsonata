@@ -1008,6 +1008,31 @@ static bool Sam4lConfigurationValid(const McuOsc_t *pOsc)
 	return Sam4lLowClockValid(low, lf);
 }
 
+static void Sam4lDelayUpdate(void)
+{
+#if defined(__SAM4LC8C__) || defined(__ATSAM4LC8C__)
+	// SAM4L Xplained Pro. The RC clock rate varies between boots.
+	if (SystemCoreClock >= 19804096UL && SystemCoreClock <= 39608192UL)
+	{
+		SystemMicroSecLoopCnt = CalcDelayFactor(SystemCoreClock,
+			19804096UL, 1414026UL, 39608192UL, 2828703UL);
+		SystemnsDelayFactor = CalcDelayFactor(SystemCoreClock,
+			19804096UL, 6599649UL, 39608192UL, 13201014UL);
+	}
+	else if (SystemCoreClock < 19804096UL)
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock, 14005468UL, 3000780UL);
+	}
+	else
+	{
+		(void)ArmDelayClockSetDivisors(SystemCoreClock, 14002244UL, 3000390UL);
+	}
+#else
+	(void)ArmDelayClockSetDivisors(SystemCoreClock,
+		(SAM4L_USDELAY_LOOP_CYCLES * 1000000UL), (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL));
+#endif
+}
+
 static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 {
 	s_StartupError = SAM4L_STARTUP_OK;
@@ -1031,8 +1056,7 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 		return false;
 	}
 	SystemCoreClock = RCSYS_FREQ;
-	(void)ArmDelayClockSetDivisors(SystemCoreClock,
-		(SAM4L_USDELAY_LOOP_CYCLES * 1000000UL), (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL));
+	Sam4lDelayUpdate();
 
 	if (Startup)
 	{
@@ -1193,8 +1217,7 @@ static bool Sam4lClockInit(const McuOsc_t *pOsc, bool Startup)
 	}
 	s_MainClock = mainRate;
 	SystemCoreClock = Sam4lApplyClkDiv(mainRate, sel);
-	(void)ArmDelayClockSetDivisors(SystemCoreClock,
-		(SAM4L_USDELAY_LOOP_CYCLES * 1000000UL), (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL));
+	Sam4lDelayUpdate();
 
 	if (g_McuOsc.bUSBClk) {
 		// Only the external OSC0/PLL path reaches here. The application must
@@ -1274,8 +1297,7 @@ void SystemCoreClockUpdate(void)
 	// Reporting a clock must not change Flash timing underneath the CPU.
 	s_MainClock = Sam4lMainClockGet();
 	SystemCoreClock = Sam4lApplyClkDiv(s_MainClock, SAM4L_PM->PM_CPUSEL);
-	(void)ArmDelayClockSetDivisors(SystemCoreClock,
-		(SAM4L_USDELAY_LOOP_CYCLES * 1000000UL), (SAM4L_NSDELAY_LOOP_CYCLES * 1000000UL));
+	Sam4lDelayUpdate();
 }
 
 uint32_t SystemCoreClockGet(void)

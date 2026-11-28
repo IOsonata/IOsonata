@@ -50,7 +50,7 @@ class ArmClockDelayUpdates(unittest.TestCase):
 	def test_sam4l_changes_both_factors_in_direct_transitions(self):
 		source = (ROOT / "ARM/Microchip/SAM4L/src/system_sam4l.c").read_text(
 			encoding="utf-8")
-		self.assertEqual(source.count("ArmDelayClockSetDivisors(SystemCoreClock,"), 3)
+		self.assertEqual(source.count("Sam4lDelayUpdate();"), 3)
 		self.assertIn("SystemCoreClock = RCSYS_FREQ;", source)
 		self.assertIn("SystemCoreClock = Sam4lApplyClkDiv(mainRate, sel);", source)
 		self.assertIn("SystemCoreClock = Sam4lApplyClkDiv(s_MainClock,", source)
