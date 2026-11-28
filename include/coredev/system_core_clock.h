@@ -366,8 +366,9 @@ uint32_t SystemCoreClockGet(void);
  *
  * A delay factor measured at the lowest and at the highest CPU frequency
  * gives the factor at any frequency between them, linear, without a
- * calibration at each frequency. Outside the two points, the nearest one is
- * used. The port stores the result in its delay factor.
+ * calibration at each frequency. Outside the two points, the factor of the
+ * nearest one is scaled to CpuHz: the measured CPU cycles per loop are kept.
+ * The port stores the result in its delay factor.
  *
  * @param	CpuHz      : CPU frequency the factor is for
  * @param	LowHz      : CPU frequency of the low calibration point
@@ -384,11 +385,15 @@ static inline uint32_t CalcDelayFactor(uint32_t CpuHz, uint32_t LowHz,
 
 	if (CpuHz <= LowHz || HighHz <= LowHz)
 	{
-		return LowFactor;
+		if (LowHz == 0U)
+		{
+			return LowFactor;
+		}
+		return (uint32_t)(((uint64_t)LowFactor * CpuHz + LowHz / 2U) / LowHz);
 	}
 	if (CpuHz >= HighHz)
 	{
-		return HighFactor;
+		return (uint32_t)(((uint64_t)HighFactor * CpuHz + HighHz / 2U) / HighHz);
 	}
 	span = HighHz - LowHz;
 
