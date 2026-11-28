@@ -1,6 +1,6 @@
 ROOT := ../..
 BUILD := build
-CPPFLAGS := -DRE01_1500KB -DRE01_1500KB_CFB -Ihost -I$(ROOT)/include -I$(ROOT)/ARM/Renesas/RE01/include -I$(ROOT)/ARM/Renesas/RE01/RE01_1500KB/lib/include
+CPPFLAGS := -DRE01_1500KB -DRE01_1500KB_CFB -Ihost -I$(ROOT)/include -I$(ROOT)/ARM/include -I$(ROOT)/ARM/Renesas/RE01/include -I$(ROOT)/ARM/Renesas/RE01/RE01_1500KB/lib/include
 COMMON := -O2 -g -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
 CXXFLAGS := $(COMMON) -std=gnu++17 -fno-exceptions -fno-rtti
 CFLAGS := $(COMMON) -std=gnu11 -Wno-int-to-pointer-cast
