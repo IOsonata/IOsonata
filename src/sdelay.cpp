@@ -76,6 +76,13 @@ static void SDelayTimerHandler(TimerDev_t *pTimer, int TrigNo, void *pContext)
 static bool SDelayIntContext(void)
 {
 #if defined(__arm__) || defined(__ICCARM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || \
+	defined(__ARM_ARCH_8M_MAIN__) || defined(__ARM_ARCH_8_1M_MAIN__)
+	if (__get_BASEPRI() != 0U || __get_FAULTMASK() != 0U)
+	{
+		return true;
+	}
+#endif
 	return __get_IPSR() != 0U || __get_PRIMASK() != 0U;
 #elif defined(__riscv)
 	uintptr_t status;
