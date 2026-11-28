@@ -71,6 +71,26 @@ void NVIC_DisableIRQ(IRQn_Type n) { s_NvicEn &= ~(1UL << (n & 31)); }
 #include "../../../ARM/NXP/LPC11xx/src/timer_lpc11uxx.cpp"
 #include "../../../ARM/NXP/src/timer_lpcxx.cpp"
 
+// High frequency clock requests of the timers
+static uint32_t s_HfUsers;
+static bool s_HfFail;
+
+bool SystemHighFreqClockEnable(void)
+{
+	if (s_HfFail)
+	{
+		return false;
+	}
+	s_HfUsers++;
+	return true;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	assert(s_HfUsers > 0);
+	s_HfUsers--;
+}
+
 static const int s_CtNo[4] = {0, 1, 2, 3};
 static void (* const s_Handler[4])(void) = {
 	TIMER16_0_IRQHandler, TIMER16_1_IRQHandler, TIMER32_0_IRQHandler, TIMER32_1_IRQHandler
@@ -192,6 +212,9 @@ int main()
 			t.Disable(&t);
 			assert(t.Enable(&t));
 			assert(s_NvicPrio[g_LpcTimer[d].IrqNo] == expected);
+			// A running timer is disabled before Init
+			assert(!TimerInit(&t, &cfg));
+			t.Disable(&t);
 		}
 		cfg.IntPrio = 3;
 		assert(TimerInit(&t, &cfg));
@@ -281,6 +304,63 @@ int main()
 		assert(timers[d].EnableTimerTrigger((uint32_t)1,
 			TIMER_TRIG_TYPE_CONTINUOUS) == 0);
 		timers[d].Disable();
+	}
+
+	// A running timer holds one clock request
+	assert(s_HfUsers == 0);
+	{
+		TimerDev_t a = {};
+		TimerDev_t b = {};
+		TimerDev_t *t0 = timers[0];
+		TimerDev_t *t1 = timers[1];
+
+		// A disabled timer stays with its object until its PowerOff
+		cfg.DevNo = 0;
+		assert(!TimerInit(&a, &cfg));
+		assert(TimerPowerOff(t0));
+		assert(t0->DevNo == -1 && t0->Freq == 0 && t0->PowerOff == nullptr);
+		assert(g_LpcTimer[0].pTimer == nullptr && !g_LpcTimer[0].bRunning);
+		assert((LPC_SYSCON->SYSAHBCLKCTRL & (1U << 7)) == 0);
+		assert(s_Ct[0].MCR == 0 && (s_Ct[0].TCR & 1U) == 0);
+		assert((s_NvicEn & (1UL << (g_LpcTimer[0].IrqNo & 31))) == 0);
+		assert(!TimerPowerOff(t0));
+		assert(TimerInit(&a, &cfg));
+		assert(s_HfUsers == 1 && (LPC_SYSCON->SYSAHBCLKCTRL & (1U << 7)));
+		assert(!TimerInit(&a, &cfg));
+		a.Disable(&a);
+		assert(s_HfUsers == 0);
+		a.Disable(&a);
+		assert(s_HfUsers == 0);
+		assert(a.Enable(&a) && a.Enable(&a) && s_HfUsers == 1);
+		a.Disable(&a);
+		// The same object again on its timer
+		assert(TimerInit(&a, &cfg) && a.DevNo == 0 && s_HfUsers == 1);
+		a.Disable(&a);
+		// Another timer held by another object: refused, a keeps its timer
+		cfg.DevNo = 1;
+		assert(!TimerInit(&a, &cfg));
+		assert(a.DevNo == 0 && g_LpcTimer[0].pTimer == &a);
+		// A free timer: a moves to it, its first timer is powered off
+		assert(TimerPowerOff(t1));
+		assert(TimerInit(&a, &cfg) && a.DevNo == 1 && g_LpcTimer[1].pTimer == &a);
+		assert(g_LpcTimer[0].pTimer == nullptr && (LPC_SYSCON->SYSAHBCLKCTRL & (1U << 7)) == 0);
+		assert(s_HfUsers == 1);
+		// PowerOff of a running timer
+		assert(TimerPowerOff(&a));
+		assert(s_HfUsers == 0 && (LPC_SYSCON->SYSAHBCLKCTRL & (1U << 8)) == 0);
+		assert(!a.Enable(&a));
+		// Init fails without the clock, the timer stays free
+		s_HfFail = true;
+		cfg.DevNo = 0;
+		assert(!TimerInit(&b, &cfg));
+		assert(g_LpcTimer[0].pTimer == nullptr && (LPC_SYSCON->SYSAHBCLKCTRL & (1U << 7)) == 0);
+		s_HfFail = false;
+		assert(TimerInit(&b, &cfg));
+		b.Disable(&b);
+		s_HfFail = true;
+		assert(!b.Enable(&b) && !g_LpcTimer[0].bRunning && s_HfUsers == 0);
+		s_HfFail = false;
+		assert(TimerPowerOff(&b) && s_HfUsers == 0);
 	}
 	puts("lpc11uxx timer: PASS");
 	return 0;

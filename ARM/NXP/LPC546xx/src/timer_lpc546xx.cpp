@@ -74,6 +74,24 @@ void LpcTimerClockEnable(const LpcTimer_t *pDev)
 
 }
 
+void LpcTimerClockDisable(const LpcTimer_t *pDev)
+{
+	if (pDev->bAsync)
+	{
+		ASYNC_SYSCON->ASYNCAPBCLKCTRLCLR = pDev->ClkMask;
+		// The async APB bridge serves CTIMER3 and 4 only
+		if ((ASYNC_SYSCON->ASYNCAPBCLKCTRL & (ASYNC_SYSCON_ASYNCAPBCLKCTRL_CTIMER3_MASK |
+			 ASYNC_SYSCON_ASYNCAPBCLKCTRL_CTIMER4_MASK)) == 0U)
+		{
+			SYSCON->ASYNCAPBCTRL = 0;
+		}
+	}
+	else
+	{
+		SYSCON->AHBCLKCTRLCLR[1] = pDev->ClkMask;
+	}
+}
+
 extern "C" void CTIMER0_IRQHandler(void)
 {
 	LpcTimerIrqHandler(&g_LpcTimer[2]);

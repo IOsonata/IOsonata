@@ -35,6 +35,7 @@ SOFTWARE.
 #include <stdint.h>
 #include "timer_lpcxx.h"
 #include "coredev/interrupt.h"
+#include "coredev/system_core_clock.h"
 
 static LpcTimer_t *LpcTimerData(TimerDev_t * const pTimer);
 static uint64_t LpcTimerCount(LpcTimer_t * const pDev);
@@ -42,6 +43,8 @@ static uint64_t LpcTimerTicks(uint32_t Freq, uint64_t nsPeriod);
 static uint64_t LpcTimerTickNs(uint32_t Freq, uint64_t Ticks);
 static void LpcTimerArm(LpcTimer_t * const pDev, int TrigNo);
 static void LpcTimerResetCounter(LpcTimer_t * const pDev);
+static bool LpcTimerRun(LpcTimer_t * const pDev, bool bRun);
+static void LpcTimerRelease(LpcTimer_t * const pDev);
 
 static void LpcTimerDisable(TimerDev_t * const pTimer);
 static bool LpcTimerEnable(TimerDev_t * const pTimer);
@@ -56,6 +59,7 @@ static uint64_t LpcTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uin
 										   void * const pContext);
 static void LpcTimerDisableExtTrigger(TimerDev_t * const pTimer);
 static bool LpcTimerEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_EXTTRIG_SENSE Sense);
+static bool LpcTimerPowerOff(TimerDev_t * const pTimer);
 
 static LpcTimer_t *LpcTimerData(TimerDev_t * const pTimer)
 {
@@ -250,6 +254,63 @@ void LpcTimerIrqHandler(LpcTimer_t * const pDev)
 	}
 }
 
+// Counter on with the high frequency clock requested, or off with the
+// request released. Called with interrupts disabled.
+static bool LpcTimerRun(LpcTimer_t * const pDev, bool bRun)
+{
+	if (bRun)
+	{
+		if (!pDev->bClock)
+		{
+			pDev->bClock = SystemHighFreqClockEnable();
+			if (!pDev->bClock)
+			{
+				return false;
+			}
+		}
+		pDev->pReg->TCR |= LPC_TIMER_ENABLE;
+		NVIC_EnableIRQ(pDev->IrqNo);
+		pDev->bRunning = true;
+	}
+	else
+	{
+		pDev->pReg->TCR &= ~LPC_TIMER_ENABLE;
+		NVIC_DisableIRQ(pDev->IrqNo);
+		pDev->bRunning = false;
+		if (pDev->bClock)
+		{
+			SystemHighFreqClockDisable();
+			pDev->bClock = false;
+		}
+	}
+
+	return true;
+}
+
+// Counter stopped, interrupts and triggers off, timer clock off and the CTIMER
+// free for Init. Called with interrupts disabled.
+static void LpcTimerRelease(LpcTimer_t * const pDev)
+{
+	TimerDev_t *t = pDev->pTimer;
+
+	(void)LpcTimerRun(pDev, false);
+	pDev->pReg->MCR = 0;
+	pDev->pReg->IR = LPC_TIMER_MATCH_FLAGS;
+	NVIC_ClearPendingIRQ(pDev->IrqNo);
+	for (int i = 0; i < LPC_TIMER_TRIG_MAX; i++)
+	{
+		pDev->Trig[i].bActive = false;
+	}
+	LpcTimerClockDisable(pDev);
+	pDev->pTimer = NULL;
+	if (t != NULL)
+	{
+		t->PowerOff = NULL;
+		t->DevNo = -1;
+		t->Freq = 0;
+	}
+}
+
 // Counter stopped, count and trigger deadlines kept
 static void LpcTimerDisable(TimerDev_t * const pTimer)
 {
@@ -262,8 +323,7 @@ static void LpcTimerDisable(TimerDev_t * const pTimer)
 
 	uint32_t state = DisableInterrupt();
 
-	dev->pReg->TCR &= ~LPC_TIMER_ENABLE;
-	NVIC_DisableIRQ(dev->IrqNo);
+	(void)LpcTimerRun(dev, false);
 
 	EnableInterrupt(state);
 }
@@ -271,6 +331,7 @@ static void LpcTimerDisable(TimerDev_t * const pTimer)
 static bool LpcTimerEnable(TimerDev_t * const pTimer)
 {
 	LpcTimer_t *dev = LpcTimerData(pTimer);
+	bool running;
 
 	if (dev == NULL)
 	{
@@ -279,9 +340,28 @@ static bool LpcTimerEnable(TimerDev_t * const pTimer)
 
 	uint32_t state = DisableInterrupt();
 
-	dev->pReg->TCR |= LPC_TIMER_ENABLE;
-	NVIC_EnableIRQ(dev->IrqNo);
+	running = LpcTimerRun(dev, true);
 
+	EnableInterrupt(state);
+
+	return running;
+}
+
+// Power down: Init is needed to use the CTIMER again
+static bool LpcTimerPowerOff(TimerDev_t * const pTimer)
+{
+	LpcTimer_t *dev;
+	uint32_t state;
+
+	state = DisableInterrupt();
+	dev = LpcTimerData(pTimer);
+	if (dev == NULL)
+	{
+		EnableInterrupt(state);
+
+		return false;
+	}
+	LpcTimerRelease(dev);
 	EnableInterrupt(state);
 
 	return true;
@@ -494,32 +574,51 @@ static bool LpcTimerEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, T
 /**
  * @brief	Timer initialization.
  *
- * Clock source TIMER_CLKSRC_DEFAULT only, no tick interrupt.
+ * Clock source TIMER_CLKSRC_DEFAULT only, no tick interrupt. A CTIMER held by
+ * another Timer object stays with it until its PowerOff. A running timer is
+ * disabled before Init. Init of a Timer object that holds a CTIMER powers that
+ * one off first.
  */
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
+	LpcTimer_t *dev;
+	uint32_t state;
+	int priority;
+	int maxprio;
+
 	if (pTimer == NULL || pCfg == NULL || pCfg->DevNo < 0 || pCfg->DevNo >= g_LpcTimerCount ||
 		pCfg->ClkSrc != TIMER_CLKSRC_DEFAULT || pCfg->bTickInt)
 	{
 		return false;
 	}
 
-	LpcTimer_t *dev = &g_LpcTimer[pCfg->DevNo];
+	dev = &g_LpcTimer[pCfg->DevNo];
 	if (LpcTimerBaseFreq(dev) == 0)
 	{
 		return false;
 	}
-	uint32_t state = DisableInterrupt();
+	state = DisableInterrupt();
 
-	// One CTIMER per timer object
+	if (dev->pTimer != NULL && dev->pTimer != pTimer)
+	{
+		EnableInterrupt(state);
+
+		return false;
+	}
 	for (int i = 0; i < g_LpcTimerCount; i++)
 	{
-		if ((i != pCfg->DevNo && g_LpcTimer[i].pTimer == pTimer) ||
-			(i == pCfg->DevNo && g_LpcTimer[i].pTimer != NULL && g_LpcTimer[i].pTimer != pTimer))
+		if (g_LpcTimer[i].pTimer == pTimer && g_LpcTimer[i].bRunning)
 		{
 			EnableInterrupt(state);
 
 			return false;
+		}
+	}
+	for (int i = 0; i < g_LpcTimerCount; i++)
+	{
+		if (g_LpcTimer[i].pTimer == pTimer)
+		{
+			LpcTimerRelease(&g_LpcTimer[i]);
 		}
 	}
 
@@ -533,13 +632,14 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	}
 
 	dev->pTimer = pTimer;
+	dev->bRunning = false;
 
 	pTimer->DevNo = pCfg->DevNo;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	pTimer->Disable = LpcTimerDisable;
-	pTimer->PowerOff = NULL;
+	pTimer->PowerOff = LpcTimerPowerOff;
 	pTimer->Enable = LpcTimerEnable;
 	pTimer->Reset = LpcTimerReset;
 	pTimer->GetTickCount = LpcTimerGetTickCount;
@@ -561,15 +661,14 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	if (LpcTimerSetFrequency(pTimer, pCfg->Freq) == 0)
 	{
-		dev->pTimer = NULL;
+		LpcTimerRelease(dev);
 		EnableInterrupt(state);
 
 		return false;
 	}
 
-	int priority = pCfg->IntPrio;
-	int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
-
+	priority = pCfg->IntPrio;
+	maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
 	if (priority < 0)
 	{
 		priority = 0;
@@ -580,8 +679,13 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	}
 	NVIC_ClearPendingIRQ(dev->IrqNo);
 	NVIC_SetPriority(dev->IrqNo, (uint32_t)priority);
-	NVIC_EnableIRQ(dev->IrqNo);
-	dev->pReg->TCR = LPC_TIMER_ENABLE;
+	if (!LpcTimerRun(dev, true))
+	{
+		LpcTimerRelease(dev);
+		EnableInterrupt(state);
+
+		return false;
+	}
 
 	EnableInterrupt(state);
 

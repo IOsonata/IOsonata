@@ -78,6 +78,21 @@ void NVIC_DisableIRQ(IRQn_Type n) { s_NvicEn &= ~(1UL << (n & 31)); }
 #include "../../../ARM/NXP/LPC546xx/src/timer_lpc546xx.cpp"
 #include "../../../ARM/NXP/src/timer_lpcxx.cpp"
 
+// High frequency clock requests of the timers
+static uint32_t s_HfUsers;
+
+bool SystemHighFreqClockEnable(void)
+{
+	s_HfUsers++;
+	return true;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	assert(s_HfUsers > 0);
+	s_HfUsers--;
+}
+
 // Virtual DevNo to CTIMER number and its handler
 static const int s_CtNo[5] = {3, 4, 0, 1, 2};
 static void (* const s_Handler[5])(void) = {
@@ -204,6 +219,9 @@ int main()
 		t0.Disable(&t0);
 		assert(t0.Enable(&t0));
 		assert(s_NvicPrio[CTIMER3_IRQn] == expected);
+		// A running timer is disabled before Init
+		assert(!TimerInit(&t0, &cfg));
+		t0.Disable(&t0);
 	}
 	cfg.IntPrio = 2;
 	assert(TimerInit(&t0, &cfg));
@@ -214,7 +232,7 @@ int main()
 	assert(s_NvicEn & (1UL << CTIMER3_IRQn));
 	assert(s_NvicPrio[CTIMER3_IRQn] == 2);
 
-	// Same object on a second CTIMER, or a second object on the same one
+	// A running object on a second CTIMER, or a second object on the same one
 	cfg.DevNo = 1;
 	assert(!TimerInit(&t0, &cfg));
 	cfg.DevNo = 0;
@@ -300,6 +318,34 @@ int main()
 	assert(s_Ct[0].PR == 72U);
 	assert(g_LpcTimer[2].Trig[0].Ticks == 301370U);
 	assert(t2.SetFrequency(&t2, 1) == 1U && s_Ct[0].PR == 219999999U);
+
+	// One clock request per running timer. PowerOff turns the timer clock
+	// off, the async bridge off after the last of CTIMER3 and 4.
+	assert(s_HfUsers == 2);
+	assert(TimerPowerOff(&t2));
+	assert(s_HfUsers == 1 && SYSCON->AHBCLKCTRLCLR[1] == SYSCON_AHBCLKCTRL_CTIMER0_MASK);
+	assert(s_Ct[0].MCR == 0 && (s_Ct[0].TCR & CTIMER_TCR_CEN_MASK) == 0);
+	assert((s_NvicEn & (1UL << CTIMER0_IRQn)) == 0);
+	assert(t2.DevNo == -1 && t2.Freq == 0 && t2.PowerOff == nullptr && !TimerPowerOff(&t2));
+	// CTIMER4 still clocked: the bridge stays on
+	ASYNC_SYSCON->ASYNCAPBCLKCTRL = ASYNC_SYSCON_ASYNCAPBCLKCTRL_CTIMER4_MASK;
+	t0.Disable(&t0);
+	assert(s_HfUsers == 0);
+	assert(TimerPowerOff(&t0));
+	assert(ASYNC_SYSCON->ASYNCAPBCLKCTRLCLR == ASYNC_SYSCON_ASYNCAPBCLKCTRL_CTIMER3_MASK);
+	assert(SYSCON->ASYNCAPBCTRL == SYSCON_ASYNCAPBCTRL_ENABLE_MASK);
+	// tx takes DevNo 0, then DevNo 1 once powered off from 0
+	cfg.DevNo = 0;
+	cfg.Freq = 0;
+	assert(TimerInit(&tx, &cfg) && s_HfUsers == 1);
+	tx.Disable(&tx);
+	cfg.DevNo = 1;
+	assert(TimerInit(&tx, &cfg) && tx.DevNo == 1 && g_LpcTimer[0].pTimer == nullptr);
+	// The last of CTIMER3 and 4: the bridge goes off
+	ASYNC_SYSCON->ASYNCAPBCLKCTRL = 0;
+	assert(TimerPowerOff(&tx));
+	assert(ASYNC_SYSCON->ASYNCAPBCLKCTRLCLR == ASYNC_SYSCON_ASYNCAPBCLKCTRL_CTIMER4_MASK);
+	assert(SYSCON->ASYNCAPBCTRL == 0 && s_HfUsers == 0);
 
 	printf("lpc546xx timer: PASS\n");
 

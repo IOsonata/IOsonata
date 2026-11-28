@@ -67,6 +67,15 @@ void LpcTimerClockEnable(const LpcTimer_t *pDev)
 	EnableInterrupt(state);
 }
 
+void LpcTimerClockDisable(const LpcTimer_t *pDev)
+{
+	uint32_t state = DisableInterrupt();
+
+	// The timer is powered down, the peripheral divider is kept
+	LPC_SC->PCONP &= ~pDev->ClkMask;
+	EnableInterrupt(state);
+}
+
 extern "C" void TIMER0_IRQHandler(void)
 {
 	LpcTimerIrqHandler(&g_LpcTimer[0]);

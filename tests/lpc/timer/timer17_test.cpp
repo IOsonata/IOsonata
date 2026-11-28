@@ -53,6 +53,21 @@ extern "C" void TIMER1_IRQHandler(void);
 extern "C" void TIMER2_IRQHandler(void);
 extern "C" void TIMER3_IRQHandler(void);
 
+// High frequency clock requests of the timers
+static uint32_t s_HfUsers;
+
+bool SystemHighFreqClockEnable(void)
+{
+	s_HfUsers++;
+	return true;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	assert(s_HfUsers > 0);
+	s_HfUsers--;
+}
+
 uint32_t SystemPeriphClockGet(int Idx)
 {
 	uint32_t sel = Idx < 16 ? LPC_SC->PCLKSEL0 : LPC_SC->PCLKSEL1;
@@ -154,6 +169,9 @@ int main(void)
 			assert(*(volatile uint32_t *)((uintptr_t)reg + 0x74U) == 0x5A5A5A5A);
 			assert(s_Priority[d + 1] == 31);
 			assert(!TimerInit(&other, &cfg));
+			// A running timer is disabled before Init
+			assert(!timers[d].Init(cfg));
+			timers[d].Disable();
 		}
 		cfg.IntPrio = INT_MIN;
 		*pclk = (*pclk & ~mask) | (1U << shift);
@@ -196,6 +214,20 @@ int main(void)
 		assert(!timers[d].Init(cfg));
 		cfg.bTickInt = false;
 		assert(!timer->EnableExtTrigger(timer, 0, TIMER_EXTTRIG_SENSE_HIGH_TRANSITION));
+		// PowerOff powers the timer down, the peripheral divider is kept
+		{
+			uint32_t before = *pclk;
+			uint32_t users = s_HfUsers;
+
+			assert(TimerPowerOff(timer));
+			assert(s_HfUsers == users - 1U);
+			assert((LPC_SC->PCONP & (1U << s_Power[d])) == 0 && *pclk == before);
+			assert(reg->MCR == 0 && (reg->TCR & 1U) == 0 && timer->DevNo == -1);
+			assert(!TimerPowerOff(timer));
+			assert(TimerInit(&other, &cfg));
+			assert(TimerPowerOff(&other));
+		}
 	}
+	assert(s_HfUsers == 0);
 	puts("LPC17xx shared timer adapter: PASS");
 }

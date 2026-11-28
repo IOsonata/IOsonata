@@ -66,6 +66,8 @@ typedef struct {
 	uint32_t PrescalerMax;		//!< Maximum prescale register value
 	TimerDev_t *pTimer;				//!< Timer using this CTIMER, NULL when free
 	uint32_t Epoch;					//!< Incremented on counter reset
+	bool bRunning;					//!< Counter enabled
+	bool bClock;					//!< High frequency clock requested
 	LpcTimerTrig_t Trig[LPC_TIMER_TRIG_MAX];
 } LpcTimer_t;
 
@@ -73,7 +75,10 @@ typedef struct {
 extern LpcTimer_t g_LpcTimer[];
 extern const int g_LpcTimerCount;
 uint32_t LpcTimerBaseFreq(const LpcTimer_t *pDev);
+// Timer clock on with a peripheral reset. Called with interrupts disabled.
 void LpcTimerClockEnable(const LpcTimer_t *pDev);
+// Timer clock off. Called with interrupts disabled.
+void LpcTimerClockDisable(const LpcTimer_t *pDev);
 void LpcTimerIrqHandler(LpcTimer_t *pDev);
 
 #endif

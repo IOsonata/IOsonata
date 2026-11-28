@@ -42,6 +42,17 @@ Disable/Enable pauses and resumes the count. Reset and frequency changes restart
 active trigger periods. A trigger-specific callback takes precedence over the
 generic timer event callback.
 
+A running timer holds one high frequency clock request: Enable and Init take
+it, Disable releases it, and Enable fails when the request fails. PowerOff
+stops the counter, turns off its match interrupts, triggers and NVIC line and
+its clock (SYSAHBCLKCTRL on LPC11Uxx, PCONP on LPC17xx, AHBCLKCTRL or the
+async bridge clock on LPC546xx, the async bridge itself after the last of
+CTIMER3 and 4). Init refuses a timer held by another Timer object, running or
+disabled, until its PowerOff, and refuses a running timer. Init of a disabled
+Timer object on another timer powers its first timer off. The tests cover
+these rules, a second PowerOff, PowerOff of a running timer and an Init or
+Enable whose clock request fails.
+
 The tests cover all four LPC11Uxx vectors, 16/32-bit rollover, trigger periods
 longer than a counter cycle, delayed interrupt service, pause/resume, callback
 reset, ownership, prescaler bounds, nearest frequency selection and long duration
