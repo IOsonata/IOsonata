@@ -44,6 +44,7 @@ EXAMPLES = {
     # The generic clock and power validation examples, run on hardware
     'CoreClockTest': ('exemples/misc/core_clock_test.cpp', 0),
     'CorePowerTest': ('exemples/misc/core_power_test.cpp', 0),
+    'TimerTest': ('exemples/misc/timer_test.cpp', 0),
 }
 # Sources linked from an example's own src folder besides board.h, with the
 # reason. None at present.
@@ -153,10 +154,12 @@ def models():
     common = [compiler, '-std=c++23', '-Wall', '-Wextra', '-Werror',
               '-Wno-missing-field-initializers', '-DRA4M1_HOST_TEST', *inc]
     for name in EXAMPLES:
-        # Packages that bond every pin of the example: the I2C pins and the
-        # Blinky LED0 P106 need 64 or 100 pins, the SPI slave MOSI P203 and
-        # the console P410/P411 100 pins
+        # Packages that bond every pin of the example: the I2C pins, the
+        # Blinky LED0 P106 and the EK-RA4M1 console P410/P411 need 64 or 100
+        # pins, the SPI slave MOSI P203 100 pins
         packages = {'Blinky': (64, 100), 'I2CMasterSlave': (64, 100),
+                    'CoreClockTest': (64, 100), 'CorePowerTest': (64, 100),
+                    'TimerTest': (64, 100),
                     'SPIMasterSlave': (100,)}.get(name, (40, 48, 64, 100))
         for package in packages:
             output = BUILD / f'{name}_pins_{package}'
