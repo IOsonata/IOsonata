@@ -46,6 +46,7 @@ def main():
         compiler, "-fsyntax-only", "-std=gnu++11", "-fno-exceptions", "-fno-rtti", "-Wall", "-Wextra", "-Werror",
         "-mcpu=cortex-m4", "-mthumb", "-D__PROGRAM_START",
         "-I", str(ROOT / "include"),
+        "-I", str(ROOT / "ARM/include"),
         "-I", str(cmsis),
         "-I", str(mdk),
         "-I", str(mdk / "common"),

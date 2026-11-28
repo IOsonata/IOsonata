@@ -18,9 +18,19 @@ The mode setter may return false if a transition is not supported, is invoked
 from an interrupt context, or cannot preserve the core's required clocks.
 Unsupported low-power requests must not silently change state.
 
-Applications should not need MCU-specific clock register writes, UART baud
-reconfiguration, or manual peripheral clock coordination. Each MCU port
-must honor the requirements of its peripherals before supporting a new mode.
+The MCU port documents which clocks change in each mode. The caller decides
+when to change mode and prepares any operation that depends on those clocks.
+For example, if SysTick uses the CPU clock for a scheduler tick, the caller
+coordinates the change with the scheduler. The owner of SysTick programs
+the reload value for the new CPU frequency to preserve the tick period.
+If the UART input clock changes, the application waits for pending transfers
+and sets the baud rate again through the UART driver. A UART driven by an
+unchanged peripheral clock keeps its baud rate.
+
+`SystemPowerModeSet()` programs the MCU clock and power registers. Whether
+a device is enabled is a decision for its owner. The mode setter must not
+read SysTick or call a timer driver to decide whether it can change mode.
+
 Each MCU port retains its own maximum-frequency default calibration.
 When CPU frequency changes, `SystemCoreClockUpdate()` updates delay factors.
 DWT-based measurement is allowed without a Timer or RTC dependency.

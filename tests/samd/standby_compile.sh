@@ -1,5 +1,5 @@
 #!/bin/sh
-# Check SAM D11/D21 Standby sources and generic PowerOffDemo for Cortex-M0+.
+# Check SAM D11/D21 Standby sources and generic CorePowerTest for Cortex-M0+.
 # Use the IOsonata-installed xPack Arm toolchain, not the macOS host headers.
 set -eu
 
@@ -44,8 +44,8 @@ do
 			;;
 	esac
 	PARTDIR="$ROOT/ARM/Microchip/SAMD/$DEVICE"
-	BOARD="$PARTDIR/exemples/PowerOffDemo/src"
-	echo "Checking $DEVICE Standby and PowerOffDemo"
+	BOARD="$PARTDIR/exemples/CorePowerTest/src"
+	echo "Checking $DEVICE Standby and CorePowerTest"
 	"$GCC" $COMMON -std=c11 -D"$PART" $CMSIS $INC -I"$PARTDIR/include" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/system_samd.c" \
 		-o "$OUT/$DEVICE-clock.o"
@@ -65,6 +65,11 @@ do
 		$CMSIS $INC -I"$PARTDIR/include" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/timer_samd.cpp" \
 		-o "$OUT/$DEVICE-timer.o"
+	"$GXX" $COMMON -std=gnu++23 -Wno-missing-field-initializers \
+		-fno-exceptions -fno-rtti -D"$PART" -DSYSTICK_TIMER_NO_DEFAULT_INIT -DSYSTICK_TIMER_SHARED_VECTOR \
+		$CMSIS $INC -I"$PARTDIR/include" \
+		-c "$ROOT/ARM/src/timer_systick.cpp" \
+		-o "$OUT/$DEVICE-systick.o"
 	"$GCC" $COMMON -std=c11 -D"$PART" \
 		$CMSIS $INC -I"$PARTDIR/include" -I"$BOARD" \
 		-c "$ROOT/ARM/Microchip/SAMD/src/system_sleep_samd.c" \
@@ -72,7 +77,7 @@ do
 	"$GXX" $COMMON -std=gnu++23 -Wno-missing-field-initializers \
 		-fno-exceptions -fno-rtti -D"$PART" \
 		$CMSIS $INC -I"$PARTDIR/include" -I"$BOARD" \
-		-c "$ROOT/exemples/misc/power_off_demo.cpp" \
+		-c "$ROOT/exemples/misc/core_power_test.cpp" \
 		-o "$OUT/$DEVICE-demo.o"
 	"$GXX" $COMMON -std=gnu++23 -Wno-missing-field-initializers \
 		-fno-exceptions -fno-rtti -D"$PART" \

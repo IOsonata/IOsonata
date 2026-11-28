@@ -19,6 +19,6 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #define UART_RX_PINOP ESP32_PINOP_U0RXD
 #define UART_TX_PINOP ESP32_PINOP_U0TXD
 
-// ClockDemo never enters sleep; BOOT wake is tested by PowerOffDemo.
+// CoreClockTest never enters sleep; BOOT wake is tested by CorePowerTest.
 
 #endif // __BOARD_H__

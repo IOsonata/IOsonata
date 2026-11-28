@@ -172,7 +172,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 			break;
 #if GPIO_COUNT > 1
 		case 1:
-#if defined(NRF52840_XXAA)
+#if defined(NRF52_SERIES)
 			reg = NRF_P1;
 #elif defined(NRF5340_XXAA_NETWORK)
 			reg = NRF_P1_NS;

@@ -8,6 +8,7 @@ ARM_CPPFLAGS and ARM_LDFLAGS can describe a relocated compiler installation.
 """
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import struct
@@ -87,13 +88,25 @@ def main():
     for tool in ('gcc', 'g++', 'ar', 'size'):
         if not shutil.which('arm-none-eabi-' + tool):
             raise SystemExit('Missing arm-none-eabi-' + tool)
-    links = ET.parse(PROJECT / 'lib/ioc/.project').findall('.//linkedResources/link')
-    sources = [ROOT / link.findtext('locationURI').removeprefix('PARENT-6-PROJECT_LOC/')
-               for link in links if link.findtext('name', '').startswith('src/')]
+    project = PROJECT / 'lib/ioc'
+    links = ET.parse(project / '.project').findall('.//linkedResources/link')
+    sources = []
+    for link in links:
+        # Files only, not the virtual folders under src
+        uri = link.findtext('locationURI') or ''
+        match = re.fullmatch(r'PARENT-(\d+)-PROJECT_LOC/(.+)', uri)
+        if not link.findtext('name', '').startswith('src/') or link.findtext('type') != '1':
+            continue
+        assert match, uri
+        sources.append(project.parents[int(match.group(1)) - 1] / match.group(2))
     assert sources and all(p.is_file() for p in sources)
-    includes = [ROOT / p for p in ('ARM/ST/include', 'ARM/include', 'ARM/CMSIS/Core/Include', 'include')]
+    includes = [ROOT / p for p in ('ARM/ST/include', 'ARM/include', 'ARM/CMSIS/Core/Include', 'include',
+                                   'micro-ecc')]
     includes.append(PORT / 'include')
+    # The micro-ecc settings of the library project
     base = ['-mcpu=cortex-m3', '-mthumb', '-DSTM32L152xE', '-D__PROGRAM_START',
+            '-DuECC_ENABLE_VLI_API', '-DuECC_OPTIMIZATION_LEVEL=3', '-DuECC_SQUARE_FUNC=1',
+            '-DuECC_SUPPORTS_secp256r1=1', '-DuECC_SUPPORT_COMPRESSED_POINT=0',
             '-ffunction-sections', '-fdata-sections', '-g']
     base += ['-I' + str(p) for p in includes]
     base += shlex.split(os.environ.get('ARM_CPPFLAGS', ''))

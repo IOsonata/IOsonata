@@ -160,20 +160,18 @@ BtUuidArr_t s_AdvUuids = {
 	.Uuid16 = {BLE_UUID_TCS_SERVICE,},
 };
 
-// This device serves one central. The library pools are sized for several
-// links by default, so both are defined here for one link.
+// This device serves one central. The library peer table is sized for
+// several links by default, so it is defined here for one link.
 
 // Peer table, one slot
 alignas(8) static uint8_t s_BtPeerPoolMem[BT_PEER_POOL_MEMSIZE(1)];
 
 const BtPeerPoolCfg_t g_BtPeerPoolCfg = { s_BtPeerPoolMem, sizeof(s_BtPeerPoolMem) };
 
-// Controller memory pool, used by the ports that run the controller in the
-// application (SDC) and not linked otherwise. BtHciCtlrMemPoolSizeNeeded
-// gives the size the configuration asked for.
-alignas(8) static uint8_t s_BtCtlrMemPool[4800];
-
-const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
+// The controller memory pool of the ports that run the controller in the
+// application (SDC) is the library default. A pool defined here has to be
+// sized from BtHciCtlrMemPoolSizeNeeded read on the board: when it is too
+// small BtAppInit fails and the device does not advertise.
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
@@ -267,7 +265,9 @@ static const SPICfg_t s_SpiCfg = {
     .ChipSel = SPICSEL_AUTO,
 	.bDmaEn = true,
 	.bIntEn = false,
-    .IntPrio = 6,//APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+    // With bIntEn, a transfer waits for this interrupt. The IMU data is read
+    // from the IMU pin interrupt (priority 6): this one must be above it.
+    .IntPrio = 5,
     .EvtCB = NULL
 };
 

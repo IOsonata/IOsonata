@@ -9,7 +9,7 @@
 
 ## Historical demo notes (pre-migration)
 
-# ESP32-C3 ClockDemo
+# ESP32-C3 CoreClockTest
 
 ## Current clock-only configuration
 
@@ -18,21 +18,21 @@ restoration, changes the supported CPU/APB divider, selects RC_SLOW,
 and checks timer IRQs, both delays and normal UART RX through
 GPIO20/GPIO21 at 1 Mbaud. It does not enter Light-sleep and has
 one startup UART RX prompt, not ten wake-related prompts.
-PowerOffDemo exercises BOOT/GPIO9 Light-sleep and optional
+CorePowerTest exercises BOOT/GPIO9 Light-sleep and optional
 GPIO3 Deep-sleep; those tests remain separate.
 
 The demo split has not been compiled or retested on this board.
-ClockDemo results from before the split remain historical below.
+CoreClockTest results from before the split remain historical below.
 
 ## Historical combined clock/sleep configuration and board results
 
-The material below describes previous combined ClockDemo builds,
+The material below describes previous combined CoreClockTest builds,
 including historical nine-wake and ten-RX-prompt runs. Their
 instructions for CLOCK_DEMO_WAKE_PIN and post-wake receive no
-longer apply to current ClockDemo.
+longer apply to current CoreClockTest.
 
 Import `ioc` as an existing Eclipse managed project. Build the ESP32C3 library
-and ClockDemo in the same Debug or Release configuration. Both configurations
+and CoreClockTest in the same Debug or Release configuration. Both configurations
 log through UART0 TX21/RX20 at 1,000,000 baud, 8N1. No debugger is required.
 
 The demo runs three cycles of XTAL 40 MHz, RC_FAST and XTAL restoration.
@@ -52,7 +52,7 @@ At each `Entering sleep; press BOOT to resume` prompt, press and release BOOT
 (GPIO9). The demo checks clock descriptors, frequency readback, timer counts
 and interrupts after Light-sleep. There are nine sleep prompts across three
 cycles. Comment out `CLOCK_DEMO_WAKE_PIN` in `src/board.h` and set `CLOCK_DEMO_UART_RX_TEST` to 0 for an automatic
-clock-only run. The expected final line is `ClockDemo complete: 0 failures`.
+clock-only run. The expected final line is `CoreClockTest complete: 0 failures`.
 No watchdog is enabled by the demo.
 
 Debug and Release compile all 204 C3 library sources and link the demo with
@@ -77,7 +77,7 @@ The default run now also checks polling UART receive. At each
 terminal buffers a line). There are ten receive prompts: one at startup and
 one after each of nine BOOT wakes. Receive timeout counts as a failure and
 the demo continues. Do not send continuously while UART is disabled for sleep.
-These checks use the existing generic ClockDemo receive function; interrupt
+These checks use the existing generic CoreClockTest receive function; interrupt
 and DMA receive modes are not enabled.
 
 Rebuild both the library and demo to include the shared RISC-V delay changes.
@@ -94,7 +94,7 @@ Receive-enabled command-line build sizes:
 ## Receive-enabled hardware run, November 17, 2026
 
 The maintainer completed three XTAL / RC_FAST / XTAL-restore cycles with
-`ClockDemo complete: 0 failures`, following the C++11 initialization fix.
+`CoreClockTest complete: 0 failures`, following the C++11 initialization fix.
 The submitted log does not identify Debug or Release.
 
 - All nine BOOT Light-sleep wakes restored CPU/APB clocks and LF descriptors.

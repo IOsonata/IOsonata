@@ -123,8 +123,6 @@ void SystemOscInit(void)
 {
 	uint32_t hfCap;
 	uint32_t lfCap;
-	uint32_t lfStat;
-	bool lfRunning;
 
 	// The board describes load capacitance in tenths of a pF.
 	// Nordic FICR calibration takes femtofarads: 0.1 pF = 100 fF.
@@ -170,19 +168,8 @@ void SystemOscInit(void)
 #endif
 		}
 
-		// GRTC can run directly from LFXO while system LFCLK is off.
-		// Preserve the capacitor configuration if either user is active.
-		lfStat = NRF_CLOCK_S->LFCLK.STAT;
-		lfRunning = (lfStat & CLOCK_LFCLK_STAT_STATE_Msk) != 0U &&
-			(lfStat & CLOCK_LFCLK_STAT_SRC_Msk) ==
-			(CLOCK_LFCLK_SRC_SRC_LFXO << CLOCK_LFCLK_STAT_SRC_Pos);
-		if ((NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk) != 0U &&
-			((NRF_GRTC->CLKCFG & GRTC_CLKCFG_CLKSEL_Msk) >>
-			GRTC_CLKCFG_CLKSEL_Pos) == GRTC_CLKCFG_CLKSEL_LFXO)
-		{
-			lfRunning = true;
-		}
-		if (!lfRunning && NRF_OSCILLATORS->XOSC32KI.INTCAP != lfCap)
+		if ((NRF_OSCILLATORS->XOSC32KI.STATUS & OSCILLATORS_XOSC32KI_STATUS_CLOCKRUNNING_Msk) == 0U &&
+			NRF_OSCILLATORS->XOSC32KI.INTCAP != lfCap)
 		{
 			NRF_OSCILLATORS->XOSC32KI.INTCAP = lfCap;
 		}

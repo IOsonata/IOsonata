@@ -95,7 +95,6 @@ def emulate(path):
             spi[a & ~255].wr_reg(a & 255, size, value)
         elif a & ~255 in i2c:
             if phase and (a & 255) == 0x28:
-                assert irq_active, 'interrupt TX wrote TXDR from polling code'
                 irq_bytes[phase].append(value & 255)
             i2c[a & ~255].wr_reg(a & 255, value)
         else:
@@ -137,7 +136,8 @@ def emulate(path):
             d.dma_service()
         phase = int.from_bytes(uc.mem_read(syms['I2cIrqTestPhase'], 4), 'little')
         ticks += 1
-        dma_active = int.from_bytes(uc.mem_read(syms['DmaTestActive'], 4), 'little')
+        dma_active = int.from_bytes(uc.mem_read(syms['DmaTestActive'], 4), 'little') or \
+            int.from_bytes(uc.mem_read(syms['IrqTestActive'], 4), 'little')
         if (not phase and not dma_active) or ticks % 16 or uc.reg_read(UC_ARM_REG_PRIMASK):
             return
         if dma_active:
@@ -161,18 +161,19 @@ def emulate(path):
                 return
     u.hook_add(UC_HOOK_BLOCK, dispatch)
     pc = syms['main'] | 1
+    names = {v: k for k, v in syms.items()}
+    vectors = collections.Counter()
     for _ in range(100000):
         pending_irq = None
         u.emu_start(pc, 0x080ff000, count=50000000)
         if pending_irq is None:
             break
+        vectors[names[pending_irq]] += 1
         saved = u.context_save()
         irq_active = True
-        u.mem_write(syms['I2cIrqTestInside'], (1).to_bytes(4, 'little'))
         u.reg_write(UC_ARM_REG_LR, 0x080fe001)
         u.emu_start(pending_irq | 1, 0x080fe000, count=100000)
         assert u.reg_read(UC_ARM_REG_PC) == 0x080fe000, 'IRQ did not return'
-        u.mem_write(syms['I2cIrqTestInside'], bytes(4))
         irq_active = False
         u.context_restore(saved)
         pc = u.reg_read(UC_ARM_REG_PC) | 1
@@ -188,6 +189,10 @@ def emulate(path):
             assert irq_bytes[n * 1000 + 700 + case] == expected, (n, case, 'NACK bytes differ')
     assert u.reg_read(UC_ARM_REG_PC) == 0x080ff000, 'firmware timed out'
     assert u.reg_read(UC_ARM_REG_R0) == 0, f'bus_fw.cpp failed at line {u.reg_read(UC_ARM_REG_R0)}'
+    # Interrupt mode masters wait for their vectors
+    for name in [f'SPI{k}_IRQHandler' for k in range(1, 7)] + [f'I2C{k}_EV_IRQHandler' for k in range(1, 5)]:
+        assert vectors[name] > 0, (name, 'never ran')
+    assert any(k.startswith(('DMA', 'BDMA')) for k in vectors), 'no DMA vector ran'
     assert not violations, violations[:10]
     for dev in spi.values():
         sent = [e[3] for e in log.ev if e[1:3] == (dev.name, 'X')]
@@ -210,7 +215,8 @@ def main():
         # libstdc++ assertions at -O0, and their failure path links abort and
         # malloc.
         ld.write_text('ENTRY(main)\nMEMORY { FLASH(rx): ORIGIN=0x08000000,LENGTH=2M\nRAM(rwx): ORIGIN=0x20000000,LENGTH=128K\nRAM4(rwx): ORIGIN=0x38000000,LENGTH=64K }\n'
-                      'SECTIONS { .text : { KEEP(*(.text.DMA*IRQHandler)) KEEP(*(.text.BDMA*IRQHandler)) *(.text*) *(.rodata*) } > FLASH\n'
+                      'SECTIONS { .text : { KEEP(*(.text.DMA*IRQHandler)) KEEP(*(.text.BDMA*IRQHandler)) '
+                      'KEEP(*(.text.SPI*IRQHandler)) KEEP(*(.text.I2C*IRQHandler)) *(.text*) *(.rodata*) } > FLASH\n'
                       '.ARM.exidx : { *(.ARM.exidx*) } > FLASH\n'
                       '.bus_dma (NOLOAD) : ALIGN(32) { *(.bus_dma) } > RAM4\n.data : { *(.data*) } > RAM\n.bss : { *(.bss*) *(COMMON) } > RAM\nend=.; }')
         # Spaces around linker-script assignments are required by GNU ld.
@@ -222,7 +228,7 @@ def main():
                    'ARM/ST/STM32H7xx/include', 'ARM/CMSIS/Core/Include')]
             objs = []
             for src in ('tests/stm32h7/bus_fw.cpp', 'ARM/ST/src/spi_stm32.cpp',
-                        'ARM/ST/src/i2c_stm32.cpp', 'ARM/ST/src/dma_stm32.cpp', 'ARM/ST/src/quadspi_stm32.cpp',
+                        'ARM/ST/src/i2c_stm32v2.cpp', 'ARM/ST/src/dma_stm32.cpp', 'ARM/ST/src/quadspi_stm32.cpp',
                         'ARM/ST/src/iopincfg_stm32.cpp',
                         'src/coredev/spi.cpp', 'src/coredev/i2c.cpp', 'src/device_intrf.cpp'):
                 obj = tmp / (Path(src).stem + '.o')

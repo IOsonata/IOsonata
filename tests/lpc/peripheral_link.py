@@ -30,11 +30,11 @@ APPLICATIONS = {
 }
 # Examples of one target only
 TARGET_APPLICATIONS = {
-    '11': {'PowerOffDemo': 'exemples/misc/power_off_demo.cpp',
+    '11': {'CorePowerTest': 'exemples/misc/core_power_test.cpp',
            'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp'},
-    '17': {'PowerOffDemo': 'exemples/misc/power_off_demo.cpp',
+    '17': {'CorePowerTest': 'exemples/misc/core_power_test.cpp',
            'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp'},
-    '546': {'PowerOffDemo': 'exemples/misc/power_off_demo.cpp',
+    '546': {'CorePowerTest': 'exemples/misc/core_power_test.cpp',
             'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp',
             'I2CMasterSlave': 'exemples/i2c/i2c_master_slave.cpp',
             'SPIMasterSlave': 'exemples/spi/spi_master_slave.cpp',
@@ -54,7 +54,8 @@ TARGET_APPLICATIONS = {
 SYMBOLS = {
     'UartLoopback': ['UARTInit'],
     'UartPrbsTxTest': ['UARTInit'],
-    'PowerOffDemo': ['SystemPowerOff', 'SystemResetReason', 'SystemRetRegWrite'],
+    'CorePowerTest': ['SystemPowerCapabilitiesGet', 'SystemPowerModeSet', 'SystemPowerModeGet',
+                      'SystemSleep', 'SystemResetReason', 'SystemRetRegWrite'],
     'SpiLoopback': ['SPIInit'],
     'I2CScan': ['I2CInit'],
     'I2CMasterSlave': ['I2CInit', 'DMA0_IRQHandler', 'FLEXCOMM2_IRQHandler', 'FLEXCOMM8_IRQHandler'],

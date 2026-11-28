@@ -56,6 +56,7 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 #include "coredev/interrupt.h"
+#include "coredev/system_core_clock.h"
 #include "clock_samd.h"
 #include "evsys_samd.h"
 
@@ -79,8 +80,8 @@ typedef struct {
 typedef struct {
 	IOPinEvtHandler_t Handler;
 	void *pCtx;
-	int8_t PortNo;			//!< -1 line not used
-	int8_t PinNo;
+	uint8_t Port1;			//!< Port number + 1, 0 line not used
+	uint8_t PinNo;
 } SamdPinInt_t;
 
 #pragma pack(pop)
@@ -117,31 +118,40 @@ static const SamdExtIntPin_t s_SamdExtIntPins[] = {
 
 static const int s_NbSamdExtIntPins = sizeof(s_SamdExtIntPins) / sizeof(SamdExtIntPin_t);
 
-static SamdPinInt_t s_SamdPinInt[EIC_EXTINT_NUM] = {
-	[0 ... EIC_EXTINT_NUM - 1] = { NULL, NULL, -1, -1 }
-};
+#if defined(__SAMD11D14AM__)
+// PA14 has no EXTINT line on this device, it is the NMI input. Its pin
+// interrupt uses the line after the last EXTINT.
+#define SAMD_EIC_NMI_LINE	EIC_EXTINT_NUM
+#define SAMD_EIC_LINES		(EIC_EXTINT_NUM + 1)
+
+static volatile bool s_bSamdNmiPending;
+#else
+#define SAMD_EIC_LINES		EIC_EXTINT_NUM
+#endif
+
+// Zero initialized: it takes no flash
+static SamdPinInt_t s_SamdPinInt[SAMD_EIC_LINES];
 
 // Lines with the event output on, for the event system
 static uint32_t s_SamdEicEvent;
 
-// EIC lines owned by Standby wakeup. Ordinary pin IRQ/event lines are separate.
-static uint32_t s_SamdStandbyWakeLines;
-#if defined(__SAMD11D14AM__)
-// The SAMD11 Xplained Pro SW0 is PA14, the dedicated NMI input.
-static bool s_bSamdStandbyNmi;
-static volatile bool s_bSamdStandbyNmiArmed;
-static uint32_t s_SamdStandbyEicEnabled;
-static uint32_t s_SamdStandbyEicPending;
-#endif
+// The EIC holds a request on the low frequency clock while it is in use
+static bool s_bSamdEicClock;
 
 static bool SamdPinValid(int PortNo, int PinNo)
 {
 	return PortNo >= 0 && PortNo < PORT_GROUP_NUMBER && PinNo >= 0 && PinNo < 32;
 }
 
-// EXTINT line of a pin, -1 if it has none
+// Interrupt line of a pin, -1 if it has none
 static int SamdExtIntFind(int PortNo, int PinNo)
 {
+#if defined(__SAMD11D14AM__)
+	if (PortNo == IOPORTA && PinNo == 14)
+	{
+		return SAMD_EIC_NMI_LINE;
+	}
+#endif
 	for (int i = 0; i < s_NbSamdExtIntPins; i++)
 	{
 		if (s_SamdExtIntPins[i].PortNo == PortNo && s_SamdExtIntPins[i].PinNo == PinNo)
@@ -285,20 +295,33 @@ static bool SamdEicSync(void)
 	return true;
 }
 
-// EIC bus and generic clock, then enabled
+// EIC bus and generic clock, then enabled. The EIC is a user of the low
+// frequency clock, requested here and released by SamdEicStopIdle. That
+// clock keeps running in Standby, so the EIC keeps detecting edges and an
+// enabled pin interrupt also wakes the MCU.
 static bool SamdEicStart(void)
 {
+	if (!s_bSamdEicClock)
+	{
+		if (!SystemLowFreqClockEnable())
+		{
+			return false;
+		}
+
+		PM_REGS->PM_APBAMASK |= PM_APBAMASK_EIC_Msk;
+
+		if (!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_EIC_Val, SAMD_GCLK_LF))
+		{
+			SystemLowFreqClockDisable();
+
+			return false;
+		}
+		s_bSamdEicClock = true;
+	}
+
 	if ((EIC_REGS->EIC_CTRL & EIC_CTRL_ENABLE_Msk) != 0U)
 	{
 		return true;
-	}
-
-	PM_REGS->PM_APBAMASK |= PM_APBAMASK_EIC_Msk;
-
-	// Edge detection runs on the EIC generic clock
-	if (!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_EIC_Val, SAMD_GCLK_MAIN))
-	{
-		return false;
 	}
 
 	EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
@@ -306,29 +329,29 @@ static bool SamdEicStart(void)
 	return SamdEicSync();
 }
 
-// Sense, filter and event output of a line. CONFIG and EVCTRL are written
-// with the EIC disabled. Interrupts disabled by the caller.
-static bool SamdEicSense(int ExtInt, IOPINSENSE Sense, bool bEvent)
+// EIC sense value, the same for CONFIG and NMICTRL
+static uint32_t SamdEicSenseVal(IOPINSENSE Sense)
 {
-	uint32_t sense;
-	uint32_t shift = (uint32_t)(ExtInt & 7) * 4U;
-	uint32_t cfg;
-
 	switch (Sense)
 	{
 		case IOPINSENSE_LOW_TRANSITION:
-			sense = SAMD_EIC_SENSE_FALL;
-			break;
+			return SAMD_EIC_SENSE_FALL;
 		case IOPINSENSE_HIGH_TRANSITION:
-			sense = SAMD_EIC_SENSE_RISE;
-			break;
+			return SAMD_EIC_SENSE_RISE;
 		case IOPINSENSE_TOGGLE:
-			sense = SAMD_EIC_SENSE_BOTH;
-			break;
+			return SAMD_EIC_SENSE_BOTH;
 		default:
-			sense = SAMD_EIC_SENSE_NONE;
 			break;
 	}
+
+	return SAMD_EIC_SENSE_NONE;
+}
+
+static bool SamdEicSense(int ExtInt, IOPINSENSE Sense, bool bEvent)
+{
+	uint32_t sense = SamdEicSenseVal(Sense);
+	uint32_t shift = (uint32_t)(ExtInt & 7) * 4U;
+	uint32_t cfg;
 
 	EIC_REGS->EIC_CTRL = 0;
 	if (!SamdEicSync())
@@ -344,6 +367,16 @@ static bool SamdEicSense(int ExtInt, IOPINSENSE Sense, bool bEvent)
 	}
 	EIC_REGS->EIC_CONFIG[ExtInt >> 3] = cfg;
 
+	// A pin interrupt line also wakes the MCU from sleep
+	if (!bEvent && sense != SAMD_EIC_SENSE_NONE)
+	{
+		EIC_REGS->EIC_WAKEUP |= 1UL << ExtInt;
+	}
+	else
+	{
+		EIC_REGS->EIC_WAKEUP &= ~(1UL << ExtInt);
+	}
+
 	if (bEvent && sense != SAMD_EIC_SENSE_NONE)
 	{
 		EIC_REGS->EIC_EVCTRL |= 1UL << ExtInt;
@@ -358,13 +391,12 @@ static bool SamdEicSense(int ExtInt, IOPINSENSE Sense, bool bEvent)
 	return SamdEicSync();
 }
 
-// Release the shared clock only after every pin, wake and event user is gone.
+// Release the clock only after every pin and event user is gone.
 // Interrupts disabled by the caller. Keep the register interface accessible.
 static bool SamdEicStopIdle(void)
 {
 	if (EIC_REGS->EIC_INTENSET != 0U || EIC_REGS->EIC_EVCTRL != 0U ||
 		EIC_REGS->EIC_WAKEUP != 0U || s_SamdEicEvent != 0U ||
-		s_SamdStandbyWakeLines != 0U ||
 		(EIC_REGS->EIC_NMICTRL & EIC_NMICTRL_NMISENSE_Msk) != EIC_NMICTRL_NMISENSE_NONE)
 	{
 		return true;
@@ -383,65 +415,97 @@ static bool SamdEicStopIdle(void)
 		return false;
 	}
 
-	return SamdGclkChannelDisable(GCLK_CLKCTRL_ID_EIC_Val);
+	if (!SamdGclkChannelDisable(GCLK_CLKCTRL_ID_EIC_Val))
+	{
+		return false;
+	}
+	if (s_bSamdEicClock)
+	{
+		s_bSamdEicClock = false;
+		SystemLowFreqClockDisable();
+	}
+
+	return true;
 }
+
+#if defined(__SAMD11D14AM__)
+// Sense of the NMI input. Interrupts disabled by the caller.
+static bool SamdEicNmiSense(IOPINSENSE Sense)
+{
+	EIC_REGS->EIC_CTRL = 0U;
+	if (!SamdEicSync())
+	{
+		return false;
+	}
+	EIC_REGS->EIC_NMICTRL = (uint8_t)SamdEicSenseVal(Sense);
+	EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk;
+	EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
+
+	return SamdEicSync();
+}
+#endif
 
 void IOPinDisableInterrupt(int IntNo)
 {
 	uint32_t state;
+	bool res = true;
 
-	if (IntNo < 0 || IntNo >= EIC_EXTINT_NUM)
+	if (IntNo < 0 || IntNo >= SAMD_EIC_LINES)
 	{
 		return;
 	}
 
 	state = DisableInterrupt();
 
-	EIC_REGS->EIC_INTENCLR = 1UL << IntNo;
-	EIC_REGS->EIC_INTFLAG = 1UL << IntNo;
-
-	// EIC wake configuration is changed with the controller disabled.
-	if ((s_SamdStandbyWakeLines & (1UL << IntNo)) != 0U)
+#if defined(__SAMD11D14AM__)
+	if (IntNo == SAMD_EIC_NMI_LINE)
 	{
-		EIC_REGS->EIC_CTRL = 0U;
-		if (!SamdEicSync())
+		if (s_SamdPinInt[IntNo].Port1 != 0U)
 		{
-			EnableInterrupt(state);
-			return;
+			res = SamdEicNmiSense(IOPINSENSE_DISABLE);
 		}
-		EIC_REGS->EIC_WAKEUP &= ~(1UL << IntNo);
-		s_SamdStandbyWakeLines &= ~(1UL << IntNo);
-		EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
-		(void)SamdEicSync();
+		s_bSamdNmiPending = false;
 	}
-
-	if (s_SamdPinInt[IntNo].PortNo >= 0)
+	else
+#endif
 	{
-		// Pin back to GPIO
-		PORT_REGS->GROUP[s_SamdPinInt[IntNo].PortNo].PORT_PINCFG[s_SamdPinInt[IntNo].PinNo] &=
-			(uint8_t)~PORT_PINCFG_PMUXEN_Msk;
-		if (!SamdEicSense(IntNo, IOPINSENSE_DISABLE, false))
+		EIC_REGS->EIC_INTENCLR = 1UL << IntNo;
+		EIC_REGS->EIC_INTFLAG = 1UL << IntNo;
+
+		if (s_SamdPinInt[IntNo].Port1 != 0U)
 		{
-			EnableInterrupt(state);
-			return;
+			res = SamdEicSense(IntNo, IOPINSENSE_DISABLE, false);
 		}
 	}
 
-	s_SamdPinInt[IntNo].Handler = NULL;
-	s_SamdPinInt[IntNo].pCtx = NULL;
-	s_SamdPinInt[IntNo].PortNo = -1;
-	s_SamdPinInt[IntNo].PinNo = -1;
-
-	if (EIC_REGS->EIC_INTENSET == 0U)
+	if (res)
 	{
-		NVIC_DisableIRQ(EIC_IRQn);
-	}
+		if (s_SamdPinInt[IntNo].Port1 != 0U)
+		{
+			// Pin back to GPIO
+			PORT_REGS->GROUP[s_SamdPinInt[IntNo].Port1 - 1U].PORT_PINCFG[s_SamdPinInt[IntNo].PinNo] &=
+				(uint8_t)~PORT_PINCFG_PMUXEN_Msk;
+		}
 
-	(void)SamdEicStopIdle();
+		s_SamdPinInt[IntNo].Handler = NULL;
+		s_SamdPinInt[IntNo].pCtx = NULL;
+		s_SamdPinInt[IntNo].Port1 = 0U;
+		s_SamdPinInt[IntNo].PinNo = 0U;
+
+		if (EIC_REGS->EIC_INTENSET == 0U &&
+			(EIC_REGS->EIC_NMICTRL & EIC_NMICTRL_NMISENSE_Msk) == EIC_NMICTRL_NMISENSE_NONE)
+		{
+			NVIC_DisableIRQ(EIC_IRQn);
+		}
+
+		(void)SamdEicStopIdle();
+	}
 
 	EnableInterrupt(state);
 }
 
+// An enabled pin interrupt is also a wake source: the EIC runs on the low
+// frequency clock, which does not stop in Standby.
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense,
 						  IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
@@ -449,7 +513,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	uint32_t state;
 	bool res;
 
-	if (!SamdPinValid((int)PortNo, (int)PinNo) || IntNo < 0 || IntNo >= EIC_EXTINT_NUM ||
+	if (!SamdPinValid((int)PortNo, (int)PinNo) || IntNo < 0 || IntNo >= SAMD_EIC_LINES ||
 		SamdExtIntFind((int)PortNo, (int)PinNo) != IntNo || IntPrio < 0)
 	{
 		return false;
@@ -458,10 +522,9 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	state = DisableInterrupt();
 
 	// The line may be in use by another pin or by the event system
-	if ((s_SamdPinInt[IntNo].PortNo >= 0 &&
-		 (s_SamdPinInt[IntNo].PortNo != (int)PortNo || s_SamdPinInt[IntNo].PinNo != (int)PinNo)) ||
-		(s_SamdEicEvent & (1UL << IntNo)) != 0U ||
-		(s_SamdStandbyWakeLines & (1UL << IntNo)) != 0U)
+	if ((s_SamdPinInt[IntNo].Port1 != 0U &&
+		 (s_SamdPinInt[IntNo].Port1 != PortNo + 1U || s_SamdPinInt[IntNo].PinNo != PinNo)) ||
+		(IntNo < EIC_EXTINT_NUM && (s_SamdEicEvent & (1UL << IntNo)) != 0U))
 	{
 		EnableInterrupt(state);
 
@@ -471,14 +534,23 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	res = SamdEicStart();
 	if (res)
 	{
-		EIC_REGS->EIC_INTENCLR = 1UL << IntNo;
-
 		s_SamdPinInt[IntNo].Handler = pEvtCB;
 		s_SamdPinInt[IntNo].pCtx = pCtx;
-		s_SamdPinInt[IntNo].PortNo = (int8_t)PortNo;
-		s_SamdPinInt[IntNo].PinNo = (int8_t)PinNo;
+		s_SamdPinInt[IntNo].Port1 = (uint8_t)(PortNo + 1U);
+		s_SamdPinInt[IntNo].PinNo = (uint8_t)PinNo;
 
-		res = SamdEicSense(IntNo, Sense, false);
+#if defined(__SAMD11D14AM__)
+		if (IntNo == SAMD_EIC_NMI_LINE)
+		{
+			s_bSamdNmiPending = false;
+			res = SamdEicNmiSense(Sense);
+		}
+		else
+#endif
+		{
+			EIC_REGS->EIC_INTENCLR = 1UL << IntNo;
+			res = SamdEicSense(IntNo, Sense, false);
+		}
 	}
 
 	if (res)
@@ -488,8 +560,11 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		SamdPinMux(pPort, (int)PinNo, SAMD_PMUX_EIC);
 		pPort->PORT_PINCFG[PinNo] |= PORT_PINCFG_PMUXEN_Msk | PORT_PINCFG_INEN_Msk;
 
-		EIC_REGS->EIC_INTFLAG = 1UL << IntNo;
-		EIC_REGS->EIC_INTENSET = 1UL << IntNo;
+		if (IntNo < EIC_EXTINT_NUM)
+		{
+			EIC_REGS->EIC_INTFLAG = 1UL << IntNo;
+			EIC_REGS->EIC_INTENSET = 1UL << IntNo;
+		}
 
 		NVIC_ClearPendingIRQ(EIC_IRQn);
 		NVIC_SetPriority(EIC_IRQn, SamdIrqPrio(IntPrio));
@@ -499,8 +574,9 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	{
 		s_SamdPinInt[IntNo].Handler = NULL;
 		s_SamdPinInt[IntNo].pCtx = NULL;
-		s_SamdPinInt[IntNo].PortNo = -1;
-		s_SamdPinInt[IntNo].PinNo = -1;
+		s_SamdPinInt[IntNo].Port1 = 0U;
+		s_SamdPinInt[IntNo].PinNo = 0U;
+		(void)SamdEicStopIdle();
 	}
 
 	EnableInterrupt(state);
@@ -514,7 +590,7 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
 	// The line is fixed by the pin
 	int intno = SamdExtIntFind(PortNo, PinNo);
 
-	if (intno < 0 || s_SamdPinInt[intno].PortNo >= 0)
+	if (intno < 0 || s_SamdPinInt[intno].Port1 != 0U)
 	{
 		return -1;
 	}
@@ -527,267 +603,30 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
 	return intno;
 }
 
-// A level interrupt remains pending while the button is held. Stop its
-// NVIC delivery after the first wake, and rearm on the next SystemSleep.
-static void SamdStandbyWakeHandler(int IntNo, void *pCtx)
-{
-	(void)pCtx;
-	EIC_REGS->EIC_INTENCLR = 1UL << IntNo;
-}
-
-// Reenable the configured wake interrupts before another Standby cycle.
-void SamdStandbyWakeArm(void)
-{
-	uint32_t mask;
-
 #if defined(__SAMD11D14AM__)
-	if (s_bSamdStandbyNmi)
-	{
-		// PRIMASK cannot hold an NMI pending. Keep its wake indication in
-		// EIC_IRQn until WFI has completed, without changing EIC pin enables.
-		s_SamdStandbyEicEnabled = NVIC_GetEnableIRQ(EIC_IRQn);
-		s_SamdStandbyEicPending = NVIC_GetPendingIRQ(EIC_IRQn);
-		s_bSamdStandbyNmiArmed = true;
-		NVIC_EnableIRQ(EIC_IRQn);
-		// Also cover a press already held when entry begins.
-		uint32_t level = PORT_REGS->GROUP[IOPORTA].PORT_IN & (1UL << 14);
-		uint8_t sense = EIC_REGS->EIC_NMICTRL & EIC_NMICTRL_NMISENSE_Msk;
-		if ((sense == EIC_NMICTRL_NMISENSE_FALL && level == 0U) ||
-			(sense == EIC_NMICTRL_NMISENSE_RISE && level != 0U))
-		{
-			NVIC_SetPendingIRQ(EIC_IRQn);
-		}
-	}
-#endif
-	mask = s_SamdStandbyWakeLines;
-	if (mask != 0U)
-	{
-		EIC_REGS->EIC_INTFLAG = mask;
-		EIC_REGS->EIC_INTENSET = mask;
-	}
-}
-
-// Called before restoring PRIMASK after WFI.
-void SamdStandbyWakeDone(void)
-{
-#if defined(__SAMD11D14AM__)
-	if (s_bSamdStandbyNmiArmed)
-	{
-		s_bSamdStandbyNmiArmed = false;
-		if (s_SamdStandbyEicEnabled == 0U)
-		{
-			NVIC_DisableIRQ(EIC_IRQn);
-		}
-		// Preserve a pre-existing pending IRQ and real pin interrupts.
-		if (s_SamdStandbyEicPending == 0U &&
-			(EIC_REGS->EIC_INTFLAG & EIC_REGS->EIC_INTENSET) == 0U)
-		{
-			NVIC_ClearPendingIRQ(EIC_IRQn);
-		}
-	}
-#endif
-}
-
-#if defined(__SAMD11D14AM__)
-// Dedicated NMI wake for the Xplained Pro SW0, PA14 (active low).
-// Unlike the level-triggered EXTINT wake, NMI uses falling-edge detection,
-// so holding the button does not continuously retrigger the NMI handler.
-static bool SamdStandbyNmiConfig(int PortNo, int PinNo, int Sense)
-{
-	uint32_t state;
-	uint8_t ctrl;
-	bool result;
-	port_group_registers_t *pPort;
-
-	if (PortNo != IOPORTA || PinNo != 14)
-	{
-		return false;
-	}
-	if (Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_LOW_TRANSITION &&
-		Sense != IOPINSENSE_HIGH_TRANSITION)
-	{
-		return false;
-	}
-	if (Sense == IOPINSENSE_DISABLE && !s_bSamdStandbyNmi)
-	{
-		return false;
-	}
-
-	state = DisableInterrupt();
-	// Standby uses a slow EIC clock for edge sampling. Do not reassign a
-	// shared EIC clock if other pin interrupts or events own it.
-	if (Sense != IOPINSENSE_DISABLE &&
-		(EIC_REGS->EIC_INTENSET != 0U || s_SamdEicEvent != 0U ||
-		s_SamdStandbyWakeLines != 0U))
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-
-	PM_REGS->PM_APBAMASK |= PM_APBAMASK_EIC_Msk;
-	if (Sense != IOPINSENSE_DISABLE &&
-		(!SamdLowFreqClockStandbyEnable() ||
-		 !SamdGclkChannelEnable(GCLK_CLKCTRL_ID_EIC_Val, SAMD_GCLK_LF)))
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-
-	EIC_REGS->EIC_CTRL = 0U;
-	result = SamdEicSync();
-	if (result)
-	{
-		ctrl = EIC_NMICTRL_NMISENSE_NONE;
-		if (Sense == IOPINSENSE_LOW_TRANSITION)
-		{
-			ctrl = EIC_NMICTRL_NMISENSE_FALL;
-		}
-		else if (Sense == IOPINSENSE_HIGH_TRANSITION)
-		{
-			ctrl = EIC_NMICTRL_NMISENSE_RISE;
-		}
-		EIC_REGS->EIC_NMICTRL = ctrl;
-		EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk;
-		EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
-		result = SamdEicSync();
-	}
-
-	if (result)
-	{
-		pPort = &PORT_REGS->GROUP[IOPORTA];
-		if (Sense != IOPINSENSE_DISABLE)
-		{
-			SamdPinMux(pPort, PinNo, SAMD_PMUX_EIC);
-			pPort->PORT_PINCFG[PinNo] |= PORT_PINCFG_PMUXEN_Msk |
-				PORT_PINCFG_INEN_Msk;
-			s_bSamdStandbyNmi = true;
-		}
-		else
-		{
-			pPort->PORT_PINCFG[PinNo] &= (uint8_t)~PORT_PINCFG_PMUXEN_Msk;
-			s_bSamdStandbyNmi = false;
-			result = SamdEicStopIdle();
-		}
-	}
-	EnableInterrupt(state);
-	return result;
-}
-
-// NMI is an ARM core exception, not an EIC NVIC interrupt.
+// NMI is an ARM core exception that PRIMASK does not hold. The pin handler
+// runs from the EIC interrupt instead. Left pending there, it also wakes a
+// WFI entered with interrupts disabled.
 void NMI_Handler(void)
 {
-	if (s_bSamdStandbyNmiArmed)
-	{
-		NVIC_SetPendingIRQ(EIC_IRQn);
-	}
 	EIC_REGS->EIC_NMIFLAG = EIC_NMIFLAG_NMI_Msk;
+	s_bSamdNmiPending = true;
+	NVIC_SetPendingIRQ(EIC_IRQn);
 }
 #endif
-
-// The EIC owns both the pin function and its wakeup bits. Level detection
-// without filtering is asynchronous on SAM D11/D21; it does not depend on
-// the main GCLK0 clock continuing in Standby.
-bool SystemWakePin(int PortNo, int PinNo, int Sense)
-{
-	int line;
-	uint32_t bit;
-	uint32_t state;
-	uint32_t shift;
-	uint32_t cfg;
-	uint32_t level;
-	bool enabled;
-	bool result;
-
-#if defined(__SAMD11D14AM__)
-	if (PortNo == IOPORTA && PinNo == 14)
-	{
-		return SamdStandbyNmiConfig(PortNo, PinNo, Sense);
-	}
-#endif
-	line = SamdExtIntFind(PortNo, PinNo);
-	if (line < 0 || line >= EIC_EXTINT_NUM)
-	{
-		return false;
-	}
-	if (Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_LOW_TRANSITION &&
-		Sense != IOPINSENSE_HIGH_TRANSITION)
-	{
-		return false;
-	}
-
-	bit = 1UL << line;
-	enabled = (s_SamdStandbyWakeLines & bit) != 0U;
-	if (Sense == IOPINSENSE_DISABLE)
-	{
-		if (!enabled)
-		{
-			return false;
-		}
-		IOPinDisableInterrupt(line);
-		return (s_SamdStandbyWakeLines & bit) == 0U && s_SamdPinInt[line].PortNo < 0;
-	}
-
-	if ((s_SamdEicEvent & bit) != 0U ||
-		(s_SamdPinInt[line].PortNo >= 0 &&
-		(!enabled || s_SamdPinInt[line].PortNo != PortNo ||
-		s_SamdPinInt[line].PinNo != PinNo)))
-	{
-		return false;
-	}
-
-	if (!enabled && !IOPinEnableInterrupt(line, 2, PortNo, PinNo,
-		(IOPINSENSE)Sense, SamdStandbyWakeHandler, NULL))
-	{
-		return false;
-	}
-
-	state = DisableInterrupt();
-	EIC_REGS->EIC_CTRL = 0U;
-	result = SamdEicSync();
-	if (result)
-	{
-		shift = (uint32_t)(line & 7) * 4U;
-		level = Sense == IOPINSENSE_LOW_TRANSITION ?
-			EIC_CONFIG_SENSE0_LOW_Val : EIC_CONFIG_SENSE0_HIGH_Val;
-		cfg = EIC_REGS->EIC_CONFIG[line >> 3];
-		cfg = (cfg & ~(0xFUL << shift)) | (level << shift);
-		EIC_REGS->EIC_CONFIG[line >> 3] = cfg;
-		EIC_REGS->EIC_WAKEUP |= bit;
-		EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
-		result = SamdEicSync();
-	}
-	if (result)
-	{
-		s_SamdStandbyWakeLines |= bit;
-		EIC_REGS->EIC_INTFLAG = bit;
-		EIC_REGS->EIC_INTENSET = bit;
-	}
-	else if (!enabled)
-	{
-		// Keep the line available for normal GPIO interrupts on failure.
-		EIC_REGS->EIC_CTRL = EIC_CTRL_ENABLE_Msk;
-	}
-	EnableInterrupt(state);
-	if (!result && !enabled)
-	{
-		IOPinDisableInterrupt(line);
-	}
-	return result;
-}
 
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
 	int intno = SamdExtIntFind(PortNo, PinNo);
 	uint32_t state;
 
-	if (intno < 0)
+	if (intno < 0 || intno >= EIC_EXTINT_NUM)
 	{
 		return;
 	}
 
 	state = DisableInterrupt();
-	if ((s_SamdEicEvent & (1UL << intno)) == 0U &&
-		(s_SamdStandbyWakeLines & (1UL << intno)) == 0U && SamdEicStart())
+	if ((s_SamdEicEvent & (1UL << intno)) == 0U && SamdEicStart())
 	{
 		if (SamdEicSense(intno, Sense, false) && Sense == IOPINSENSE_DISABLE)
 		{
@@ -810,7 +649,7 @@ bool SamdEicEvent(int ExtInt, IOPINSENSE Sense)
 	state = DisableInterrupt();
 
 	// Not on a line with a pin interrupt
-	res = s_SamdPinInt[ExtInt].PortNo < 0 && SamdEicStart() &&
+	res = s_SamdPinInt[ExtInt].Port1 == 0U && SamdEicStart() &&
 		  SamdEicSense(ExtInt, Sense, Sense != IOPINSENSE_DISABLE);
 	if (res && Sense != IOPINSENSE_DISABLE)
 	{
@@ -832,6 +671,18 @@ bool SamdEicEvent(int ExtInt, IOPINSENSE Sense)
 void EIC_Handler(void)
 {
 	uint32_t flags = EIC_REGS->EIC_INTFLAG & EIC_REGS->EIC_INTENSET;
+
+#if defined(__SAMD11D14AM__)
+	if (s_bSamdNmiPending)
+	{
+		s_bSamdNmiPending = false;
+		if (s_SamdPinInt[SAMD_EIC_NMI_LINE].Handler != NULL)
+		{
+			s_SamdPinInt[SAMD_EIC_NMI_LINE].Handler(SAMD_EIC_NMI_LINE,
+				s_SamdPinInt[SAMD_EIC_NMI_LINE].pCtx);
+		}
+	}
+#endif
 
 	for (int i = 0; flags != 0U && i < EIC_EXTINT_NUM; i++)
 	{

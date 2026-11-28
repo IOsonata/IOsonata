@@ -135,7 +135,7 @@
                is no need to call the 2 first functions listed above, since SystemCoreClock
                variable is updated automatically.
   */
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated delay-loop iterations per second, defined in ResetEntry.c
 extern uint32_t SystemMicroSecLoopCnt;
 uint32_t SystemnsDelayFactor = 1000000UL;
 

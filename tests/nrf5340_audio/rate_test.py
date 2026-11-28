@@ -12,7 +12,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 source = (ROOT / 'ARM/Nordic/src/i2s_nrfx.cpp').read_text()
-start = source.index('typedef struct {', source.index('// HFCLKAUDIO'))
+start = source.index('typedef struct', source.index('// HFCLKAUDIO'))
 table = source[start:source.index('static bool s_AudioClockStarted;', start)]
 start = source.index('static uint32_t nRFxI2SSetRate(')
 setter = source[start:source.index('static void nRFxI2SService(', start)]
@@ -27,6 +27,8 @@ static struct {
 	struct { uint32_t CLKCONFIG, MCKFREQ, RATIO; } CONFIG;
 } regs;
 #define NRF_I2S (&regs)
+// The driver names the audio peripheral of the MCU NRF_AUDIO
+#define NRF_AUDIO NRF_I2S
 static bool s_Running, s_AudioClockStarted, clockOk = true;
 static uint32_t s_AudioClockReg;
 static unsigned starts, stops;

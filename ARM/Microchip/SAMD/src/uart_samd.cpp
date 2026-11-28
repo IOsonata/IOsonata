@@ -9,7 +9,8 @@
 		with PinOp IOPINOP_PERIPHC (SERCOM) or IOPINOP_PERIPHD (SERCOM-ALT):
 		TX on pad 0 or 2, RX on any other pad. With hardware flow control TX
 		is on pad 0, RTS on pad 2, CTS on pad 3 and RX on pad 1. A pin that
-		is not a pad of the SERCOM fails UARTInit.
+		is not a pad of the SERCOM fails UARTInit. For TX only, set the RX
+		PinNo to -1 and select UART_FLWCTRL_NONE.
 
 		5 to 8 data bits, no, even or odd parity, 1 or 2 stop bits. The
 		SERCOM runs on the main clock, the baud rate is the closest of the
@@ -140,8 +141,6 @@ struct SamdUartDev {
 	alignas(4) uint8_t RxFifoMem[SAMD_UART_CFIFO_MEMSIZE];
 	alignas(4) uint8_t TxFifoMem[SAMD_UART_CFIFO_MEMSIZE];
 	uint8_t TxDmaCopy[SAMD_UART_DMA_COPY];	//!< Block of a non-blocking TX CFIFO
-	bool bSleepPaused;			//!< SystemSleep temporarily gated this USART
-	uint8_t SleepInterrupts;		//!< Active interrupt mask before sleep
 };
 
 #pragma pack(pop)
@@ -151,8 +150,6 @@ static SamdUartDev_t s_SamdUartDev[SAMD_SERCOM_CNT];
 static bool SamdUartDmaService(SamdUartDev_t * const pDev, bool bError);
 static void SamdUartDmaStop(SamdUartDev_t * const pDev);
 static void SamdUartDmaClose(SamdUartDev_t * const pDev);
-
-extern "C" void SamdUartResumeSleep(void);
 
 static const SamdUartDmaOps_t s_SamdUartDmaOps = {
 	SamdUartDmaService, SamdUartDmaStop, SamdUartDmaClose
@@ -407,6 +404,31 @@ static void SamdUartDmaClose(SamdUartDev_t * const pDev)
 	pDev->DmaChan = -1;
 }
 
+static void SamdUartTxIrq(UARTDev_t *udev, sercom_usart_int_registers_t *reg, uint8_t flags)
+{
+	if (flags & SERCOM_USART_INT_INTFLAG_DRE_Msk)
+	{
+		int c = CFifoGetByte(udev->hTxFifo);
+
+		if (c >= 0)
+		{
+			// Writing DATA clears DRE
+			reg->SERCOM_DATA = (uint16_t)c;
+		}
+		else
+		{
+			// FIFO empty, DRE disabled so that it does not keep interrupting
+			reg->SERCOM_INTENCLR = SERCOM_USART_INT_INTENCLR_DRE_Msk;
+			udev->bTxReady = true;
+			if (udev->DevIntrf.EvtCB)
+			{
+				// Length is the free space in the TX FIFO
+				udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
+			}
+		}
+	}
+}
+
 static void SamdUartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
 	SamdUartDev_t *dev = (SamdUartDev_t *)pDev->pDevData;
@@ -432,27 +454,31 @@ static void SamdUartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 		}
 	}
 
-	if (flags & SERCOM_USART_INT_INTFLAG_DRE_Msk)
-	{
-		int c = CFifoGetByte(udev->hTxFifo);
+	SamdUartTxIrq(udev, reg, flags);
+}
 
-		if (c >= 0)
-		{
-			// Writing DATA clears DRE
-			reg->SERCOM_DATA = (uint16_t)c;
-		}
-		else
-		{
-			// FIFO empty, DRE disabled so that it does not keep interrupting
-			reg->SERCOM_INTENCLR = SERCOM_USART_INT_INTENCLR_DRE_Msk;
-			udev->bTxReady = true;
-			if (udev->DevIntrf.EvtCB)
-			{
-				// Length is the free space in the TX FIFO
-				udev->DevIntrf.EvtCB(&udev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, CFifoAvail(udev->hTxFifo));
-			}
-		}
+static void SamdUartTxOnlyIrq(int DevNo, DevIntrf_t *pDev)
+{
+	SamdUartDev_t *dev = (SamdUartDev_t *)pDev->pDevData;
+	(void)DevNo;
+	if (dev->pUartDev != NULL && pDev->bIntEn)
+	{
+		SamdUartTxIrq(dev->pUartDev, dev->pReg, dev->pReg->SERCOM_INTFLAG & dev->pReg->SERCOM_INTENSET);
 	}
+}
+
+static int SamdUartNoRx(DevIntrf_t *pDev, uint8_t *pBuff, int Length)
+{
+	SamdUartDev_t *dev = (SamdUartDev_t *)pDev->pDevData;
+	uint32_t state;
+
+	if (dev->Poll != NULL && pBuff != NULL && Length > 0)
+	{
+		state = DisableInterrupt();
+		dev->Poll(dev);
+		EnableInterrupt(state);
+	}
+	return 0;
 }
 
 static uint32_t SamdUartGetRate(DevIntrf_t * const pDev)
@@ -566,6 +592,18 @@ static bool SamdUartStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
+static void SamdUartPollTxOnly(SamdUartDev_t *pDev)
+{
+	if (pDev->DmaChan < 0)
+	{
+		(void)SamdUartPollTx(pDev);
+	}
+	else
+	{
+		(void)pDev->pDmaOps->Service(pDev, false);
+	}
+}
+
 // Without the interrupt, DATA goes in the RX CFIFO and the TX CFIFO bytes to
 // DATA, before and after the copy, so that both directions keep going while
 // the application only reads. Interrupts disabled. Inline in the one byte
@@ -577,14 +615,7 @@ static inline __attribute__((always_inline)) void SamdUartPollInline(SamdUartDev
 	// characters. With DMA the channel sends the TX CFIFO bytes DATA does
 	// not take.
 	SamdUartPollRx(pDev);
-	if (pDev->DmaChan < 0)
-	{
-		(void)SamdUartPollTx(pDev);
-	}
-	else
-	{
-		(void)pDev->pDmaOps->Service(pDev, false);
-	}
+	SamdUartPollTxOnly(pDev);
 	SamdUartPollRx(pDev);
 }
 
@@ -784,79 +815,6 @@ static void SamdUartStopTx(DevIntrf_t * const pDev)
 	(void)pDev;
 }
 
-// SystemSleep temporarily suspends an idle UART without changing its
-// DeviceIntrf enable count or discarding buffered data. Shared SERCOM
-// instances owned by I2C/SPI are left to their own drivers.
-extern "C" bool SamdUartPrepareSleep(void)
-{
-	SamdUartDev_t *dev;
-	UARTDev_t *udev;
-	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
-	{
-		dev = &s_SamdUartDev[i];
-		udev = dev->pUartDev;
-		if (udev == NULL ||
-			g_SharedIntrf[i].pIntrf != &udev->DevIntrf ||
-			atomic_load(&udev->DevIntrf.EnCnt) == 0 ||
-			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) == 0U)
-		{
-			continue;
-		}
-		if (atomic_flag_test(&udev->DevIntrf.bBusy) ||
-			dev->bSleepPaused || CFifoUsed(udev->hTxFifo) != 0 ||
-			!udev->bTxReady || dev->bDmaActive ||
-			(dev->pReg->SERCOM_INTFLAG &
-				(SERCOM_USART_INT_INTFLAG_TXC_Msk | SERCOM_USART_INT_INTFLAG_RXC_Msk)) !=
-				SERCOM_USART_INT_INTFLAG_TXC_Msk)
-		{
-			return false;
-		}
-	}
-	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
-	{
-		dev = &s_SamdUartDev[i];
-		udev = dev->pUartDev;
-		if (udev == NULL ||
-			g_SharedIntrf[i].pIntrf != &udev->DevIntrf ||
-			atomic_load(&udev->DevIntrf.EnCnt) == 0 ||
-			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) == 0U)
-		{
-			continue;
-		}
-		dev->SleepInterrupts = dev->pReg->SERCOM_INTENSET;
-		dev->pReg->SERCOM_INTENCLR = SERCOM_USART_INT_INTENCLR_Msk;
-		if (!SamdUartRun(dev, false))
-		{
-			(void)SamdUartRun(dev, true);
-			dev->pReg->SERCOM_INTENSET = dev->SleepInterrupts;
-			SamdUartResumeSleep();
-			return false;
-		}
-		SamdSercomClockDisable(i);
-		IOPinDis(dev->pIOPinMap, dev->NbIOPins);
-		dev->bSleepPaused = true;
-	}
-	return true;
-}
-
-extern "C" void SamdUartResumeSleep(void)
-{
-	SamdUartDev_t *dev;
-	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
-	{
-		dev = &s_SamdUartDev[i];
-		if (dev->bSleepPaused && SamdSercomClockEnable(i))
-		{
-			IOPinCfg(dev->pIOPinMap, dev->NbIOPins);
-			if (SamdUartRun(dev, true))
-			{
-				dev->pReg->SERCOM_INTENSET = dev->SleepInterrupts;
-				dev->bSleepPaused = false;
-			}
-		}
-	}
-}
-
 // Registers keep their content while the clock is off, Enable restarts the
 // UART without a new UARTInit.
 static void SamdUartDisable(DevIntrf_t * const pDev)
@@ -916,7 +874,7 @@ static void SamdUartEnable(DevIntrf_t * const pDev)
 	{
 		IOPinCfg(dev->pIOPinMap, dev->NbIOPins);
 
-		if (pDev->bIntEn)
+		if (pDev->bIntEn && udev->hRxFifo != NULL)
 		{
 			dev->pReg->SERCOM_INTENSET = SERCOM_USART_INT_INTENSET_RXC_Msk | SERCOM_USART_INT_INTENSET_ERROR_Msk;
 		}
@@ -958,25 +916,27 @@ void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 	pDev->LineState = LineState;
 }
 
-// CTRLA pad selection from the pin map, 0 for a pin map the SERCOM cannot
+// CTRLA pad selection from the pin map, UINT32_MAX for a map the SERCOM cannot
 // take. TXPO and RXPO are returned in their CTRLA fields.
 static uint32_t SamdUartPads(int DevNo, const IOPinCfg_t *pPins, int NbPins, bool bFlowCtrl)
 {
 	int rx;
 	int tx;
 	uint32_t txpo;
+	bool txOnly;
 
 	if (NbPins < 2 || (bFlowCtrl && NbPins <= UARTPIN_RTS_IDX))
 	{
-		return 0;
+		return UINT32_MAX;
 	}
 
-	rx = SamdSercomPad(DevNo, &pPins[UARTPIN_RX_IDX]);
+	txOnly = pPins[UARTPIN_RX_IDX].PinNo == -1 && !bFlowCtrl;
+	rx = txOnly ? -1 : SamdSercomPad(DevNo, &pPins[UARTPIN_RX_IDX]);
 	tx = SamdSercomPad(DevNo, &pPins[UARTPIN_TX_IDX]);
 
-	if (rx < 0 || tx < 0 || rx == tx)
+	if ((!txOnly && rx < 0) || tx < 0 || rx == tx)
 	{
-		return 0;
+		return UINT32_MAX;
 	}
 
 	if (bFlowCtrl)
@@ -984,7 +944,7 @@ static uint32_t SamdUartPads(int DevNo, const IOPinCfg_t *pPins, int NbPins, boo
 		if (tx != 0 || rx != 1 || SamdSercomPad(DevNo, &pPins[UARTPIN_RTS_IDX]) != 2 ||
 			SamdSercomPad(DevNo, &pPins[UARTPIN_CTS_IDX]) != 3)
 		{
-			return 0;
+			return UINT32_MAX;
 		}
 		txpo = SAMD_USART_TXPO_FLOW;
 	}
@@ -998,10 +958,11 @@ static uint32_t SamdUartPads(int DevNo, const IOPinCfg_t *pPins, int NbPins, boo
 	}
 	else
 	{
-		return 0;
+		return UINT32_MAX;
 	}
 
-	return SERCOM_USART_INT_CTRLA_TXPO(txpo) | SERCOM_USART_INT_CTRLA_RXPO((uint32_t)rx);
+	// RXPO = TX pad is valid when the receiver is disabled.
+	return SERCOM_USART_INT_CTRLA_TXPO(txpo) | SERCOM_USART_INT_CTRLA_RXPO(txOnly ? (uint32_t)tx : (uint32_t)rx);
 }
 
 bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
@@ -1041,11 +1002,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	bool flowctrl = pCfg->FlowControl == UART_FLWCTRL_HW;
 	uint32_t pads = SamdUartPads(pCfg->DevNo, pins, pCfg->NbIOPins, flowctrl);
 
-	if (pads == 0)
+	if (pads == UINT32_MAX)
 	{
 		return false;
 	}
 
+	bool txOnly = pins[UARTPIN_RX_IDX].PinNo == -1;
 	SamdUartDev_t *dev = &s_SamdUartDev[pCfg->DevNo];
 	sercom_usart_int_registers_t *reg = &SamdSercomGetReg(pCfg->DevNo)->USART_INT;
 	uint32_t state = DisableInterrupt();
@@ -1074,10 +1036,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	dev->pReg = reg;
 	dev->DmaChan = -1;
 	dev->pDmaOps = pCfg->bDMAMode ? &s_SamdUartDmaOps : NULL;
-	dev->Poll = pCfg->bIntMode ? NULL : SamdUartPoll;
+	dev->Poll = pCfg->bIntMode ? NULL : (txOnly ? SamdUartPollTxOnly : SamdUartPoll);
 	dev->bDmaActive = false;
 	dev->DmaLen = 0;
-	dev->bSleepPaused = false;
 	if (pCfg->bDMAMode)
 	{
 		dev->DmaChan = (int8_t)SamdDmacOpen(SAMD_DMAC_TRIG_SERCOM_TX(pCfg->DevNo),
@@ -1106,7 +1067,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
+	if (txOnly)
+	{
+		pDev->hRxFifo = NULL;
+	}
+	else if (pCfg->pRxMem && pCfg->RxMemSize > 0)
 	{
 		pDev->hRxFifo = CFifoInit(pCfg->pRxMem, pCfg->RxMemSize, 1, pCfg->bFifoBlocking);
 	}
@@ -1125,7 +1090,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	}
 
 	// CFifoInit returns NULL when the supplied memory is too small
-	if (pDev->hRxFifo == NULL || pDev->hTxFifo == NULL)
+	if ((!txOnly && pDev->hRxFifo == NULL) || pDev->hTxFifo == NULL)
 	{
 		if (dev->pDmaOps != NULL)
 		{
@@ -1144,15 +1109,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
-	dev->pIOPinMap = pins;
-	dev->NbIOPins = flowctrl ? UARTPIN_RTS_IDX + 1 : UARTPIN_TX_IDX + 1;
+	dev->pIOPinMap = txOnly ? pins + UARTPIN_TX_IDX : pins;
+	dev->NbIOPins = txOnly ? 1 : flowctrl ? UARTPIN_RTS_IDX + 1 : UARTPIN_TX_IDX + 1;
 	dev->RxDataMask = (uint8_t)((1U << pCfg->DataBits) - 1U);
 
 	IOPinCfg(dev->pIOPinMap, dev->NbIOPins);
 
 	// Internal clock, asynchronous, LSB first
 	uint32_t ctrla = SERCOM_USART_INT_CTRLA_MODE_USART_INT_CLK | SERCOM_USART_INT_CTRLA_DORD_Msk | pads;
-	uint32_t ctrlb = SERCOM_USART_INT_CTRLB_TXEN_Msk | SERCOM_USART_INT_CTRLB_RXEN_Msk;
+	uint32_t ctrlb = SERCOM_USART_INT_CTRLB_TXEN_Msk | (txOnly ? 0U : SERCOM_USART_INT_CTRLB_RXEN_Msk);
 
 	if (pCfg->Parity != UART_PARITY_NONE)
 	{
@@ -1224,7 +1189,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.GetRate = SamdUartGetRate;
 	pDev->DevIntrf.SetRate = SamdUartSetRate;
 	pDev->DevIntrf.StartRx = SamdUartStartRx;
-	pDev->DevIntrf.RxData = SamdUartRxData;
+	pDev->DevIntrf.RxData = txOnly ? SamdUartNoRx : SamdUartRxData;
 	pDev->DevIntrf.StopRx = SamdUartStopRx;
 	pDev->DevIntrf.StartTx = SamdUartStartTx;
 	pDev->DevIntrf.TxData = SamdUartTxData;
@@ -1234,12 +1199,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	SharedIntrfSetIrqHandler(pCfg->DevNo, &pDev->DevIntrf, SamdUartIrqHandler);
+	SharedIntrfSetIrqHandler(pCfg->DevNo, &pDev->DevIntrf, txOnly ? SamdUartTxOnlyIrq : SamdUartIrqHandler);
 
 	if (pCfg->bIntMode)
 	{
 		// DRE is enabled by SamdUartTxData when the TX FIFO has data
-		reg->SERCOM_INTENSET = SERCOM_USART_INT_INTENSET_RXC_Msk | SERCOM_USART_INT_INTENSET_ERROR_Msk;
+		if (!txOnly)
+		{
+			reg->SERCOM_INTENSET = SERCOM_USART_INT_INTENSET_RXC_Msk | SERCOM_USART_INT_INTENSET_ERROR_Msk;
+		}
 
 		NVIC_ClearPendingIRQ(SamdSercomIrq(pCfg->DevNo));
 		NVIC_SetPriority(SamdSercomIrq(pCfg->DevNo), SamdIrqPrio(pCfg->IntPrio));

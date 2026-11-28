@@ -38,7 +38,7 @@ class RunningPowerMode(unittest.TestCase):
 		start = self.app.index("bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)")
 		end = self.app.index("SYSTEM_POWER_MODE SystemPowerModeGet(void)", start)
 		body = self.app[start:end]
-		self.assertIn("NRF_APP_CLOCK->HFCLKCTRL = requested;", body)
+		self.assertIn("(NRF_APP_CLOCK->HFCLKCTRL & ~CLOCK_HFCLKCTRL_HCLK_Msk) | requested;", body)
 		self.assertIn("SystemCoreClockUpdate();", body)
 		self.assertIn("NRF_APP_HCLK_LOW_POWER", body)
 		self.assertIn("NRF_APP_HCLK_PERFORMANCE", body)
@@ -58,10 +58,14 @@ class RunningPowerMode(unittest.TestCase):
 		start = self.demo.index("static void CoreClockTestPowerMode(void)")
 		end = self.demo.index("static void CoreClockTestCalibrationTest(void)", start)
 		body = self.demo[start:end]
-		self.assertIn("CoreClockTestDelayCalibrationRecord();", body)
-		self.assertLess(body.index("CoreClockTestDelayCalibrationRecord();"),
-			body.index("SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);", 
-				body.index("CoreClockTestDelayCalibrationRecord();")))
+		# The delays at the highest frequency, then at the lowest before the
+		# performance mode is restored
+		high = body.index("CoreClockTestDelay(&s_DelayHigh);",
+			body.index("SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);"))
+		low = body.index("CoreClockTestDelay(&s_DelayLow);")
+		self.assertLess(body.index("SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER)"), low)
+		self.assertLess(high, body.index("SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER)"))
+		self.assertLess(low, body.index("SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE);", low))
 		self.assertIn("SYSTEM_POWER_MODE_LOW_POWER", self.demo)
 		self.assertIn("SYSTEM_POWER_MODE_PERFORMANCE", self.demo)
 		for term in ("NRF_CLOCK", "HFCLKCTRL", "__arm__", "__riscv", "DWT->"):

@@ -30,7 +30,10 @@ struct Command {
 	uint32_t *cv; Status *sr;
 	bool Started=false;
 	void operator=(uint32_t v) {
-		if(v&TC_CCR_CLKDIS) sr->value &= ~TC_SR_CLKSTA;
+		if(v&TC_CCR_CLKDIS) {
+			sr->value &= ~TC_SR_CLKSTA;
+			Started=false;
+		}
 		else if(v&TC_CCR_CLKEN) sr->value |= TC_SR_CLKSTA;
 		if(v&TC_CCR_SWTRG) {
 			*cv=0;
@@ -80,9 +83,21 @@ AstStatus::operator uint32_t() {
 	clock=ast.AST_CLOCK;
 	return value;
 }
+static unsigned s_TestHfUsers;
+static unsigned s_TestLfUsers;
+extern "C" bool SystemHighFreqClockEnable() { ++s_TestHfUsers; return true; }
+extern "C" bool SystemLowFreqClockEnable() { ++s_TestLfUsers; return true; }
+extern "C" void SystemHighFreqClockDisable() { assert(s_TestHfUsers); --s_TestHfUsers; }
+extern "C" void SystemLowFreqClockDisable() { assert(s_TestLfUsers); --s_TestLfUsers; }
+static uint32_t s_TestStartUs;
+extern "C" uint32_t SystemHighFreqClockStartTime() { return s_TestStartUs; }
+extern "C" uint32_t SystemLowFreqClockStartTime() { return s_TestStartUs; }
+#define IRQ_PRIO_LOW 5
+static void __WFI();
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l.cpp"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp"
 #include "../../ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp"
+#include "../../src/sdelay.cpp"
 McuOsc_t g_McuOsc = {};
 extern "C" uint32_t SystemPeriphClockGet(int) { return s_TestPeripheralClock; }
 unsigned events[7][3]={},overflows[7]={},callbacks=0;
@@ -122,8 +137,12 @@ void Advance(int dev,uint32_t ticks,bool service=true) {
 		if(service)Service(dev);
 	}
 }
+// The sDelay timer reaches its trigger during the wait
+static void __WFI()
+{
+	Advance(s_SDelayTimer.DevNo, g_Sam4lTimerData[s_SDelayTimer.DevNo].Trigger[0].Ticks);
+}
 int main() {
-	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0));
 	g_McuOsc.LowPwrOsc.Freq=32768;
 	// AST is only reset by POR (42023H table 10-12), not by debugger reset.
 	// Model a previous firmware's running timer with no live software owner.
@@ -166,9 +185,23 @@ int main() {
 		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OK);
 		assert(timers[dev].GetTickCount(&timers[dev])==0);
 		assert(timers[dev].pObj==&timers[dev]);
+		// Timers 0 to dev held, sDelay takes a free TC until there is none
+		assert(sDelay(1) == (dev < 6));
+		assert(s_SDelayTimer.DevNo == -1);
+		assert(timers[dev].GetTickCount(&timers[dev])==0);
 		assert(!TimerInit(&other,&cfg));
 		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OWNER);
 		assert(!TimerInit(&timers[dev],&cfg));
+		timers[dev].Disable(&timers[dev]);
+		// A disabled timer stays with its Timer object until PowerOff
+		assert(!TimerInit(&other, &cfg));
+		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OWNER);
+		assert(timers[dev].PowerOff(&timers[dev]));
+		assert(TimerInit(&other, &cfg));
+		assert(!timers[dev].Enable(&timers[dev]));
+		assert(other.PowerOff(&other));
+		assert(!other.Enable(&other));
+		assert(TimerInit(&timers[dev], &cfg));
 		assert(timers[dev].Freq==(dev?375000u:1024u));
 		assert(timers[dev].GetMaxTrigger(&timers[dev])==(dev?3:1));
 		assert(!timers[dev].EnableExtTrigger(&timers[dev],0,TIMER_EXTTRIG_SENSE_TOGGLE));
@@ -176,17 +209,7 @@ int main() {
 	assert(ast.AST_WER == AST_WER_OVF);
 	assert(bpm.BPM_BKUPWEN & (1U << 1));
 	assert(pm.PM_PBADIVMASK==64 && (pm.PM_PBAMASK & (PM_PBAMASK_TC0|PM_PBAMASK_TC1)));
-	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0 | PM_PBAMASK_TC1));
 	for (int dev = 1; dev < 7; dev++) timers[dev].Disable(&timers[dev]);
-	assert(!Sam4lTimerClockBusy(PM_PBAMASK_TC0 | PM_PBAMASK_TC1));
-	// The ownership query must not clear pending rollover/compare flags.
-	tc[0].TC_CHANNEL[0].TC_SR.value = TC_SR_COVFS | TC_SR_CPAS;
-	assert(!Sam4lTimerClockBusy(PM_PBAMASK_TC0));
-	assert(tc[0].TC_CHANNEL[0].TC_SR.value == (TC_SR_COVFS | TC_SR_CPAS));
-	tc[0].TC_CHANNEL[0].TC_SR.value = 0;
-	g_Sam4lTimerData[1].Healthy = false;
-	assert(Sam4lTimerClockBusy(PM_PBAMASK_TC0));
-	g_Sam4lTimerData[1].Healthy = true;
 	for (int dev = 1; dev < 7; dev++) assert(timers[dev].Enable(&timers[dev]));
 	for(int dev=0;dev<7;++dev) {
 		auto &t=timers[dev];
@@ -200,7 +223,8 @@ int main() {
 		Advance(dev,period);assert(t.GetTickCount(&t)==count);
 		assert(t.Enable(&t));
 		if (dev == 0) assert(ast.AST_WER == (AST_WER_OVF | AST_WER_ALARM0));
-		Advance(dev,period);assert(events[dev][0]==4);
+		Advance(dev,1);assert(t.GetTickCount(&t)==count+1);
+		Advance(dev,period-1);assert(events[dev][0]==4);
 		t.Disable(&t);t.Reset(&t);assert(t.GetTickCount(&t)==0);
 		Advance(dev,period);assert(t.GetTickCount(&t)==0);
 		assert(t.Enable(&t));
@@ -300,5 +324,21 @@ int main() {
 	s_TestPeripheralClock = 24000000;
 	assert(timers[1].SetFrequency(&timers[1], 0) == 187500);
 	assert(g_Sam4lTimerData[1].BaseFreq == s_TestPeripheralClock);
+	assert(!TimerPowerOff(&a));
+	ast.AST_SR.value &= ~AST_SR_BUSY;
+	assert(TimerPowerOff(&a));
+	assert(ast.AST_IMR == 0U && ast.AST_WER == 0U);
+	assert(!(pm.PM_PBDMASK & PM_PBDMASK_AST));
+	assert(sDelay(0U));
+	assert(sDelay(1U));
+	assert(!s_TestLfUsers);
+	for (int dev = 1; dev <= 3; dev++)
+	{
+		assert(TimerPowerOff(&timers[dev]));
+		assert(tc[0].TC_CHANNEL[dev - 1].TC_IMR == 0U);
+		assert(bool(pm.PM_PBAMASK & PM_PBAMASK_TC0) == (dev < 3));
+		assert(pm.PM_PBAMASK & PM_PBAMASK_TC1);
+		assert(!TimerPowerOff(&timers[dev]));
+	}
 	puts("SAM4L timer register-model tests passed");
 }

@@ -15,7 +15,11 @@
 #define __IO volatile
 #include "component/sercom.h"
 #include "component/dmac.h"
+#include "component/pm.h"
+static pm_registers_t s_Pm;
+#define PM_REGS (&s_Pm)
 #define SAMD_SERCOM_CNT 3
+SharedIntrf_t g_SharedIntrf[SAMD_SERCOM_CNT];
 #define SAMD_GCLK_MAIN 0
 #define SAMD_DMAC_COUNT_MAX 65535
 #define SAMD_DMAC_TRIG_SERCOM_TX(n) (2 + 2 * (n))
@@ -57,14 +61,26 @@ static void NVIC_SetPriority(int, uint32_t) {}
 static int SamdSercomIrq(int DevNo) { return DevNo; }
 static uint32_t SamdIrqPrio(int Prio) { return Prio > 3 ? 3 : Prio; }
 static bool SamdSercomOwned(int, const DevIntrf_t *) { return false; }
-static bool SamdSercomClockEnable(int) { return true; }
-static void SamdSercomClockDisable(int) {}
+static bool SamdSercomClockEnable(int DevNo)
+{
+	PM_REGS->PM_APBCMASK = PM_REGS->PM_APBCMASK | (PM_APBCMASK_SERCOM0_Msk << DevNo);
+	return true;
+}
+static void SamdSercomClockDisable(int DevNo)
+{
+	PM_REGS->PM_APBCMASK = PM_REGS->PM_APBCMASK & ~(PM_APBCMASK_SERCOM0_Msk << DevNo);
+}
 static sercom_registers_t *SamdSercomGetReg(int DevNo) { return &s_Regs[DevNo]; }
 static int SamdSercomPad(int, const IOPinCfg_t *pPin) { return pPin->PinNo; }
 static uint32_t SystemPeriphClockGet(int) { return 48000000; }
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
 void IOPinDisable(int, int) {}
-void SharedIntrfSetIrqHandler(int, DevIntrf_t *, IrqHandler_t Handler) { s_Handler = Handler; }
+void SharedIntrfSetIrqHandler(int DevNo, DevIntrf_t *pIntrf, IrqHandler_t Handler)
+{
+	g_SharedIntrf[DevNo].pIntrf = pIntrf;
+	g_SharedIntrf[DevNo].Handler = Handler;
+	s_Handler = Handler;
+}
 static int SamdDmacOpen(int, SamdDmacHandler_t Handler, void *Ctx, int)
 {
 	assert(!s_Channel);
@@ -156,5 +172,44 @@ int main()
 	assert(!s_Channel);
 	assert(uart.DevIntrf.TxData(&uart.DevIntrf, data, sizeof(data)) == 0);
 	assert(s_Opens == s_Closes && s_Starts == 2);
+	IOPinCfg_t txPins[] = {{0, -1}, {0, 0}};
+	cfg.pIOPinMap = txPins;
+	for (int mode : {0, 1, 2, 3})
+	{
+		cfg.bIntMode = (mode & 1) != 0;
+		cfg.bDMAMode = (mode & 2) != 0;
+		assert(UARTInit(&uart, &cfg));
+		assert(uart.hRxFifo == nullptr && s_SamdUartDev[2].NbIOPins == 1);
+		assert((reg.SERCOM_CTRLB & SERCOM_USART_INT_CTRLB_RXEN_Msk) == 0);
+		assert(reg.SERCOM_CTRLB & SERCOM_USART_INT_CTRLB_TXEN_Msk);
+		reg.SERCOM_INTFLAG = 0;
+		assert(uart.DevIntrf.TxData(&uart.DevIntrf, data, sizeof(data)) == 4);
+		reg.SERCOM_INTFLAG = SERCOM_USART_INT_INTFLAG_DRE_Msk;
+		if (cfg.bDMAMode)
+		{
+			s_Busy = false;
+			if (cfg.bIntMode)
+			{
+				s_DmaHandler(0, DMAC_CHINTFLAG_TCMPL_Msk, s_DmaCtx);
+			}
+		}
+		else if (cfg.bIntMode)
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				s_Handler(2, &uart.DevIntrf);
+			}
+		}
+		assert(uart.DevIntrf.RxData(&uart.DevIntrf, received, 1) == 0);
+		assert(CFifoUsed(uart.hTxFifo) == 0);
+		uart.DevIntrf.Disable(&uart.DevIntrf);
+		uart.DevIntrf.Enable(&uart.DevIntrf);
+		assert((reg.SERCOM_CTRLB & SERCOM_USART_INT_CTRLB_RXEN_Msk) == 0);
+		uart.DevIntrf.PowerOff(&uart.DevIntrf);
+	}
+	cfg.pIOPinMap = s_Pins;
+	assert(UARTInit(&uart, &cfg));
+	assert(uart.hRxFifo && (reg.SERCOM_CTRLB & SERCOM_USART_INT_CTRLB_RXEN_Msk));
+	uart.DevIntrf.PowerOff(&uart.DevIntrf);
 	puts("SAMD UART DMA/poll selection, FIFO transfers and lifecycle: PASS");
 }

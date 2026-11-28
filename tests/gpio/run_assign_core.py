@@ -33,7 +33,7 @@ def single_core_checks(build):
 		("ARM/NXP/LPC11xx/src/iopincfg_lpc11uxx.c",
 		 function("ARM/NXP/LPC11xx/include/iopinctrl.h", "Lpc11GpioValidPin"),
 		 "assert(!IOPinAssignCore(1, 30, 0));"),
-		("ARM/NXP/LPC17xx/src/iopincfg.c", "", ""),
+		("ARM/NXP/LPC17xx/src/iopincfg_lpc17xx.c", "", ""),
 		("ARM/NXP/LPC546xx/src/iopincfg_lpc546xx.cpp",
 		 "#define LPC546XX_GPIO_PORT_MAX 6U\n#define LPC546XX_GPIO_PIN_MAX 32U\n", ""),
 		("ARM/Renesas/RE01/src/iopincfg_re01.c",

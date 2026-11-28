@@ -79,10 +79,8 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL", oscillator)
         self.assertIn("g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL", oscillator)
         self.assertIn("NRF_CLOCK_S->XO.STAT & CLOCK_XO_STAT_STATE_Msk", oscillator)
-        self.assertIn("NRF_CLOCK_S->LFCLK.STAT", oscillator)
-        self.assertIn("NRF_GRTC->MODE & GRTC_MODE_SYSCOUNTEREN_Msk", oscillator)
-        self.assertIn("NRF_GRTC->CLKCFG & GRTC_CLKCFG_CLKSEL_Msk", oscillator)
-        self.assertIn("if (!lfRunning && NRF_OSCILLATORS->XOSC32KI.INTCAP != lfCap)", oscillator)
+        self.assertIn("OSCILLATORS_XOSC32KI_STATUS_CLOCKRUNNING_Msk", oscillator)
+        self.assertNotIn("NRF_GRTC->", oscillator)
         self.assertIn("NRF_OSCILLATORS->XOSC32KI.INTCAP = lfCap;", oscillator)
         self.assertNotIn("slope = ((-(slope>>8))<<8) | slope", oscillator)
         self.assertIn("NRF_GRTC->TASKS_START = 1U;", self.grtc)
@@ -156,15 +154,6 @@ class Nrf54lCorePort(unittest.TestCase):
                 self.assertIn("state = DisableInterrupt();", function)
                 self.assertIn("EnableInterrupt(state);", function)
 
-    def test_sdelay_uses_generic_timer_and_grtc(self):
-        source = self.timer
-        self.assertIn("defined(NRF54L_SERIES)", source)
-        self.assertIn("warmClock = nRFxGrtcSleepClockWarm();", source)
-        self.assertIn("cfg.DevNo = -1;", source)
-        self.assertIn("TimerInit(&s_SleepTimer, &cfg)", source)
-        self.assertIn("TimerDisableTrigger(&s_SleepTimer, 0);", source)
-        self.assertIn("TimerPowerOff(&s_SleepTimer)", source)
-
     def test_nrf54l_system_sleep_and_capabilities(self):
         source = self.power
         self.assertIn("defined(NRF54L_SERIES)", source)
@@ -173,21 +162,22 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("__WFI();", source)
         self.assertIn("SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_TIMER_WAKE", source)
 
-    def test_l15_measured_128mhz_delay_factors(self):
+    def test_l15_measured_delay_factors(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
-        self.assertIn("#if defined(NRF54L15_XXAA)", source)
-        self.assertIn("if (SystemCoreClock == 128000000UL)", source)
-        self.assertIn("8000400UL, 3000150UL", source)
-        self.assertIn("16000000UL, 3000000UL", source)
+        start = source.index("#if defined(NRF54L15_XXAA)", source.index("void SystemCoreClockUpdate(void)"))
+        l15 = source[start:source.index("#elif", start)]
+        self.assertIn("64000000UL, 7998880UL, 128000000UL, 15999199UL", l15)
+        self.assertIn("64000000UL, 21331839UL, 128000000UL, 42664533UL", l15)
 
-    def test_lm20a_two_point_delay_interpolation(self):
+    def test_lm20_shared_two_point_delay_interpolation(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
-        start = source.index("#elif defined(NRF54LM20A_XXAA)")
-        end = source.index("#elif defined(NRF54LM20B_XXAA)", start)
+        start = source.index("#elif defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)")
+        end = source.index("\n#else\n", start)
         lm20a = source[start:end]
-        self.assertIn("64000000UL, 7998400UL, 21331413UL", lm20a)
-        self.assertIn("128000000UL, 15999360UL, 42664533UL", lm20a)
-        self.assertIn("ArmDelayClockInterpolate(SystemCoreClock,", lm20a)
+        self.assertIn("64000000UL, 7998400UL, 128000000UL, 15999360UL", lm20a)
+        self.assertIn("64000000UL, 21331413UL, 128000000UL, 42664533UL", lm20a)
+        self.assertIn("SystemMicroSecLoopCnt = CalcDelayFactor(SystemCoreClock,", lm20a)
+        self.assertIn("SystemnsDelayFactor = CalcDelayFactor(SystemCoreClock,", lm20a)
         self.assertNotIn("16000000UL, 3000000UL", lm20a)
         self.assertEqual(64000000 * 1000000 // 8001600, 7998400)
         self.assertEqual(128000000 * 1000000 // 8000320, 15999360)
@@ -208,37 +198,18 @@ class Nrf54lCorePort(unittest.TestCase):
                 NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
             #endif''', init)
 
-    def test_lm20b_remains_unmeasured(self):
-        source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
-        start = source.index("#elif defined(NRF54LM20B_XXAA)")
-        end = source.index("\n#else\n", start)
-        lm20b = source[start:end]
-        self.assertIn("8000640UL, 3000150UL", lm20b)
-        self.assertNotIn("4000320UL", lm20b)
-        l15 = source[source.index("#if defined(NRF54L15_XXAA)"):
-                     source.index("#elif defined(NRF54LM20A_XXAA)")]
-        self.assertIn("8000400UL, 3000150UL", l15)
-
-    def test_lm20a_cold_sdelay_is_separate_from_l15(self):
-        timer = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text()
-        l15 = timer[timer.index("#elif defined(NRF54L15_XXAA)"):
-                    timer.index("#elif defined(NRF54LM20A_XXAA)")]
-        lm20a = timer[timer.index("#elif defined(NRF54LM20A_XXAA)"):
-                      timer.index("#elif defined(NRF52832_XXAA)")]
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 434775", l15)
-        self.assertIn("#define NRF_SDELAY_COLD_DEFAULT_TICKS 433611", lm20a)
-        self.assertIn("#define NRF_SDELAY_WARM_DEFAULT_TICKS 0", lm20a)
-        self.assertEqual((1433700 + 1433521) // 2 - 433611, 999999)
-
     def test_lm20_managed_projects_use_their_target_variant(self):
         # nRF54LM20A and nRF54LM20B are separate targets. Every managed
         # project of a target defines that target's MCU and no other.
+        inventories = {}
         for variant, other in (("A", "B"), ("B", "A")):
             base = ROOT / ("ARM/Nordic/nRF54/nRF54LM20" + variant)
             own = 'value="NRF54LM20%s_XXAA"' % variant
             foreign = 'value="NRF54LM20%s_XXAA"' % other
             projects = sorted(base.glob("exemples/*/ioc/.cproject"))
-            self.assertEqual(len(projects), 40)
+            inventories[variant] = {p.parents[1].name for p in projects}
+            self.assertGreaterEqual(len(projects), 41)
+            self.assertIn("TimerTest", inventories[variant])
             projects.append(base / "lib/ioc/.cproject")
             for path in projects:
                 with self.subTest(project=str(path.relative_to(ROOT))):
@@ -251,6 +222,7 @@ class Nrf54lCorePort(unittest.TestCase):
             # Four managed library configs, each with C and C++ definitions.
             library = (base / "lib/ioc/.cproject").read_text()
             self.assertEqual(library.count(own), 8)
+        self.assertSetEqual(inventories["A"], inventories["B"])
         self.assertFalse((ROOT / "ARM/Nordic/nRF54/nRF54LM20x").exists())
 
     def test_nrf54l15_managed_example_library_paths_match_configuration(self):
@@ -290,7 +262,6 @@ class Nrf54lCorePort(unittest.TestCase):
         for variant in ("A", "B"):
             base = ROOT / ("ARM/Nordic/nRF54/nRF54LM20" + variant)
             projects = sorted(base.glob("exemples/*/ioc/.cproject"))
-            self.assertEqual(len(projects), 40)
             for path in projects:
                 source = path.read_text()
                 sections = list(re.finditer(
@@ -298,6 +269,8 @@ class Nrf54lCorePort(unittest.TestCase):
                     r'core.configurationDataProvider"[^>]*name="([^"]+)"',
                     source))
                 self.assertGreaterEqual(len(sections), 2, str(path))
+                if path.parents[1].name in ("UsbCdcLoopback", "UsbCdcPrbsTx", "UsbIsoLoopback"):
+                    self.assertTrue({"Debug", "Release"} <= {m.group(1) for m in sections}, path)
                 for i, match in enumerate(sections):
                     config = match.group(1)
                     end = sections[i + 1].start() if i + 1 < len(sections) else len(source)
@@ -306,12 +279,12 @@ class Nrf54lCorePort(unittest.TestCase):
                         r'lib/ioc/(Debug(?:_SDC)?|Release(?:_SDC)?)',
                         section)
                     expected = "Release" if config.startswith("Release") else "Debug"
+                    self.assertTrue(library_paths, (path, config))
                     for linked in library_paths:
                         with self.subTest(project=str(path.relative_to(ROOT)),
                                           config=config, linked=linked):
                             self.assertTrue(linked.startswith(expected))
-                    if library_paths:
-                        self.assertIn("IOsonata_nRF54LM20" + variant, section)
+                    self.assertIn("IOsonata_nRF54LM20" + variant, section)
 
     def test_lm20a_default_startup_restored_after_64mhz_validation(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
@@ -332,6 +305,16 @@ class Nrf54lCorePort(unittest.TestCase):
                              "system_clock_nrfx.cpp"):
                 with self.subTest(mcu=mcu, file=filename):
                     self.assertIn(filename, project)
+
+    def test_sdelay_is_generic(self):
+        self.assertNotIn("sDelay", self.timer)
+        for target in ("nRF54L15", "nRF54LM20A", "nRF54LM20B"):
+            project = (ROOT / "ARM/Nordic/nRF54" / target / "lib/ioc/.project").read_text()
+            self.assertIn("PARENT-6-PROJECT_LOC/src/sdelay.cpp", project)
+        # GRTC timer 3 and TIMER10 stay with the radio stack while it runs
+        self.assertIn("#define NRFX_TIMER_STACK_LF_DEVNO\t(TIMER_NRFX_RTC_MAX - 1)", self.timer)
+        self.assertIn("#define NRFX_TIMER_STACK_HF_DEVNO\t(TIMER_NRFX_RTC_MAX + 1)", self.timer)
+        self.assertIn("nRFxTimerStackHeld(pCfg->DevNo)", self.timer)
 
 
 if __name__ == "__main__":

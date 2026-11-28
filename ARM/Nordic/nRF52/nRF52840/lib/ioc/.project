@@ -556,6 +556,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/sdelay.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sdelay.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/semihost_arm.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/semihost_arm.c</locationURI>

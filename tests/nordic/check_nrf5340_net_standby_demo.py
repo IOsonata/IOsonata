@@ -22,12 +22,12 @@ class NetworkStandbyDemo(unittest.TestCase):
 
 	def test_generic_timer_wake_starts_before_sleep(self):
 		s = (ROOT / "exemples/misc/core_power_test.cpp").read_text(encoding="utf-8")
-		start = s.index("if (TimerSetFrequency(pTimer, 1024U)")
-		end = s.index("elapsed = TimerGetMicrosecond(pTimer) - start;", start)
+		start = s.index("if (TimerSetFrequency(&s_WakeTimer, 1024U)")
+		end = s.index("elapsed = TimerGetMicrosecond(&s_WakeTimer) - start;", start)
 		cycle = s[start:end]
-		self.assertLess(cycle.index("TimerEnable(pTimer)"),
-			cycle.index("nsTimerEnableTrigger(pTimer"))
-		self.assertLess(cycle.index("nsTimerEnableTrigger(pTimer"),
+		self.assertLess(cycle.index("TimerEnable(&s_WakeTimer)"),
+			cycle.index("nsTimerEnableTrigger(&s_WakeTimer"))
+		self.assertLess(cycle.index("nsTimerEnableTrigger(&s_WakeTimer"),
 			cycle.index("SystemSleep();"))
 
 	def test_network_core_system_sleep_backend(self):

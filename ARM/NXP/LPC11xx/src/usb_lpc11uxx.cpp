@@ -102,6 +102,7 @@ static uint8_t s_WakeFrames;
 static LpcUsbFsData_t s_Data;
 
 static bool Lpc11UsbRetire(uint32_t Mask);
+static void Lpc11UsbEp0Setup(void);
 static void Lpc11UsbWakeCancel(void);
 static void Lpc11UsbBusReset(uint32_t Status, bool Detached);
 
@@ -155,6 +156,26 @@ static bool Lpc11UsbClockReady(void)
 		cco >= 156000000U && cco <= 320000000U;
 }
 
+// EP0 and data endpoint access to the controller and its SRAM.
+// Lpc11UsbHwRelease uses it, also when the hardware was prepared without
+// UsbCtrlrInit. Endpoint registrations are not changed.
+static void Lpc11UsbEp0Setup(void)
+{
+	s_Ep0.pReg = LPC_USB;
+	s_Ep0.pList = s_Memory.Command;
+	s_Ep0.pSetup = s_Memory.Setup;
+	s_Ep0.pBuf = s_Memory.Packet[0];
+	s_Ep0.BufSize = sizeof(s_Memory.Packet[0]);
+	s_Ep0.NbEp = 5;
+	s_Ep0.bHsList = false;
+	s_Ep0.Ready = Lpc11UsbControlReady;
+	s_Ep0.Fault = Lpc11UsbEp0Fault;
+	s_Data.pEp0 = &s_Ep0;
+	s_Data.pPrepared = &s_Prepared;
+	s_Data.pClosing = &s_Closing;
+	s_Data.Irq = USB_IRQn;
+}
+
 void Lpc11UsbHwAckStatus(uint32_t Flags)
 {
 	if (!s_Prepared)
@@ -188,6 +209,7 @@ Lpc11UsbMemory_t *Lpc11UsbHwPrepare(int IntPrio)
 	NVIC_DisableIRQ(USB_IRQn);
 	LPC_USB->INTEN = 0U;
 	LPC_USB->DEVCMDSTAT = LPC11_USB_PLL_ON | LPC11_USB_NO_WAKE | LPC11_USB_STATUS_W1C;
+	Lpc11UsbEp0Setup();
 	memset(&s_Memory, 0, sizeof(s_Memory));
 	for (unsigned physical = 0U; physical < 10U; ++physical)
 	{
@@ -274,19 +296,7 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 		return false;
 	}
 	s_Initialized = false;
-	s_Ep0.pReg = LPC_USB;
-	s_Ep0.pList = s_Memory.Command;
-	s_Ep0.pSetup = s_Memory.Setup;
-	s_Ep0.pBuf = s_Memory.Packet[0];
-	s_Ep0.BufSize = sizeof(s_Memory.Packet[0]);
-	s_Ep0.NbEp = 5;
-	s_Ep0.bHsList = false;
-	s_Ep0.Ready = Lpc11UsbControlReady;
-	s_Ep0.Fault = Lpc11UsbEp0Fault;
-	s_Data.pEp0 = &s_Ep0;
-	s_Data.pPrepared = &s_Prepared;
-	s_Data.pClosing = &s_Closing;
-	s_Data.Irq = USB_IRQn;
+	Lpc11UsbEp0Setup();
 	LpcUsbFsDataInit(&s_Data);
 	if (s_VbusInt >= 0)
 		IOPinDisableInterrupt(s_VbusInt);

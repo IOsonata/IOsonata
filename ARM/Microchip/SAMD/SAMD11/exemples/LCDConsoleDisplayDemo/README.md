@@ -77,7 +77,7 @@ byte count means text was passed to that API, not verified on the panel.
   the target's real linker script, a separate library archive, GCC 15.2.1,
   `-Os` and LTO. Checks that unused SPI transfer modes are absent.
 - `python3 tests/samd/run_spi.py`: host tests of all SPI master modes,
-  completion, read-command synchronization, reinitialization, failed channel
+  transfer counts, read-command synchronization, reinitialization, failed channel
   acquisition, reset timeout, power-off cleanup and slave arming.
 - `python3 tests/samd/build_spi.py`: after the display build, links a C program
   with runtime mode selection against the archive, with and without LTO.
@@ -86,6 +86,9 @@ byte count means text was passed to that API, not verified on the panel.
 - Maintainer reports polling, interrupt-only and DMA-only OLED output works
   on D11 + OLED1, including combined DMA/interrupt in a later run. Current
   clock-arithmetic changes have not been rerun on the board.
+- Synchronous SPI master transfers (Nov. 26, 2026): the maintainer reports the
+  display output works on D11 + OLED1 with interrupt and DMA off, and with
+  both on. Interrupt only and DMA only were not rerun.
 
 Hardware references:
 - [OLED1 extension header](https://onlinedocs.microchip.com/oxy/GUID-26DC66D4-2EF7-4C54-8D2D-2A29BED57CAB-en-US-2/GUID-4AEF0FF0-9E97-4FCB-8565-668D17B30006.html)
@@ -167,26 +170,27 @@ keeping that archive member native lets the linker resolve those calls.
 Clean and rebuild both the D11 library and the application after updating.
 
 The archive still contributes the DMAC vector handler; the display ELF omits
-DMA channel allocation and transfer functions, slave handling and the shared
-SPI interrupt transmit buffer. No other board was built or hardware-tested
-for this change.
+DMA channel allocation and transfer functions and slave handling. No other
+board was built or hardware-tested for this change.
 
 ## Interrupt and DMA display transfers
 
 The previous SSD1315/SSD1306 initialization rejected either `bIntEn` or
 `bDma`, so enabling either caused this demo to exit before sending commands.
-The display now accepts synchronous DMA and waits for interrupt transfers
-through `DeviceIntrfWaitTxComplete`. D/C and the source data stay unchanged
-until completion. The SPI driver releases CS; the display does not stop an
-asynchronous transfer a second time. On timeout it resets SPI to abort the
-pending transfer, releases CS if necessary and reports failure.
+The display now accepts both.
 
-Interrupt operation requires a SPI implementation that signals
-`DeviceIntrfTxComplete` and provides Reset to abort transfers. Use foreground
-or task context with completion interrupts enabled. The wait limit is
-1,000,000 polling iterations per transfer. Completion means the SPI transfer
-ended; this helper does not expose the asynchronous byte count or confirm
-that the panel received the bytes.
+The SAM D SPI master transfer is synchronous in all four modes: `TxData`
+returns the count when the bytes are sent, in interrupt mode after waiting
+for the SERCOM or DMAC interrupt, and the display then releases CS. Send the
+display data from foreground or task context, not from an interrupt handler
+of the same or a higher priority than the SPI.
+
+For a SPI implementation that returns `-1` and completes the transfer later,
+the display waits through `DeviceIntrfWaitTxComplete`, at most 1,000,000
+polling iterations, with D/C and the source data unchanged until completion.
+That SPI implementation releases CS from `DeviceIntrfTxComplete`; the display
+does not stop the transfer a second time. On timeout it resets SPI to abort
+the pending transfer, releases CS if necessary and reports failure.
 
 Select these definitions in `src/board.h` or the application compiler settings;
 then clean and rebuild the library and application:
@@ -213,6 +217,13 @@ SPI transfer selection, fonts and formatted logging are unchanged.
 archive and produces 16376 flash bytes, leaving eight bytes. Pass `--interrupt`,
 `--dma`, or neither for the other selections. The managed-library sizes above
 are the reference for the Eclipse projects.
+
+These sizes predate the synchronous SPI master transfers (Nov. 26, 2026) and
+were not measured again with the managed library. With
+`tests/display/build_samd11_console.py` and GCC 14.2.1, Release flash with
+the initialized data went from 14856, 15404, 15828 and 16280 bytes to 14716,
+14788, 15676 and 15728 bytes for polling, interrupt only, DMA and DMA with
+interrupts.
 
 `tests/display/run_ssd1315.py` now covers all four interface flag combinations,
 delayed and immediate completion, CS/D/C ordering, timeout abort and recovery,

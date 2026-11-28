@@ -140,9 +140,10 @@ void LpcUsbFsEp0Reset(LpcUsbFsEp0_t *pEp0)
 	__DMB();
 }
 
+// Enabled first: Ready is set only once the controller is initialized
 static bool LpcUsbFsEp0Current(LpcUsbFsEp0_t *pEp0)
 {
-	return pEp0->Ready() && pEp0->Enabled && !pEp0->Halted &&
+	return pEp0->Enabled && pEp0->Ready() && !pEp0->Halted &&
 		(pEp0->pReg->DEVCMDSTAT & (LPCUSB_SETUP | LPCUSB_RESET)) == 0U;
 }
 

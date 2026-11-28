@@ -9,29 +9,13 @@ or by the 32 MHz crystal (HFXO). The crystal only improves accuracy. The
 radio and USB need it and it draws much more current, so it is started on
 request, not at startup.
 
-SystemCoreClockSelect configures the core oscillator descriptor. Shared
-high-frequency oscillator use is controlled by SystemHighFreqClockEnable and
-SystemHighFreqClockDisable. The first enable starts HFXO when configured,
-and the final disable stops it without disabling the CPU clock.
+The first HF request starts the configured oscillator. The last releases it.
 SoftDevice and MPSL ownership is handled by the MCU implementation.
 
 On the nRF53, HFCLKSRC selects the crystal before HFCLKSTART and selects the
 RC again after HFCLKSTOP. On the nRF54L the crystal is started and stopped
 with XOSTART and XOSTOP, its state is in XO.STAT. The PLL is not touched, the
 CPU clock started by SystemInit keeps running from it.
-
-SystemCoreClockSelect does not change g_McuOsc, it stays the description of
-the board.
-
-SystemLowFreqClockSelect validates the board-declared source and configures
-LFCLK without starting it. Enable and Disable own the oscillator lifecycle.
-The board's g_McuOsc declaration is never rewritten. The RC, the crystal, and on the
-nRF52 a rail to rail external clock on XL1 (OSC_TYPE_TCXO) are supported.
-On the nRF54L the LFCLK registers are LFCLK.SRC, LFCLK.STAT and
-LFCLK.SRCCOPY.
-When a BLE stack is enabled it owns LFCLK, whose source it set when it was
-enabled, and the function returns false. If the crystal does not start,
-LFCLK runs again from its previous source.
 
 The peripheral clock is the fixed 16 MHz PCLK16M, peripheral clock 0.
 SystemPeriphClockSet returns it, the only frequency there is.
@@ -79,11 +63,6 @@ SOFTWARE.
 #include "nrf_mpsl.h"
 #include "idelay.h"
 
-#if defined(NRF52_SERIES) && defined(NRFX_LFRC_CAL_LOG)
-#include "app_evt_handler.h"
-#include "syslog.h"
-#endif
-
 // CLOCK instance, as in timer_hf_nrfx.cpp
 #if defined(NRF91_SERIES)
 // Non secure on nRF91, as POWER, which the Modem library uses there
@@ -97,6 +76,11 @@ SOFTWARE.
 
 // About 50 ms at 64 MHz, the crystal starts in a few ms
 #define NRFX_HFXO_WAIT_LOOPS		1000000
+
+// The HFXO start is polled in time, so the clock code knows how long the
+// start took, see SystemHighFreqClockStartTime
+#define NRFX_HFXO_START_TIMEOUT_US	50000U
+#define NRFX_HFXO_START_POLL_US		10U
 
 // Peripherals run from the fixed 16 MHz PCLK16M
 #define NRFX_PCLK_FREQ				16000000UL
@@ -170,6 +154,8 @@ typedef enum {
 } nRFxHfxoOwner_t;
 
 static uint32_t s_nRFxHfxoReqCnt = 0U;
+// Time the last HF Enable waited for HFXO, see SystemHighFreqClockStartTime
+static uint32_t s_nRFxHfxoStartWaitUs = 0U;
 static bool s_bNRFxHfxoTransition = false;
 static nRFxHfxoOwner_t s_nRFxHfxoOwner = NRFX_HFXO_OWNER_NONE;
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
@@ -196,11 +182,8 @@ static uint32_t s_nRFxLfclkReqCnt = 0U;
 static bool s_bNRFxLfclkTransition = false;
 static bool s_bNRFxLfclkOwned = false;
 static bool s_bNRFxLfclkStopPending = false;
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-// Time spent in calibrated LFCLK startup polling, for the next sDelay
-// request. This is internal to the Nordic clock/delay implementation.
-static uint32_t s_nRFxLfclkStartWaitUs;
-#endif
+// Time the last LF Enable waited for LFCLK, see SystemLowFreqClockStartTime
+static uint32_t s_nRFxLfclkStartWaitUs = 0U;
 #if defined(NRF52_SERIES) && defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 // A direct LFCLK owner may release while the SoftDevice controls CLOCK.
 // Its physical STOP is deferred until the SoftDevice has shut down.
@@ -211,26 +194,6 @@ static bool s_bNRFxSdLfclkStopPending;
 static bool s_bNRFxNetLfclkRcFallback;
 #endif
 
-// Temporarily selected sources, independent of the board oscillator hardware.
-static bool s_bNRFxCoreOscSelected;
-static bool s_bNRFxLowOscSelected;
-#if defined(NRF91_SERIES)
-// Invalidate the measured LFRC RTC rate after every source configuration.
-// The counter is independent of the application's oscillator descriptor.
-static uint32_t s_nRF91LfclkConfigEpoch;
-#endif
-static OSC_TYPE s_nRFxCoreOscSelected;
-static OSC_TYPE s_nRFxLowOscSelected;
-
-static inline OSC_TYPE nRFxCoreOscSelected(void)
-{
-	return s_bNRFxCoreOscSelected ? s_nRFxCoreOscSelected : g_McuOsc.CoreOsc.Type;
-}
-
-static inline OSC_TYPE nRFxLowOscSelected(void)
-{
-	return s_bNRFxLowOscSelected ? s_nRFxLowOscSelected : g_McuOsc.LowPwrOsc.Type;
-}
 #if defined(NRF53_SERIES) || defined(NRF52_SERIES)
 static bool s_bNRFxLfclkCalibrating;
 #endif
@@ -286,6 +249,8 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 	int res;
 	int i;
 
+	// MPSL waits for the crystal itself, the wait is not counted in the start
+	// time. The crystal starts in well under a millisecond.
 	res = nRFxMpslHfxo(true);
 	if (res >= 0)
 	{
@@ -305,7 +270,7 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 		{
 			return false;
 		}
-		for (i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
+		for (i = 0; i < (int)(NRFX_HFXO_START_TIMEOUT_US / NRFX_HFXO_START_POLL_US); i++)
 		{
 			if (sd_clock_hfclk_is_running(&running) != NRF_SUCCESS)
 			{
@@ -317,6 +282,8 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 				*pOwner = NRFX_HFXO_OWNER_SOFTDEVICE;
 				return true;
 			}
+			usDelay(NRFX_HFXO_START_POLL_US);
+			s_nRFxHfxoStartWaitUs += NRFX_HFXO_START_POLL_US;
 		}
 		(void)sd_clock_hfclk_release();
 		return false;
@@ -336,7 +303,7 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 	NRF_CLOCK->NRFX_HFXO_STARTED = 0U;
 	NRF_CLOCK->NRFX_HFXO_START = 1U;
 
-	for (i = 0; i < NRFX_HFXO_WAIT_LOOPS; i++)
+	for (i = 0; i < (int)(NRFX_HFXO_START_TIMEOUT_US / NRFX_HFXO_START_POLL_US); i++)
 	{
 		if (nRFxHfxoRunning())
 		{
@@ -344,6 +311,8 @@ static bool nRFxHfxoStart(nRFxHfxoOwner_t *pOwner)
 			*pOwner = NRFX_HFXO_OWNER_DIRECT;
 			return true;
 		}
+		usDelay(NRFX_HFXO_START_POLL_US);
+		s_nRFxHfxoStartWaitUs += NRFX_HFXO_START_POLL_US;
 	}
 
 	NRF_CLOCK->NRFX_HFXO_STOP = 1U;
@@ -473,38 +442,13 @@ SYSTEM_POWER_MODE SystemPowerModeGet(void)
 }
 #endif
 
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	uint32_t state;
-
-	if (ClkSrc != OSC_TYPE_RC &&
-		(ClkSrc != g_McuOsc.CoreOsc.Type || g_McuOsc.CoreOsc.Freq == 0U))
-	{
-		return false;
-	}
-	if (OscFreq != 0U && OscFreq != g_McuOsc.CoreOsc.Freq)
-	{
-		return false;
-	}
-
-	state = DisableInterrupt();
-	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt != 0U)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	s_nRFxCoreOscSelected = ClkSrc;
-	s_bNRFxCoreOscSelected = true;
-	EnableInterrupt(state);
-	return true;
-}
-
 bool SystemHighFreqClockEnable(void)
 {
 	nRFxHfxoOwner_t owner;
 	uint32_t state;
 	bool success;
 
+	s_nRFxHfxoStartWaitUs = 0U;
 	state = DisableInterrupt();
 	if (s_bNRFxHfxoTransition || s_nRFxHfxoReqCnt == UINT32_MAX)
 	{
@@ -517,14 +461,14 @@ bool SystemHighFreqClockEnable(void)
 		EnableInterrupt(state);
 		return true;
 	}
-	if (nRFxCoreOscSelected() == OSC_TYPE_RC)
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
 	{
 		s_nRFxHfxoReqCnt = 1U;
 		EnableInterrupt(state);
 		return true;
 	}
-	if (nRFxCoreOscSelected() != OSC_TYPE_XTAL &&
-		nRFxCoreOscSelected() != OSC_TYPE_TCXO)
+	if (g_McuOsc.CoreOsc.Type != OSC_TYPE_XTAL &&
+		g_McuOsc.CoreOsc.Type != OSC_TYPE_TCXO)
 	{
 		EnableInterrupt(state);
 		return false;
@@ -563,7 +507,7 @@ void SystemHighFreqClockDisable(void)
 		EnableInterrupt(state);
 		return;
 	}
-	if (nRFxCoreOscSelected() == OSC_TYPE_RC)
+	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
 	{
 		s_nRFxHfxoReqCnt = 0U;
 		EnableInterrupt(state);
@@ -738,6 +682,11 @@ static bool nRFxLfclkCalibrate(void)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
+		if (s_bNRFxLfclkTransition)
+		{
+			// Calibration as part of an Enable start
+			s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
+		}
 	}
 	if (NRF_CLOCK->EVENTS_DONE != 0U)
 	{
@@ -774,7 +723,7 @@ bool SystemLowFreqClockCalibrate(void)
 		return false;
 	}
 	state = DisableInterrupt();
-	active = nRFxLowOscSelected() == OSC_TYPE_RC &&
+	active = g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC &&
 		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U &&
 		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STAT_SRC_Msk) ==
 			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos) &&
@@ -854,9 +803,7 @@ static bool nRFxLfclkFinishStart(uint32_t Src)
 			}
 			usDelay(NRFX_LFCLK_START_POLL_US);
 			elapsed += NRFX_LFCLK_START_POLL_US;
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 			s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
-#endif
 		}
 		return false;
 	}
@@ -899,15 +846,13 @@ static bool nRFxLfclkStart(uint32_t Src)
 {
 	uint32_t elapsed;
 
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-	s_nRFxLfclkStartWaitUs = 0U;
-#endif
 	NRF_CLOCK->NRFX_LFCLKSRC = Src;
 	NRF_CLOCK->EVENTS_LFCLKSTARTED = 0U;
 #if NRF52_ERRATA_132_ENABLE_WORKAROUND
 	if (nrf52_errata_132())
 	{
 		usDelay(NRFX_LFCLK_ERRATA132_DELAY_US);
+		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_ERRATA132_DELAY_US;
 	}
 #endif
 	NRF_CLOCK->TASKS_LFCLKSTART = 1U;
@@ -926,9 +871,7 @@ static bool nRFxLfclkStart(uint32_t Src)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
 		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
-#endif
 	}
 	if (NRF_CLOCK->EVENTS_LFCLKSTARTED != 0U)
 	{
@@ -956,27 +899,22 @@ static bool nRFxLfclkWaitStopped(void)
 		}
 		usDelay(NRFX_LFCLK_START_POLL_US);
 		elapsed += NRFX_LFCLK_START_POLL_US;
+		s_nRFxLfclkStartWaitUs += NRFX_LFCLK_START_POLL_US;
 	}
 	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U;
 }
 
-// Snapshot actual LFCLK hardware state before sDelay requests an RTC.
-// A running oscillator avoids the cold LFXO startup penalty. No ownership
-// change or oscillator start takes place in this query.
-#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
-extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void)
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	return s_nRFxHfxoStartWaitUs;
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
 {
 	return s_nRFxLfclkStartWaitUs;
 }
-#endif
 
 #if defined(NRF91_SERIES)
-// Internal nRF91 clock/RTC interface. Neither function starts or stops LFCLK.
-extern "C" uint32_t nRFxLfclkConfigurationEpoch(void)
-{
-	return s_nRF91LfclkConfigEpoch;
-}
-
 extern "C" bool nRFxLfclkRunningFromRc(void)
 {
 	return (NRF_CLOCK->NRFX_LFCLKSTAT &
@@ -994,7 +932,7 @@ extern "C" bool nRFxLfclkUsesRc(void)
 {
 	uint32_t stat;
 
-	if (nRFxLowOscSelected() != OSC_TYPE_RC)
+	if (g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC)
 	{
 		return false;
 	}
@@ -1004,20 +942,6 @@ extern "C" bool nRFxLfclkUsesRc(void)
 			(NRFX_LFCLK_SRC_RC << NRFX_LFCLK_SRC_Pos);
 }
 #endif
-
-#if defined(NRF91_SERIES)
-// Do not calibrate LFRC by a CPU busy wait as part of sDelay's
-// low-power sleep setup. Use the already validated LFXO timebase.
-extern "C" bool nRFxSleepLfClockAccurate(void)
-{
-	return nRFxLowOscSelected() == OSC_TYPE_XTAL;
-}
-#endif
-
-extern "C" bool nRFxSleepLfClockRunning(void)
-{
-	return (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
-}
 
 // A STOP issued here is settled once LFCLKSTAT reports the clock stopped,
 // or once a BLE stack that drives CLOCK itself runs LFCLK. Without this
@@ -1053,7 +977,8 @@ bool SystemLowFreqClockEnable(void)
 	bool stopped;
 	bool started;
 
-	if (!nRFxLfclkOscSource(nRFxLowOscSelected(), &src))
+	s_nRFxLfclkStartWaitUs = 0U;
+	if (!nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src))
 	{
 		return false;
 	}
@@ -1200,58 +1125,6 @@ void SystemLowFreqClockDisable(void)
 	EnableInterrupt(state);
 }
 
-bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	uint32_t src;
-	uint32_t state;
-	bool running;
-	bool stopped;
-
-	if ((ClkSrc != OSC_TYPE_RC &&
-		(ClkSrc != g_McuOsc.LowPwrOsc.Type ||
-		g_McuOsc.LowPwrOsc.Freq != 32768U)) ||
-		(OscFreq != 0U && OscFreq != 32768U) ||
-		!nRFxLfclkOscSource(ClkSrc, &src) || __get_IPSR() != 0U)
-	{
-		return false;
-	}
-	state = DisableInterrupt();
-	if (s_bNRFxLfclkTransition || s_nRFxLfclkReqCnt != 0U ||
-		nRFxMpslActive() || nRFxClockSdEnabled())
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	running = (NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) != 0U;
-	if (running && !s_bNRFxLfclkStopPending &&
-		(NRF_CLOCK->NRFX_LFCLKSRCCOPY & NRFX_LFCLK_SRC_Msk) !=
-		(src & NRFX_LFCLK_SRC_Msk))
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	s_bNRFxLfclkTransition = true;
-	EnableInterrupt(state);
-
-	stopped = !s_bNRFxLfclkStopPending || nRFxLfclkWaitStopped();
-	state = DisableInterrupt();
-	if (stopped)
-	{
-		NRF_CLOCK->NRFX_LFCLKSRC = src;
-		s_bNRFxLfclkStopPending = false;
-		s_nRFxLowOscSelected = ClkSrc;
-		s_bNRFxLowOscSelected = true;
-#if defined(NRF91_SERIES)
-		// A subsequent RTC initialization must remeasure LFRC after
-		// selecting an oscillator, even if the oscillator was RC before.
-		s_nRF91LfclkConfigEpoch++;
-#endif
-	}
-	s_bNRFxLfclkTransition = false;
-	EnableInterrupt(state);
-	return stopped;
-}
-
 uint32_t SystemPeriphClockGet(int Idx)
 {
 	return Idx == 0 ? NRFX_PCLK_FREQ : 0;
@@ -1265,17 +1138,6 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	return SystemPeriphClockGet(Idx);
 }
 #if defined(NRF52_SERIES)
-#if defined(NRFX_LFRC_CAL_LOG)
-// Report calibration in the foreground. Never format or transmit UART data
-// from the POWER_CLOCK interrupt handler.
-static void nRFxMpslCalibrationLog(uint32_t Evt, void *pCtx)
-{
-	(void)Evt;
-	(void)pCtx;
-	SysLogPrintf(SysLogGet(), "LFRC calibration: completed=%lu\r\n",
-		(unsigned long)s_nRFxMpslCalibrationCount);
-}
-#endif
 // Start LFRC calibration once HFXO is ready. The callback and CLOCK
 // interrupt both use this helper so startup never waits in an interrupt.
 static void nRFxMpslCalibrationBegin(void)
@@ -1298,7 +1160,7 @@ void nRFxMpslLfclkCalibrationStart(void)
 
 	state = DisableInterrupt();
 	if (!s_bNRFxMpslExternalClock ||
-		nRFxLowOscSelected() != OSC_TYPE_RC ||
+		g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC ||
 		s_bNRFxMpslCalibrationPending ||
 		(NRF_CLOCK->NRFX_LFCLKSTAT & NRFX_LFCLK_STATE_Msk) == 0U)
 	{
@@ -1317,7 +1179,7 @@ void nRFxMpslLfclkCalibrationStart(void)
 
 bool nRFxMpslLfclkCalibrationIsEnabled(void)
 {
-	return nRFxLowOscSelected() == OSC_TYPE_RC;
+	return g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC;
 }
 
 uint32_t nRFxMpslLfclkCalibrationCount(void)
@@ -1325,42 +1187,30 @@ uint32_t nRFxMpslLfclkCalibrationCount(void)
 	return s_nRFxMpslCalibrationCount;
 }
 
-void nRFxMpslClockIrq(void)
+// Clock interrupt part of the calibration started by
+// nRFxMpslLfclkCalibrationStart. One calibration per start: the caller
+// handles the period.
+// Returns true when the calibration completed in this call.
+bool nRFxMpslClockIrq(void)
 {
-	if (!s_bNRFxMpslExternalClock)
+	if (!s_bNRFxMpslExternalClock || !s_bNRFxMpslCalibrationPending)
 	{
-		return;
+		return false;
 	}
-	if (NRF_CLOCK->EVENTS_CTTO != 0U)
+	nRFxMpslCalibrationBegin();
+	if (!s_bNRFxMpslCalibrationRunning || NRF_CLOCK->EVENTS_DONE == 0U)
 	{
-		NRF_CLOCK->EVENTS_CTTO = 0U;
-		nRFxMpslLfclkCalibrationStart();
+		return false;
 	}
-	if (s_bNRFxMpslCalibrationPending)
-	{
-		nRFxMpslCalibrationBegin();
-		if (s_bNRFxMpslCalibrationRunning &&
-			NRF_CLOCK->EVENTS_DONE != 0U)
-		{
-			NRF_CLOCK->EVENTS_DONE = 0U;
-			nRFxLfrcCalErrata192(false);
-			NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_DONE_Msk;
-			s_bNRFxMpslCalibrationRunning = false;
-			s_bNRFxMpslCalibrationPending = false;
-			s_nRFxMpslCalibrationCount++;
-			nRFxMpslHfclkRelease();
-#if defined(NRFX_LFRC_CAL_LOG)
-			(void)AppEvtHandlerQue(0U, nullptr, nRFxMpslCalibrationLog);
-#endif
-			// CTIV is specified in 0.25-second units on nRF52.
-			// Recalibrate every four seconds; MPSL can request
-			// additional calibrations after temperature changes.
-			NRF_CLOCK->CTIV = 16U;
-			NRF_CLOCK->EVENTS_CTTO = 0U;
-			NRF_CLOCK->INTENSET = CLOCK_INTENSET_CTTO_Msk;
-			NRF_CLOCK->TASKS_CTSTART = 1U;
-		}
-	}
+	NRF_CLOCK->EVENTS_DONE = 0U;
+	nRFxLfrcCalErrata192(false);
+	NRF_CLOCK->INTENCLR = CLOCK_INTENCLR_DONE_Msk;
+	s_bNRFxMpslCalibrationRunning = false;
+	s_bNRFxMpslCalibrationPending = false;
+	s_nRFxMpslCalibrationCount++;
+	nRFxMpslHfclkRelease();
+
+	return true;
 }
 
 // The external MPSL clock driver uses these short interrupt-safe callbacks.
@@ -1434,7 +1284,7 @@ int32_t nRFxMpslLfclkRequest(void)
 	uint32_t state;
 	uint32_t src;
 
-	if (!nRFxLfclkOscSource(nRFxLowOscSelected(), &src))
+	if (!nRFxLfclkOscSource(g_McuOsc.LowPwrOsc.Type, &src))
 	{
 		return -1;
 	}

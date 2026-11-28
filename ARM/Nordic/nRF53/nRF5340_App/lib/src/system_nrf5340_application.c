@@ -90,11 +90,6 @@ uint32_t SystemCoreClockGet(void)
 #define NRF_APP_HCLK_PERFORMANCE	(CLOCK_HFCLKCTRL_HCLK_Div1 << CLOCK_HFCLKCTRL_HCLK_Pos)
 #define NRF_APP_HCLK_LOW_POWER	(CLOCK_HFCLKCTRL_HCLK_Div2 << CLOCK_HFCLKCTRL_HCLK_Pos)
 
-// Runtime delays use calibrated assembly loops, never DWT.
-// Keep separate measured defaults for 128 MHz and 64 MHz; any intermediate
-// CPU rate uses the cached loop cost without enabling trace hardware.
-static ArmDelayCalibration_t s_DelayCalibration;
-
 void SystemCoreClockUpdate(void)
 {
 	uint32_t cpuHz;
@@ -108,29 +103,11 @@ void SystemCoreClockUpdate(void)
 #endif
 	SystemCoreClock = cpuHz;
 
-	// Refresh the runtime assembly-loop factors whenever HCLK changes.
-	// This path never enables DWT or debug/trace clocks.
-	if (s_DelayCalibration.UsCycles == 0U ||
-		s_DelayCalibration.CpuHz != cpuHz)
-	{
-		if (cpuHz == __SYSTEM_CLOCK_DEFAULT)
-		{
-			// Aligned countdown: HF Timer measured 76,932 us for
-			// 100 ms at 26 cycles; 20 cycles matches 6,399,256 loops/s.
-			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U);
-		}
-		else if (cpuHz == (__SYSTEM_CLOCK_MAX / 2U))
-		{
-			// Aligned countdown: HF Timer measured 75,881 us for
-			// 100 ms at 29 cycles; 22 cycles matches 2,908,364 loops/s.
-			(void)ArmDelayClockInit(&s_DelayCalibration, cpuHz, 22U, 3U);
-		}
-		else
-		{
-			// Retain a proportional fallback for other supported speeds.
-			(void)ArmDelayClockUpdate(&s_DelayCalibration, cpuHz);
-		}
-	}
+	// Audio DK, CoreClockTest at both application-core speeds.
+	SystemMicroSecLoopCnt = CalcDelayFactor(cpuHz,
+		64000000UL, 2908624UL, 128000000UL, 6399488UL);
+	SystemnsDelayFactor = CalcDelayFactor(cpuHz,
+		64000000UL, 21330560UL, 128000000UL, 42664106UL);
 }
 
 /**

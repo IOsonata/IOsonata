@@ -221,7 +221,13 @@ class LinkerReferenceAuditTests(unittest.TestCase):
                     self.assertNotEqual(script.parent.name, "ldscript")
                     self.assertIn("nrfx", str(script).lower())
                     continue
-                self.assertEqual(script.parent.name, "ldscript")
+                # IOsonata scripts are in the family ldscript folder. An
+                # example with its own memory layout keeps it in its src.
+                rel = script.relative_to(nordic).parts
+                if script.parent.name == "src" and "exemples" in rel:
+                    self.assertEqual(rel[rel.index("exemples") + 2], "src")
+                else:
+                    self.assertEqual(script.parent.name, "ldscript")
                 self.assertTrue(script.name.startswith("gcc_"), script.name)
                 if re.search(r"(?m)^\s*MEMORY\s*$", content):
                     self.assertIn('INCLUDE "gcc_arm_flash.ld"', content)

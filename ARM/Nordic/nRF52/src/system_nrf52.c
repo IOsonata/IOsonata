@@ -153,16 +153,15 @@ uint32_t SystemCoreClockGet(void)
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;
-	// nRF52832 CoreClockTest: two independent 64 MHz hardware runs,
-	// HF Timer measured 4922682 us-delay iterations/s in both runs.
-	// The aligned countdown measured 100008 us for a 100 ms request;
-	// all 250 ms timer tests passed. DWT was unavailable on this build.
-	// Scaled divisor 13001042 produces the measured loop rate at 64 MHz.
-	// The same run measured 100008 us for a 100 ms nsDelay request with
-	// the 3000000 divisor and reported 21331626 ns-delay iterations/s.
-	// Divisor 3000240 produces that loop rate at 64 MHz.
+#if defined(NRF52840_XXAA)
+	// nRF52840 DK, CoreClockTest at 64 MHz.
+	(void)ArmDelayClockSetDivisors(__SYSTEM_CLOCK_DEFAULT,
+		13001174UL, 3000210UL);
+#else
+	// nRF52832, CoreClockTest at 64 MHz.
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		13001042UL, 3000240UL);
+#endif
 }
 
 void SystemInit(void)

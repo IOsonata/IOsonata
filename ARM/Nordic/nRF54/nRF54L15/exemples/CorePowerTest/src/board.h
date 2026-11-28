@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	board.h
 
-@brief	Board definitions for nRF54L15 DK and IBK-NRF54L15 PowerOffDemo
+@brief	Board definitions for nRF54L15 DK and IBK-NRF54L15 CorePowerTest
 
 The DK uses UARTE30 on VCOM1, P0.01 RX and P0.00 TX, with Button 1
 on P1.09. The IBK-NRF54L15 (schematic 03-231201-01 revision 0) has
@@ -65,6 +65,7 @@ SOFTWARE.
 #define WAKE_BUT_PORT		1
 #define WAKE_BUT_PIN		8
 #define WAKE_BUT_PINOP		0
+#define WAKE_BUT_SYSTEM_OFF	1
 
 // RAM1 is unused by this example's linker script (normal data/stack use RAM).
 #define POWER_DEMO_RAM_RET_TEST	1
@@ -87,9 +88,10 @@ SOFTWARE.
 #define WAKE_BUT_PORT		1
 #define WAKE_BUT_PIN		9
 #define WAKE_BUT_PINOP		0
+#define WAKE_BUT_SYSTEM_OFF	1
 
 #else
-#error "Unsupported nRF54L15 PowerOffDemo board"
+#error "Unsupported nRF54L15 CorePowerTest board"
 #endif
 
 #endif

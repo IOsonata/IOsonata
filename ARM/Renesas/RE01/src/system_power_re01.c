@@ -42,6 +42,24 @@ static bool s_ResetRead;
 static const uint8_t s_WakeGroup[10] = {0, 1, 2, 3, 4, 5, 6, 7, 0, 2};
 static const uint8_t s_WakeEvent[10] = {1, 1, 1, 1, 0x13, 0x12, 0x12, 0x13, 0x1e, 0x1f};
 
+// SystemSleep and SystemPowerOff below, with the wake pin and CCC timer
+// wakes SystemResetReason reports. No retention register or RAM retention.
+uint32_t SystemPowerCapabilitiesGet(void)
+{
+	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_SYSTEM_OFF |
+		   SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE;
+}
+
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	return Mode == SYSTEM_POWER_MODE_PERFORMANCE;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return SYSTEM_POWER_MODE_PERFORMANCE;
+}
+
 uint32_t SystemResetReason(void)
 {
 	uint32_t state = DisableInterrupt();

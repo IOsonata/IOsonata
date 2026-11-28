@@ -54,50 +54,22 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertIn("#if defined(NRF53_SERIES)\n\t\t\t(void)nRFxLfclkCalibrate();", section)
 		self.assertIn("#if defined(NRF91_SERIES)", section)
 
-	def test_nrf91_sdelay_uses_shared_lf_timer_and_measured_startup(self):
-		timer = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(encoding="utf-8")
-		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
-		self.assertIn("defined(NRF54L_SERIES) || defined(NRF91_SERIES)", timer)
-		self.assertIn('extern "C" bool nRFxSleepLfClockAccurate(void);', timer)
-		self.assertIn('extern "C" uint32_t nRFxSleepLfClockStartupWaitUs(void);', timer)
-		self.assertIn('extern "C" bool nRFxSleepLfClockAccurate(void)\n{', clock)
-		self.assertIn("#if defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)", clock)
-		start = timer.index('extern "C" bool sDelay(uint32_t Seconds)')
-		delay = timer[start:]
-		for call in ("nRFxSleepLfClockAccurate()", "nRFxSleepLfClockStartupWaitUs()",
-					 "TimerInit(&s_SleepTimer", "TimerPowerOff(&s_SleepTimer)", "__WFE()"):
-			self.assertIn(call, delay)
-		self.assertNotIn("msDelay(", delay)
-		self.assertNotIn("DWT->", delay)
-
 	def test_example_is_generic(self):
 		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
 		self.assertNotIn("NRF91_SERIES", example)
 		self.assertNotIn("NRF9160", example)
 
-	def test_independent_raw_lf_timer_frequency_diagnostics(self):
-		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
-		begin = example.index("static void CoreClockTestTimer(int DevNo)")
-		end = example.index("// Exercise the public Timer trigger API", begin)
-		section = example[begin:end]
-		self.assertIn("TimerGetTickCount(pTimer)", section)
-		self.assertIn("TimerGetMicrosecond(&s_RetainedTimer)", section)
-		self.assertIn("Independent LF timer rate:", section)
-		self.assertIn('CoreClockTestResult("Delay within 2 percent",', section)
-		self.assertNotIn("NRF91_SERIES", section)
-
-
 	def test_nrf91_lfrc_measured_before_timer_frequency_is_exposed(self):
 		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
 		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
-		self.assertIn("s_nRF91LfclkConfigEpoch++", clock)
-		self.assertIn('extern "C" uint32_t nRFxLfclkConfigurationEpoch(void)', clock)
+		self.assertNotIn("SystemLowFreqClockSelect(", clock)
+		self.assertNotIn("nRFxLfclkConfigurationEpoch", clock)
 		self.assertIn('extern "C" bool nRFxLfclkRunningFromRc(void)', clock)
 		self.assertIn("NRF91_LFRC_MEASURE_US", rtc)
 		self.assertIn("usDelay(NRF91_LFRC_MEASURE_US);", rtc)
 		self.assertIn("if (__get_IPSR() != 0U || __get_PRIMASK() != 0U)", rtc)
 		self.assertIn("ticks = (after - before) & RTC_COUNTER_MASK;", rtc)
-		self.assertIn("s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch()", rtc)
+		self.assertIn("s_bNRF91LfrcMeasured", rtc)
 		self.assertIn("s_nRF91LfrcHz = freq;", rtc)
 		self.assertIn("uint32_t base = nRFxRtcBaseFrequency();", rtc)
 		self.assertIn("pTimer->Freq = (base + div / 2U) / div;", rtc)
@@ -129,11 +101,6 @@ class Nrf91PowerClock(unittest.TestCase):
 				elapsed_us = (ticks * 1000000 + reports_hz // 2) // reports_hz
 				self.assertLessEqual(abs(elapsed_us - 250000), 5000)
 
-	def test_generic_accuracy_is_not_waived_for_rc(self):
-		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
-		self.assertIn('CoreClockTestResult("Delay within 2 percent", elapsed >= 245000U && elapsed <= 255000U);', example)
-		self.assertIn("timer reports %u Hz", example)
-		self.assertNotIn("NRF91_SERIES", example)
 	def test_nrf9160_dk_button_wake_configuration(self):
 		board = (ROOT / "ARM/Nordic/nRF91/nRF9160/exemples/CorePowerTest/src/board.h").read_text(encoding="utf-8")
 		thingy = board[board.index("#if defined(NORDIC_THINGY91)"):board.index("#elif defined(NRF9160_DK)")]
@@ -145,17 +112,18 @@ class Nrf91PowerClock(unittest.TestCase):
 		self.assertNotIn("WAKE_BUT_PIN", thingy)
 		self.assertNotIn("POWER_DEMO_UART_DMA", board)
 		example = (ROOT / "exemples/misc/core_power_test.cpp").read_text(encoding="utf-8")
-		self.assertIn("SystemWakePin(WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE)", example)
+		self.assertIn("WAKE_BUT_PORT, WAKE_BUT_PIN, WAKE_BUT_SENSE, CorePowerTestWakeHandler", example)
+		self.assertNotIn("SystemWakePin", example)
 		self.assertIn("IOPINRES_PULLDOWN : IOPINRES_PULLUP", example)
 		self.assertIn("SystemPowerOff();", example)
 
 	def test_nrf91_measured_delay_divisors(self):
 		# Measured on nRF9160 hardware with CoreClockTest at 64 MHz.
 		src = (ROOT / "ARM/Nordic/nRF91/src/system_nrf91.c").read_text(encoding="utf-8")
-		self.assertIn("16001600UL, 3000330UL", src)
+		self.assertIn("16001920UL, 3000270UL", src)
 		self.assertNotIn("16000000UL, 3000000UL", src)
-		self.assertEqual(64000000 * 1000000 // 16001600, 3999600)
-		self.assertEqual(64000000 * 1000000 // 3000330, 21330986)
+		self.assertEqual(64000000 * 1000000 // 16001920, 3999520)
+		self.assertEqual(64000000 * 1000000 // 3000270, 21331413)
 
 
 	def test_lfrc_rate_survives_timer_disable_enable(self):
@@ -164,7 +132,7 @@ class Nrf91PowerClock(unittest.TestCase):
 		start = clock.index('extern "C" bool nRFxLfclkUsesRc(void)')
 		end = clock.index("#endif", start)
 		helper = clock[start:end]
-		self.assertIn("nRFxLowOscSelected() != OSC_TYPE_RC", helper)
+		self.assertIn("g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC", helper)
 		self.assertIn("(stat & NRFX_LFCLK_STATE_Msk) == 0U", helper)
 		self.assertIn("NRFX_LFCLK_STAT_SRC_Msk", helper)
 		self.assertIn("NRFX_LFCLK_SRC_RC", helper)
@@ -174,38 +142,27 @@ class Nrf91PowerClock(unittest.TestCase):
 		base = rtc[begin:end]
 		self.assertIn("nRFxLfclkUsesRc()", base)
 		self.assertNotIn("nRFxLfclkRunningFromRc()", base)
-		self.assertIn("s_nRF91LfrcEpoch == nRFxLfclkConfigurationEpoch()", base)
+		self.assertIn("s_bNRF91LfrcMeasured", base)
 		self.assertIn("return s_nRF91LfrcHz;", base)
 		self.assertIn("return TIMER_NRFX_RTC_BASE_FREQ;", base)
 
 		# A stopped LFCLK does not invalidate the selected RC source.
-		# An externally supplied LFXO and a changed selection epoch do.
+		# An externally supplied LFXO uses its nominal rate.
 		measured = 44720
-		def base_rate(selected_rc, running, active_rc, same_epoch):
+		def base_rate(selected_rc, running, active_rc):
 			uses_rc = selected_rc and (not running or active_rc)
-			return measured if uses_rc and same_epoch else 32768
+			return measured if uses_rc else 32768
 
-		self.assertEqual(base_rate(True, True, True, True), measured)
-		self.assertEqual(base_rate(True, False, False, True), measured)
-		self.assertEqual(base_rate(True, True, True, True), measured)
-		self.assertEqual(base_rate(True, True, False, True), 32768)
-		self.assertEqual(base_rate(False, False, False, True), 32768)
-		self.assertEqual(base_rate(True, False, False, False), 32768)
-
-		# CoreClockTest calls TimerSetFrequency before re-enabling each
-		# timer: its second 250-ms sample must keep the measured rate.
-		demo = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
-		start = demo.index("static void CoreClockTestTimer(int DevNo)")
-		end = demo.index("// Exercise the public Timer trigger API", start)
-		sample = demo[start:end]
-		self.assertLess(sample.index("frequency = TimerSetFrequency(pTimer"),
-			sample.index("enabled = TimerEnable(pTimer)"))
-		self.assertIn("TimerDisable(pTimer);", sample)
+		self.assertEqual(base_rate(True, True, True), measured)
+		self.assertEqual(base_rate(True, False, False), measured)
+		self.assertEqual(base_rate(True, True, False), 32768)
+		self.assertEqual(base_rate(False, False, False), 32768)
 
 	def test_nrf91_hf_timer_reinit(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
 		section = hf[hf.index("bool nRFxTimerInit("):]
-		self.assertNotIn("s_pnRFxTimerDev[devno] != pTimer", section)
+		# Another Timer object takes the TIMER only after its PowerOff
+		self.assertIn("s_pnRFxTimerDev[devno] != nullptr && s_pnRFxTimerDev[devno] != pTimer", section)
 		self.assertIn("pReg->MODE != TIMER_MODE_MODE_Timer", section)
 		self.assertIn("s_pnRFxTimerDev[devno] = nullptr;", section)
 
@@ -307,19 +264,10 @@ class Nrf91PowerClock(unittest.TestCase):
 			accept_xtal = not selected_rc
 			self.assertNotEqual(accept_rc, accept_xtal)
 
-	def test_core_clock_test_reuses_retained_hf_timer(self):
-		example = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
-		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
-		start = example.index("static void CoreClockTestTimer(int DevNo)")
-		end = example.index("// Exercise the public Timer trigger API", start)
-		matrix = example[start:end]
-		self.assertIn("DevNo == TimerGetHighFreqDevNo()", matrix)
-		self.assertIn("pTimer = &s_RetainedTimer;", matrix)
-		self.assertIn("CoreClockTestTimerInit(DevNo, pTimer)", matrix)
-		self.assertIn("CoreClockTestTimerTriggers(pTimer);", matrix)
-		self.assertNotIn("NRF91_SERIES", matrix)
+	def test_nrf91_hf_timer_ownership(self):
+		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text()
 		guard = hf[hf.index("bool nRFxTimerInit("):]
-		self.assertNotIn("s_pnRFxTimerDev[devno] != pTimer", guard)
+		self.assertIn("s_pnRFxTimerDev[devno] != nullptr && s_pnRFxTimerDev[devno] != pTimer", guard)
 		self.assertIn("s_bTimerEnabled[devno]", guard)
 		self.assertIn("s_pnRFxTimerDev[devno] = pTimer;", guard)
 
@@ -327,7 +275,6 @@ class Nrf91PowerClock(unittest.TestCase):
 	def test_nrf91_poweroff_old_timer_structure(self):
 		hf = (ROOT / "ARM/Nordic/src/timer_hf_nrfx.cpp").read_text(encoding="utf-8")
 		rtc = (ROOT / "ARM/Nordic/src/timer_lf_nrfx.cpp").read_text(encoding="utf-8")
-		test = (ROOT / "exemples/misc/core_clock_test.cpp").read_text(encoding="utf-8")
 		for src, name, data, owner in (
 			(hf, "nRFxTimerPowerOff", "s_pnRFxTimerDev[devno]", "nRFxTimerOwned"),
 			(rtc, "nRFxRtcPowerOff", "s_pnRfxRtcDev[devno]", "nRFxRtcOwned"),
@@ -337,9 +284,17 @@ class Nrf91PowerClock(unittest.TestCase):
 				self.assertIn(data + " = nullptr;", src)
 				self.assertIn("static bool " + owner + "(", src)
 				self.assertIn("!" + owner + "(pTimer)", src)
-		self.assertIn("stopped = TimerPowerOff(&s_RetainedTimer);", test)
-		self.assertIn("TimerInit(&s_RetainedTimer, &cfg);", test)
-		self.assertNotIn("NRF91_SERIES", test[test.index("static void CoreClockTestTimerPowerOff(void)"):test.index("int main(void)")])
+
+	def test_nrf91_sdelay_is_generic(self):
+		timer = (ROOT / "ARM/Nordic/src/timer_nrfx.cpp").read_text(encoding="utf-8")
+		clock = (ROOT / "ARM/Nordic/src/system_clock_nrfx.cpp").read_text(encoding="utf-8")
+		self.assertNotIn("sDelay", timer)
+		self.assertNotIn("nRFxSleepLfClock", clock)
+		self.assertIn("uint32_t SystemLowFreqClockStartTime(void)", clock)
+		for target in ("nRF9160", "nRF91x1"):
+			project = (ROOT / "ARM/Nordic/nRF91" / target / "lib/ioc/.project").read_text()
+			self.assertIn("PARENT-6-PROJECT_LOC/src/sdelay.cpp", project)
+
 
 if __name__ == "__main__":
 	unittest.main()

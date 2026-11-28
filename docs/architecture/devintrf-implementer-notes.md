@@ -118,7 +118,7 @@ Do not infer completion solely from `bIntEn` or `bDma`.
 Common patterns are:
 
 - synchronous direct transfer: return the number of bytes moved;
-- interrupt or DMA transfer handed to hardware: return `-1`, then report completion later;
+- interrupt or DMA transfer handed to hardware on an asynchronous interface: return `-1`, then report completion later. An I2C or SPI master does not, see below;
 - FIFO-backed UART TX: return the number of bytes accepted into the software FIFO, while the ISR or DMA drains it later;
 - retryable zero-byte result: return `0`, allowing the generic retry loop to make another attempt;
 - permanent failure: use the interface's documented error convention.
@@ -127,14 +127,68 @@ A positive UART return does not necessarily mean every byte is already on the wi
 
 An interface event reports transport activity or transport completion. A higher-level device operation may continue after the transfer completes. For example, NVM programming or erase completion is separate from the SPI/I2C transfer that issued the command.
 
+## I2C and SPI master transfers
+
+An I2C or SPI master transfer is synchronous. `TxData` and `RxData` return
+when the transfer is done, with the number of bytes moved, whether `bIntEn`
+is set or not. A device driver reads a register because its next line uses
+the value, and the bus takes one transfer at a time: a deferred completion
+does not fit that use. The `-1` deferred return of `DeviceIntrf` stays for the
+interfaces that are asynchronous by nature, such as a UART.
+
+`bIntEn` changes only how the driver waits for the controller:
+
+- Polling: the wait reads the controller event or status register.
+- Interrupt: the interrupt handler takes the controller interrupt and tells
+  the wait that an event came. The wait then looks at the same events as in
+  polling mode. The handler does not move the transfer on, release the bus
+  or call the event callback.
+
+The transfer itself, block by block for a DMA controller, the STOP condition
+and the busy flag, is the same code in both modes. The data is moved from and
+into the caller's buffer; the driver keeps no copy.
+
+Interrupt mode is managed by the application that enables it. A transfer
+waits for the bus interrupt, so it must not be called from an interrupt
+handler of the same or a higher priority than the bus. An application reading
+a device from such a handler gives the bus a higher priority, or defers the
+read to the main loop.
+
+Conversion status: the master drivers below still return `-1` from an
+interrupt driven transfer and complete it from the interrupt handler, most of
+them from a private copy of the transmit data. They are converted one driver
+per commit and removed from this list as they are done.
+`exemples/i2c/i2c_master_slave.cpp` takes the count a master transfer returns
+and does not wait for a master event, so its runs with the master interrupt
+on need a converted driver.
+
+| Family | I2C master | SPI master |
+|---|---|---|
+| Nordic | `i2c_nrfx.cpp`: done | `spi_nrfx.cpp`: done |
+| ST | `i2c_stm32v2.cpp`: done | `spi_stm32.cpp`: done |
+| Microchip SAM4L | `i2c_sam4l.cpp`: done | `spi_sam4l.cpp`: done |
+| Microchip SAM D | `i2c_samd.cpp`: done | `spi_samd.cpp`: done |
+| Renesas RA4M1 | `i2c_ra4m1.cpp`: 64 byte copy, state flags | `spi_ra4m1.cpp`: state flag |
+| Renesas R9A02 | `i2c_r9a02.cpp`: copy, state flags | `spi_r9a02.cpp`: state flag |
+| NXP LPC546xx | `i2c_lpc546xx.cpp`: 64 byte copy, state flags | `spi_lpc546xx.cpp`: 64 byte copy, state flags |
+
+The Nordic PEI prepared transfers of I2C and SPI are started by hardware and
+are not affected: their transmit and receive buffers belong to the caller
+until the transfer is released.
+
 ## Combined-write buffer lifetime
 
 `DeviceIntrfWrite()` concatenates command and data into a temporary stack
-buffer and calls `DeviceIntrfTx()`. Its return value excludes command bytes;
-a negative deferred result is converted to zero. A target used through this
-helper must consume or copy that buffer before returning. Do not retain its
-pointer for later DMA. Deferred callers need caller-owned storage and a
-transfer path whose completion and buffer lifetime are explicitly supported.
+buffer and sends it with its own transfer loop. Its return value excludes
+command bytes; a negative deferred result is converted to zero.
+
+That buffer is gone when `DeviceIntrfWrite()` returns. A driver has finished
+with it when `TxData` returns, or sends from its own copy of the data. A
+synchronous I2C or SPI master has sent it when `TxData` returns; the master
+drivers not converted yet send it before `TxData` returns, or keep a private
+copy of an interrupt driven transmit.
+`DeviceIntrfWrite()` itself does not wait: it is used by every interface type,
+including the ones that are asynchronous by nature.
 
 `DeviceIntrfRead()` waits for a deferred command phase with an iteration
 budget. The current helper does not propagate that wait result or the raw

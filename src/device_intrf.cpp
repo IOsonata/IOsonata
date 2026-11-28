@@ -167,7 +167,8 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
                   	 const uint8_t *pData, int DataLen)
 {
-	int txlen = AdCmdLen;
+    int count = 0, txlen = AdCmdLen;
+    int nrtry = pDev->MaxRetry;
 
     if (pAdCmd == NULL || (AdCmdLen + DataLen) <= 0)
         return 0;
@@ -196,13 +197,25 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *p
     	txlen += l;
     }
 
-	if (txlen <= 0)
-	{
-		return 0;
-	}
+    do {
+        if (DeviceIntrfStartTx(pDev, DevAddr))
+        {
+    		pDev->bNoStop = false;
+            count = pDev->TxData(pDev, d, txlen);
+        	if (count < 0)
+        	{
+        		break;
+        	}
+			DeviceIntrfStopTx(pDev);
+        }
+    } while (count <= 0 && nrtry-- > 0);
 
-	int count = DeviceIntrfTx(pDev, DevAddr, d, txlen);
-	return count >= AdCmdLen ? count - AdCmdLen : 0;
+    if (count >= AdCmdLen)
+        count -= AdCmdLen;
+    else
+        count = 0;
+
+    return count;
 }
 
 // Enable and disable: one copy here instead of one inlined into every

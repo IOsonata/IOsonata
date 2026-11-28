@@ -592,6 +592,13 @@ bool nRFxGrtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		EnableInterrupt(state);
 		return false;
 	}
+	// A timer held by another Timer object stays with it until its PowerOff
+	if (s_nRfxGrtcData[devno].pTimer != nullptr &&
+		s_nRfxGrtcData[devno].pTimer != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 	// Retire the old disabled group before rebinding this Timer handle.
 	// Otherwise the old interrupt group keeps a pointer whose DevNo now
 	// names the new hardware and can dispatch an event to the wrong timer.

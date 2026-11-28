@@ -9,10 +9,10 @@
 
 ## Historical demo notes (pre-migration)
 
-# ESP32-C6 PowerOffDemo
+# ESP32-C6 CorePowerTest
 
 Import `ioc` as an Eclipse managed project. Build the matching
-ESP32C6 IOsonata library and PowerOffDemo for the same
+ESP32C6 IOsonata library and CorePowerTest for the same
 Debug or Release configuration. The UART0 console is TX16/RX17
 at 1,000,000 baud on the DevKit N8 USB-UART bridge, not the
 native USB Serial/JTAG port.
@@ -37,7 +37,7 @@ These reports do not establish sleep current.
 For BOOT-button wake instead, set `WAKE_BUT_PIN=9` and
 `POWER_DEMO_RESUME_WAKE=1` in `src/board.h`. Release
 BOOT before resetting, then press it after each
-`Entering Standby` prompt. PowerOffDemo verifies the
+`Entering Standby` prompt. CorePowerTest verifies the
 128-byte static and stack RAM samples and prints the UART
 configured rate and CPU/APB clock restoration checks.
 Normal UART output after resume exercises its TX path.
@@ -51,7 +51,7 @@ PMU entry, and sleep-current measurements remain pending.
 
 ## System-owned sleep coordination (review 0.14)
 
-For resumable sleep, PowerOffDemo now leaves its UART enabled and calls
+For resumable sleep, CorePowerTest now leaves its UART enabled and calls
 `SystemSleep()` directly after draining pending output. The target system
 coordinates temporary UART suspension and restoration with the driver's
 clock and interrupt state, without changing its enable reference count.

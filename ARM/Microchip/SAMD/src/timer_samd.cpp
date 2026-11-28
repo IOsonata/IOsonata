@@ -99,7 +99,7 @@ SOFTWARE.
 #define SAMD_RTC_TICK_PRESC_MIN		3U		// 4096 Hz, periodic event 0
 
 // TC prescaler divisions, PRESCALER field values 0 to 7
-static const uint16_t s_SamdTcDiv[SAMD_TC_PRESC_MAX + 1] = { 1, 2, 4, 8, 16, 64, 256, 1024 };
+static const uint8_t s_SamdTcShift[SAMD_TC_PRESC_MAX + 1] = { 0, 1, 2, 3, 4, 6, 8, 10 };
 
 static void SamdRtcTimerIrq(SamdTimerData_t *pData);
 static void SamdCounterTimerIrq(SamdTimerData_t *pData);
@@ -131,7 +131,7 @@ typedef struct {
 	uint8_t GclkId;
 	uint8_t NbTrig;
 	uint8_t CntBits;
-	uint8_t TrigIdx;			//!< First trigger in s_SamdTimerTrig
+	uint8_t TrigIdx;			//!< First trigger in device-number order
 	int8_t EvUser;				//!< Event user of the capture channel, -1 none
 } SamdTimerHw_t;
 
@@ -162,9 +162,11 @@ static const SamdTimerHw_t s_SamdTimerHw[SAMD_TIMER_MAXCNT] = {
 #endif
 };
 
-SamdTimerData_t g_SamdTimerData[SAMD_TIMER_MAXCNT];
+static SamdTimerData_t s_SamdRtcData;
+static SamdTimerData_t *s_SamdTimerData[SAMD_TIMER_MAXCNT];
 static TimerDev_t *s_SamdSysTickOwner;
-static void (*s_SamdReleaseHardware)(TimerDev_t *pTimer, int DevNo);
+static bool (*s_SamdSysTickBusy)(void);
+static bool (*s_SamdReleaseHardware)(TimerDev_t *pTimer, int DevNo);
 
 static bool SamdTimerTickOpen(SamdTimerData_t *pData, int IntPrio);
 static void SamdTimerTickClose(SamdTimerData_t *pData);
@@ -173,25 +175,34 @@ static const SamdTimerTickOps_t s_SamdTickOps = {
 	SamdTimerTickOpen, SamdTimerTickClose
 };
 
-static SamdTimerTrig_t s_SamdTimerTrig[SAMD_TIMER_TRIG_CNT];
-
-// RTC uses the low-frequency clock and remains available as a wake timer.
-// The TC/TCC and SysTick counters cannot retain their running clock in
-// Standby, so report them before the system suspends other peripherals.
-extern "C" bool SamdTimerAllowStandby(void)
+// Keep each timer family's storage with its initialization path. A build
+// that selects only the RTC can discard the TC and TCC storage as well.
+static SamdTimerData_t *SamdTimerStorage(int DevNo)
 {
-	if (s_SamdSysTickOwner != NULL)
+	static SamdTimerTrig_t rtcTrig[SAMD_RTC_TIMER_TRIG_MAXCNT];
+	static SamdTimerData_t tc[SAMD_TC_TIMER_MAXCNT];
+	static SamdTimerTrig_t tcTrig[SAMD_TC_TIMER_MAXCNT][SAMD_TC_TIMER_TRIG_MAXCNT];
+	static SamdTimerData_t tcc[SAMD_TCC_TIMER_MAXCNT];
+	static SamdTimerTrig_t tccTrig[SAMD_TCC_TIMER_TRIG_CNT];
+	const int firstTcc = SAMD_RTC_TIMER_MAXCNT + SAMD_TC_TIMER_MAXCNT;
+	SamdTimerData_t *data;
+
+	if (DevNo < SAMD_RTC_TIMER_MAXCNT)
 	{
-		return false;
+		data = &s_SamdRtcData;
+		data->pTrig = rtcTrig;
 	}
-	for (int i = SAMD_RTC_TIMER_MAXCNT; i < SAMD_TIMER_MAXCNT; i++)
+	else if (DevNo < firstTcc)
 	{
-		if (g_SamdTimerData[i].pTimer != NULL && g_SamdTimerData[i].bRunning)
-		{
-			return false;
-		}
+		data = &tc[DevNo - SAMD_RTC_TIMER_MAXCNT];
+		data->pTrig = tcTrig[DevNo - SAMD_RTC_TIMER_MAXCNT];
 	}
-	return true;
+	else
+	{
+		data = &tcc[DevNo - firstTcc];
+		data->pTrig = &tccTrig[s_SamdTimerHw[DevNo].TrigIdx - s_SamdTimerHw[firstTcc].TrigIdx];
+	}
+	return data;
 }
 
 static inline bool SamdTimerIsRtc(const SamdTimerData_t *pData)
@@ -213,9 +224,9 @@ static SamdTimerData_t *SamdTimerGet(TimerDev_t * const pTimer)
 		return NULL;
 	}
 
-	SamdTimerData_t *d = &g_SamdTimerData[pTimer->DevNo];
+	SamdTimerData_t *d = s_SamdTimerData[pTimer->DevNo];
 
-	return d->pTimer == pTimer ? d : NULL;
+	return d != NULL && d->pTimer == pTimer ? d : NULL;
 }
 
 static inline int SamdTimerTrigCnt(const SamdTimerData_t *pData)
@@ -225,7 +236,7 @@ static inline int SamdTimerTrigCnt(const SamdTimerData_t *pData)
 
 static inline uint64_t SamdTimerSpan(const SamdTimerData_t *pData)
 {
-	return 1ULL << pData->CntBits;
+	return (uint64_t)pData->CountMask + 1U;
 }
 
 // RTC counts from a compare write to a compare in effect, seen from a count
@@ -355,7 +366,20 @@ static bool SamdTimerRun(SamdTimerData_t *pData, bool bRun)
 	uint32_t state;
 	uint64_t now;
 	bool res = false;
+	uint32_t irqState;
 
+	irqState = DisableInterrupt();
+
+	if (bRun && !pData->ClockEnabled)
+	{
+		pData->ClockEnabled = SamdTimerIsRtc(pData) ?
+			SystemLowFreqClockEnable() : SystemHighFreqClockEnable();
+		if (!pData->ClockEnabled)
+		{
+			EnableInterrupt(irqState);
+			return false;
+		}
+	}
 	if (SamdTimerLock(pData, &state, &now, false))
 	{
 		res = pData->pOps->Run(pData, bRun);
@@ -379,6 +403,19 @@ static bool SamdTimerRun(SamdTimerData_t *pData, bool bRun)
 		res = false;
 	}
 
+	if (!pData->bRunning && pData->ClockEnabled)
+	{
+		if (SamdTimerIsRtc(pData))
+		{
+			SystemLowFreqClockDisable();
+		}
+		else
+		{
+			SystemHighFreqClockDisable();
+		}
+		pData->ClockEnabled = false;
+	}
+	EnableInterrupt(irqState);
 	return res;
 }
 
@@ -488,7 +525,7 @@ static bool SamdTimerPlan(SamdTimerData_t *pData, uint32_t Request, uint32_t *pP
 		else
 		{
 			*pPresc = SAMD_TC_PRESC_DEFAULT;
-			*pFreq = pData->BaseFreq / s_SamdTcDiv[SAMD_TC_PRESC_DEFAULT];
+			*pFreq = pData->BaseFreq >> s_SamdTcShift[SAMD_TC_PRESC_DEFAULT];
 		}
 
 		return true;
@@ -497,7 +534,7 @@ static bool SamdTimerPlan(SamdTimerData_t *pData, uint32_t Request, uint32_t *pP
 	*pFreq = 0;
 	for (uint32_t p = first; p < nb; p++)
 	{
-		uint32_t f = SamdTimerIsRtc(pData) ? pData->BaseFreq >> p : pData->BaseFreq / s_SamdTcDiv[p];
+		uint32_t f = pData->BaseFreq >> (SamdTimerIsRtc(pData) ? p : s_SamdTcShift[p]);
 		uint32_t diff = f > Request ? f - Request : Request - f;
 
 		if (f != 0 && diff < best)
@@ -512,7 +549,7 @@ static bool SamdTimerPlan(SamdTimerData_t *pData, uint32_t Request, uint32_t *pP
 }
 
 // Counts of a period, rounded, the closest supported value
-static bool SamdTimerPeriod(uint32_t Freq, uint64_t nsPeriod, uint32_t *pTicks, uint64_t *pActual)
+static __attribute__((noinline)) bool SamdTimerPeriod(uint32_t Freq, uint64_t nsPeriod, uint32_t *pTicks, uint64_t *pActual)
 {
 	uint64_t ticks = UINT32_MAX;
 
@@ -521,14 +558,10 @@ static bool SamdTimerPeriod(uint32_t Freq, uint64_t nsPeriod, uint32_t *pTicks, 
 		return false;
 	}
 
-	// Whole seconds and the rest apart, the product would overflow otherwise
-	if (nsPeriod / 1000000000ULL <= UINT32_MAX / Freq)
+	// Saturate at the maximum count before multiplying a 64-bit period.
+	if (nsPeriod <= (UINT32_MAX * 1000000000ULL) / Freq)
 	{
-		ticks = nsPeriod / 1000000000ULL * Freq + (nsPeriod % 1000000000ULL * Freq + 500000000ULL) / 1000000000ULL;
-	}
-	if (ticks > UINT32_MAX)
-	{
-		ticks = UINT32_MAX;
+		ticks = (nsPeriod * Freq + 500000000ULL) / 1000000000ULL;
 	}
 	if (ticks < SAMD_TIMER_MIN_TICKS)
 	{
@@ -675,6 +708,13 @@ static int SamdTimerGetMaxTrigger(TimerDev_t * const pTimer)
 	return SamdTimerTrigCnt(d) - (d->bCapture ? 1 : 0);
 }
 
+static bool SamdTimerStart(SamdTimerData_t *pData, int IntPrio)
+{
+	return pData->pOps->Setup(pData) &&
+		   (pData->pTickOps == NULL || pData->pTickOps->Open(pData, IntPrio)) &&
+		   SamdTimerResetCounter(pData) && SamdTimerRun(pData, true);
+}
+
 // New prescaler: the counter restarts from zero, the trigger periods are
 // converted to the new frequency
 static uint32_t SamdTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
@@ -712,7 +752,7 @@ static uint32_t SamdTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	d->Prescaler = presc;
 	d->Compare = 0;
 	pTimer->Freq = freq;
-	pTimer->nsPeriod = (1000000000ULL + freq / 2) / freq;
+	pTimer->nsPeriod = (1000000000U + freq / 2U) / freq;
 
 	for (int i = 0; i < SamdTimerTrigCnt(d); i++)
 	{
@@ -728,8 +768,7 @@ static uint32_t SamdTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 	}
 	EnableInterrupt(state);
 
-	bool res = d->pOps->Setup(d) && (d->pTickOps == NULL || d->pTickOps->Open(d, (int)NVIC_GetPriority(d->IrqNo))) &&
-			   SamdTimerResetCounter(d) && SamdTimerRun(d, true);
+	bool res = SamdTimerStart(d, (int)NVIC_GetPriority(d->IrqNo));
 
 	if (!res)
 	{
@@ -825,7 +864,11 @@ static uint64_t SamdTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 		trig->bActive = false;
 		actual = 0;
 	}
-	SamdTimerUnlock(d, state);
+	// The caller may enter Standby immediately with interrupts masked.
+	// Resuming continuous RTC reads here can request a SYNCRDY IRQ before
+	// the compare. SamdTimerLock restarts reads when the count is needed,
+	// including for the close-deadline check and the compare handler.
+	EnableInterrupt(state);
 
 	if (check)
 	{
@@ -984,13 +1027,16 @@ static bool SamdTimerTickOpen(SamdTimerData_t *pData, int IntPrio)
 // Interrupt of a timer device: overflow event, then the triggers whose
 // deadline is reached, all from one count. The callbacks run with
 // interrupts enabled.
-static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData_t *d, bool bRtc, int NbTrig)
+static void SamdTimerService(SamdTimerData_t *d, bool bRtc, int NbTrig)
 {
 	TimerDev_t *timer = d->pTimer;
-	TimerTrig_t info[SAMD_TIMER_TRIG_MAXCNT];
-	bool fired[SAMD_TIMER_TRIG_MAXCNT];
-	bool check[SAMD_TIMER_TRIG_MAXCNT];
-	uint32_t seq[SAMD_TIMER_TRIG_MAXCNT];
+	struct {
+		TimerTrigEvtHandler_t Handler;
+		void *pContext;
+		uint32_t Seq;
+		bool bFired;
+		bool bCheck;
+	} pending[SAMD_TIMER_TRIG_MAXCNT];
 	uint32_t state;
 	uint64_t count;
 
@@ -1020,7 +1066,7 @@ static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData
 		state = DisableInterrupt();
 		for (int i = 0; i < NbTrig; i++)
 		{
-			if (i != SamdTimerCaptChan(d) && d->pOps->Matched(d, i) && d->pTrig[i].bActive)
+			if ((bRtc || i != SamdTimerCaptChan(d)) && d->pOps->Matched(d, i) && d->pTrig[i].bActive)
 			{
 				d->pTrig[i].bDue = true;
 			}
@@ -1040,12 +1086,12 @@ static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData
 
 	for (int i = 0; i < NbTrig; i++)
 	{
-		matched[i] = i != SamdTimerCaptChan(d) && d->pOps->Matched(d, i);
+		matched[i] = (bRtc || i != SamdTimerCaptChan(d)) && d->pOps->Matched(d, i);
 	}
 
 	// External trigger captured before the count read again below
 	uint32_t capt = 0;
-	bool ext = d->bCapture && d->pOps->Captured(d, &capt);
+	bool ext = !bRtc && d->bCapture && d->pOps->Captured(d, &capt);
 
 	// A TC or TCC compare can match after the count was read, the count is
 	// read again after the flags. The RTC count is not readable after the
@@ -1058,9 +1104,9 @@ static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData
 	if (ext)
 	{
 		// The capture is less than a counter turn before the count
-		uint64_t back = ((uint64_t)count - capt) & (SamdTimerSpan(d) - 1U);
+		uint32_t back = ((uint32_t)count - capt) & d->CountMask;
 
-		d->ExtCount = count >= back ? count - back : 0;
+		capt = count >= back ? (uint32_t)count - back : 0;
 	}
 
 	for (int i = 0; i < NbTrig; i++)
@@ -1068,9 +1114,8 @@ static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData
 		SamdTimerTrig_t *trig = &d->pTrig[i];
 		uint64_t now = count;
 
-		fired[i] = false;
-		check[i] = false;
-		seq[i] = 0;
+		pending[i].bFired = false;
+		pending[i].bCheck = false;
 
 		if (!trig->bActive)
 		{
@@ -1089,14 +1134,14 @@ static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData
 			d->Floor = now;
 		}
 
-		fired[i] = true;
-		info[i] = trig->Info;
+		pending[i].bFired = true;
+		pending[i].Handler = trig->Info.Handler;
+		pending[i].pContext = trig->Info.pContext;
 
-		if (info[i].Type == TIMER_TRIG_TYPE_SINGLE)
+		if (trig->Info.Type == TIMER_TRIG_TYPE_SINGLE)
 		{
 			trig->bActive = false;
-			(void)SamdTimerArm(d, i, false, count, &check[i]);
-			seq[i] = trig->Seq;
+			(void)SamdTimerArm(d, i, false, count, &pending[i].bCheck);
 		}
 		else
 		{
@@ -1110,9 +1155,9 @@ static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData
 			{
 				trig->Deadline += ((now - trig->Deadline) / trig->Ticks + 1) * trig->Ticks;
 			}
-			(void)SamdTimerArm(d, i, true, count, &check[i]);
-			seq[i] = trig->Seq;
+			(void)SamdTimerArm(d, i, true, count, &pending[i].bCheck);
 		}
+		pending[i].Seq = trig->Seq;
 	}
 
 	// Also an overflow found by the TC reads of SamdTimerArm
@@ -1129,15 +1174,15 @@ static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData
 	// The count captured at the external trigger in LastCount
 	if (ext && timer->EvtHandler && epoch == d->Epoch && d->bRunning)
 	{
-		timer->LastCount = (uint32_t)d->ExtCount;
+		timer->LastCount = capt;
 		timer->EvtHandler(timer, TIMER_EVT_EXTTRIG);
 	}
 
 	for (int i = 0; i < NbTrig; i++)
 	{
-		if (check[i])
+		if (pending[i].bCheck)
 		{
-			SamdTimerCheck(d, i, seq[i]);
+			SamdTimerCheck(d, i, pending[i].Seq);
 		}
 	}
 
@@ -1150,11 +1195,11 @@ static inline __attribute__((always_inline)) void SamdTimerService(SamdTimerData
 		}
 
 		// Not when a callback before changed this trigger
-		if (fired[i] && d->pTrig[i].Seq == seq[i])
+		if (pending[i].bFired && d->pTrig[i].Seq == pending[i].Seq)
 		{
-			if (info[i].Handler)
+			if (pending[i].Handler)
 			{
-				info[i].Handler(timer, i, info[i].pContext);
+				pending[i].Handler(timer, i, pending[i].pContext);
 			}
 			if (timer->EvtHandler)
 			{
@@ -1176,9 +1221,9 @@ static void SamdCounterTimerIrq(SamdTimerData_t *pData)
 
 void SamdTimerIrq(int DevNo)
 {
-	SamdTimerData_t *d = &g_SamdTimerData[DevNo];
+	SamdTimerData_t *d = s_SamdTimerData[DevNo];
 
-	if (d->pTimer != NULL && d->bRunning)
+	if (d != NULL && d->bRunning)
 	{
 		d->pOps->Irq(d);
 	}
@@ -1193,8 +1238,6 @@ static void SamdTimerRelease(SamdTimerData_t *pData)
 		pData->pTickOps->Close(pData);
 	}
 
-	pData->pTimer->Disable(pData->pTimer);
-
 	uint32_t state = DisableInterrupt();
 
 	for (int i = 0; i < pData->NbTrig; i++)
@@ -1202,6 +1245,7 @@ static void SamdTimerRelease(SamdTimerData_t *pData)
 		pData->pTrig[i].bActive = false;
 		pData->pTrig[i].Seq++;
 	}
+	s_SamdTimerData[pData->pTimer->DevNo] = NULL;
 	pData->pTimer = NULL;
 	EnableInterrupt(state);
 }
@@ -1221,66 +1265,154 @@ static bool SamdTimerNoExtEnable(TimerDev_t * const pTimer, int TrigDevNo, TIMER
 }
 
 // Release this handle's previous timer, or the selected hardware timer.
-static void SamdTimerReleaseBinding(TimerDev_t *pTimer, int DevNo)
+static bool SamdTimerReleaseBinding(TimerDev_t *pTimer, int DevNo)
 {
 	for (int i = 0; i < SAMD_TIMER_MAXCNT; i++)
 	{
-		if (g_SamdTimerData[i].pTimer == pTimer || (i == DevNo && g_SamdTimerData[i].pTimer != NULL))
+		if (s_SamdTimerData[i] != NULL && (i == DevNo || s_SamdTimerData[i]->pTimer == pTimer) &&
+			s_SamdTimerData[i]->bRunning)
 		{
-			SamdTimerRelease(&g_SamdTimerData[i]);
+			return false;
 		}
 	}
+	// A timer held by another Timer object stays with it until its PowerOff
+	if (DevNo >= 0 && DevNo < SAMD_TIMER_MAXCNT && s_SamdTimerData[DevNo] != NULL &&
+		s_SamdTimerData[DevNo]->pTimer != pTimer)
+	{
+		return false;
+	}
+	for (int i = 0; i < SAMD_TIMER_MAXCNT; i++)
+	{
+		if (s_SamdTimerData[i] != NULL &&
+			(i == DevNo || s_SamdTimerData[i]->pTimer == pTimer))
+		{
+			if (!TimerPowerOff(s_SamdTimerData[i]->pTimer))
+			{
+				return false;
+			}
+		}
+	}
+	return true;
 }
 
-bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+static bool SamdSysTickPowerOff(TimerDev_t * const pTimer)
 {
-	if (pTimer != NULL && pCfg != NULL && pCfg->DevNo == SAMD_SYSTICK_TIMER_DEVNO)
+	uint32_t state;
+	bool stopped;
+
+	state = DisableInterrupt();
+	stopped = s_SamdSysTickOwner == pTimer && SysTickTimerPowerOff(pTimer);
+	if (stopped)
 	{
-		if (pCfg->bTickInt || pCfg->IntPrio < 0 ||
-			(s_SamdSysTickOwner != NULL && s_SamdSysTickOwner != pTimer))
-		{
-			return false;
-		}
-		if (s_SamdSysTickOwner == pTimer)
-		{
-			pTimer->Disable(pTimer);
-			s_SamdSysTickOwner = NULL;
-		}
-		if (s_SamdReleaseHardware != NULL)
-		{
-			s_SamdReleaseHardware(pTimer, -1);
-		}
-		if (!SysTickTimerInit(pTimer, pCfg))
-		{
-			return false;
-		}
-		pTimer->DevNo = pCfg->DevNo;
-		s_SamdSysTickOwner = pTimer;
-
-		return true;
+		s_SamdSysTickOwner = NULL;
+		s_SamdSysTickBusy = NULL;
 	}
+	EnableInterrupt(state);
+	return stopped;
+}
 
-	// Tick interrupt on the RTC only
-	if (pTimer == NULL || pCfg == NULL || pCfg->DevNo < 0 || pCfg->DevNo >= SAMD_TIMER_MAXCNT ||
-		(pCfg->bTickInt && pCfg->DevNo >= SAMD_RTC_TIMER_MAXCNT) || pCfg->IntPrio < 0)
+// APBC clocks of the other timer on the same generic clock channel, in
+// virtual device order. A peripheral outside the timer driver can own it.
+static const uint32_t s_SamdTimerPeerMask[SAMD_TIMER_MAXCNT] = {
+	0,	// RTC
+#if defined(TC3_REGS)
+	PM_APBCMASK_TCC2_Msk, PM_APBCMASK_TC5_Msk, PM_APBCMASK_TC4_Msk,
+#if SAMD_TC_TIMER_MAXCNT > 3
+	PM_APBCMASK_TC7_Msk, PM_APBCMASK_TC6_Msk,
+#endif
+	PM_APBCMASK_TCC1_Msk, PM_APBCMASK_TCC0_Msk, PM_APBCMASK_TC3_Msk
+#else
+	PM_APBCMASK_TC2_Msk, PM_APBCMASK_TC1_Msk, 0
+#endif
+};
+
+static bool SamdTimerPowerOff(TimerDev_t * const pTimer)
+{
+	SamdTimerData_t *pData;
+	uint32_t state;
+
+	state = DisableInterrupt();
+	pData = SamdTimerGet(pTimer);
+	if (pData == NULL || !SamdTimerRun(pData, false))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	SamdTimerRelease(pData);
+	NVIC_ClearPendingIRQ(pData->IrqNo);
+	if ((PM_REGS->PM_APBCMASK & s_SamdTimerPeerMask[pTimer->DevNo]) == 0U &&
+		!SamdGclkChannelDisable(pData->GclkId))
+	{
+		pData->pTimer = pTimer;
+		s_SamdTimerData[pTimer->DevNo] = pData;
+		EnableInterrupt(state);
+		return false;
+	}
+	if (SamdTimerIsRtc(pData))
+	{
+		PM_REGS->PM_APBAMASK &= ~PM_APBAMASK_RTC_Msk;
+	}
+	else
+	{
+		PM_REGS->PM_APBCMASK &= ~pData->ApbMask;
+	}
+	pTimer->PowerOff = NULL;
+	pTimer->DevNo = -1;
+	pTimer->Freq = 0U;
+	EnableInterrupt(state);
+	return true;
+}
+
+// Keep TimerInit small so LTO can discard the unused initializer at each call.
+static __attribute__((noinline)) bool SamdSysTickInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+{
+	// A timer held by another Timer object stays with it until its PowerOff
+	if (SysTickTimerEnabled() || (s_SamdSysTickOwner != NULL && s_SamdSysTickOwner != pTimer))
+	{
+		return false;
+	}
+	if (s_SamdReleaseHardware != NULL && !s_SamdReleaseHardware(pTimer, -1))
+	{
+		return false;
+	}
+	if (!SysTickTimerInit(pTimer, pCfg))
+	{
+		return false;
+	}
+	pTimer->DevNo = pCfg->DevNo;
+	pTimer->PowerOff = SamdSysTickPowerOff;
+	s_SamdSysTickBusy = SysTickTimerEnabled;
+	s_SamdSysTickOwner = pTimer;
+
+	return true;
+}
+
+static __attribute__((noinline)) bool SamdHardwareTimerInit(TimerDev_t *pTimer,
+	const TimerCfg_t *pCfg, SamdTimerData_t *d, const SamdTimerOps_t *ops,
+	const SamdTimerTickOps_t *tickOps, decltype(pTimer->EnableExtTrigger) enableExt,
+	decltype(pTimer->DisableExtTrigger) disableExt)
+{
+	int DevNo = pCfg->DevNo;
+
+	if (s_SamdSysTickOwner == pTimer && s_SamdSysTickBusy())
 	{
 		return false;
 	}
 
-	SamdTimerData_t *d = &g_SamdTimerData[pCfg->DevNo];
-
-	const SamdTimerHw_t *hw = &s_SamdTimerHw[pCfg->DevNo];
+	if (d->bRunning)
+	{
+		return false;
+	}
+	const SamdTimerHw_t *hw = &s_SamdTimerHw[DevNo];
 
 	// Constants of the DevNo, the same if the device is bound
-	d->pOps = pCfg->DevNo < SAMD_RTC_TIMER_MAXCNT ? &s_SamdRtcOps :
-			  (pCfg->DevNo < SAMD_RTC_TIMER_MAXCNT + SAMD_TC_TIMER_MAXCNT ? &s_SamdTcOps : &s_SamdTccOps);
+	d->pOps = ops;
 	d->pReg = hw->pReg;
-	d->pTrig = &s_SamdTimerTrig[hw->TrigIdx];
 	d->IrqNo = hw->IrqNo;
 	d->ApbMask = hw->ApbMask;
 	d->GclkId = hw->GclkId;
 	d->NbTrig = hw->NbTrig;
-	d->CntBits = hw->CntBits;
+	d->CountMask = UINT32_MAX >> (32U - hw->CntBits);
 	d->EvUser = hw->EvUser;
 
 	// Clock source: the RTC runs on generator 1 from the low frequency
@@ -1308,17 +1440,19 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	uint32_t presc;
 	uint32_t freq;
 
-	if (s_SamdSysTickOwner == pTimer)
-	{
-		pTimer->Disable(pTimer);
-		s_SamdSysTickOwner = NULL;
-	}
 	s_SamdReleaseHardware = SamdTimerReleaseBinding;
-	SamdTimerReleaseBinding(pTimer, pCfg->DevNo);
+	if (!SamdTimerReleaseBinding(pTimer, DevNo))
+	{
+		return false;
+	}
+	if (s_SamdSysTickOwner == pTimer && !TimerPowerOff(pTimer))
+	{
+		return false;
+	}
 
 	d->bCapture = false;
 	d->bTick = pCfg->bTickInt;
-	d->pTickOps = pCfg->bTickInt ? &s_SamdTickOps : NULL;
+	d->pTickOps = tickOps;
 
 	if (!SamdTimerPlan(d, pCfg->Freq, &presc, &freq))
 	{
@@ -1334,14 +1468,14 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	d->bOverflow = false;
 	d->bResetOvf = false;
 
-	pTimer->DevNo = pCfg->DevNo;
+	pTimer->DevNo = DevNo;
 	pTimer->Freq = freq;
-	pTimer->nsPeriod = (1000000000ULL + freq / 2) / freq;
+	pTimer->nsPeriod = (1000000000U + freq / 2U) / freq;
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;
 	pTimer->Disable = SamdTimerDisable;
-	pTimer->PowerOff = NULL;
+	pTimer->PowerOff = SamdTimerPowerOff;
 	pTimer->Enable = SamdTimerEnable;
 	pTimer->Reset = SamdTimerReset;
 	pTimer->GetTickCount = SamdTimerGetTickCount;
@@ -1350,23 +1484,55 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	pTimer->FindAvailTrigger = SamdTimerFindAvailTrigger;
 	pTimer->DisableTrigger = SamdTimerDisableTrigger;
 	pTimer->EnableTrigger = SamdTimerEnableTrigger;
-	pTimer->DisableExtTrigger = pCfg->DevNo < SAMD_RTC_TIMER_MAXCNT ?
-		SamdTimerNoExtDisable : SamdTimerDisableExtTrigger;
-	pTimer->EnableExtTrigger = pCfg->DevNo < SAMD_RTC_TIMER_MAXCNT ?
-		SamdTimerNoExtEnable : SamdTimerEnableExtTrigger;
+	pTimer->DisableExtTrigger = disableExt;
+	pTimer->EnableExtTrigger = enableExt;
 
 	d->pTimer = pTimer;
+	s_SamdTimerData[DevNo] = d;
 
-	bool res = d->pOps->Setup(d) && (d->pTickOps == NULL || d->pTickOps->Open(d, pCfg->IntPrio)) &&
-			   SamdTimerResetCounter(d) && SamdTimerRun(d, true);
+	bool res = SamdTimerStart(d, pCfg->IntPrio);
 
 	if (!res)
 	{
+		(void)SamdTimerRun(d, false);
 		SamdTimerRelease(d);
 	}
 
 	return res;
 }
+
+// Keep the public symbol for native callers. LTO must inline the device selection
+// at each call site so constant device numbers do not retain other timer drivers.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wattributes"
+__attribute__((always_inline)) bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+{
+	int dev;
+	bool rtc;
+	const SamdTimerOps_t *ops;
+
+	if (pTimer == NULL || pCfg == NULL || pCfg->IntPrio < 0)
+	{
+		return false;
+	}
+	dev = pCfg->DevNo;
+	rtc = dev == 0;
+	if (dev < 0 || dev > SAMD_SYSTICK_TIMER_DEVNO || (!rtc && pCfg->bTickInt))
+	{
+		return false;
+	}
+	if (dev == SAMD_SYSTICK_TIMER_DEVNO)
+	{
+		return SamdSysTickInit(pTimer, pCfg);
+	}
+	ops = rtc ? &s_SamdRtcOps :
+		(dev < SAMD_RTC_TIMER_MAXCNT + SAMD_TC_TIMER_MAXCNT ? &s_SamdTcOps : &s_SamdTccOps);
+	return SamdHardwareTimerInit(pTimer, pCfg, SamdTimerStorage(dev), ops,
+		pCfg->bTickInt ? &s_SamdTickOps : NULL,
+		rtc ? SamdTimerNoExtEnable : SamdTimerEnableExtTrigger,
+		rtc ? SamdTimerNoExtDisable : SamdTimerDisableExtTrigger);
+}
+#pragma GCC diagnostic pop
 
 int TimerGetLowFreqDevCount(void)
 {

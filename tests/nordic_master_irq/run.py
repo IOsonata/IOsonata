@@ -5,7 +5,9 @@ Usage: run.py fixture.elf [MCU name]
 Requires unicorn and pyelftools. The register model starts nothing by itself:
 each START or STARTTX/STARTRX task is recorded, and the test then raises the
 completion events and runs the shared interrupt handler, which is what the
-hardware and NVIC do. Pin configuration is stubbed; this does not model
+hardware and NVIC do. An I2C or SPI master transfer is synchronous and waits
+for its interrupt: the test serves the controller and the interrupt each time
+the firmware has run for a while without returning. Pin configuration is stubbed; this does not model
 electrical signalling, bus timing or hardware errata.
 """
 import struct
@@ -45,28 +47,6 @@ def call(name, *args, sp=0x200FF000):
     assert u.reg_read(UC_ARM_REG_PC) == 0xF0000, (name, 'did not return')
     return signed(u.reg_read(UC_ARM_REG_R0))
 
-def call_break(name, args, brk, action):
-    """Run name until the function brk is entered, run action, then resume."""
-    hit = []
-    def code(uc, address, size, data):
-        if not hit:
-            hit.append(address)
-            uc.emu_stop()
-    prefixes = ('_Z%d%s' % (len(brk), brk), '_ZL%d%s' % (len(brk), brk))
-    where = [v for k, v in symbols.items() if k == brk or k.startswith(prefixes)][0] & ~1
-    h = u.hook_add(UC_HOOK_CODE, code, begin=where, end=where)
-    u.ctl_flush_tb()    # blocks translated earlier do not run a new hook
-    setup(name, args, 0x200FF000)
-    u.emu_start(symbols[name] | 1, 0xF0000, count=10000000)
-    u.hook_del(h)
-    assert hit, (name, 'never reached', brk)
-    ctx = u.context_save()
-    action()
-    u.context_restore(ctx)
-    u.emu_start(hit[0] | 1, 0xF0000, count=10000000)
-    assert u.reg_read(UC_ARM_REG_PC) == 0xF0000, (name, 'did not return after', brk)
-    return signed(u.reg_read(UC_ARM_REG_R0))
-
 o = [get(symbols['offsets'] + i * 4) for i in range(26)]
 CHIP = sys.argv[2] if len(sys.argv) > 2 else 'NRF9160_XXAA'
 T = [get(symbols['twi'] + i * 4) for i in range(16 if get(symbols['twi']) else 1)]
@@ -84,18 +64,24 @@ actions = []
 active = None
 polled = False      # model hardware that finishes by itself, for bIntEn false
 
-legacy = None      # 'twi' selects the TWI model, without EasyDMA
+legacy = None      # model without EasyDMA: 'twi_int', 'twi_polled' or 'spi_int'
 sent = []          # bytes written to TXD
 
 at_start = []      # TXDSENT, RXDREADY and SHORTS seen by STARTTX and STARTRX
-nack_at = None     # polled TWI: the byte of this index is refused
+nack_at = None     # TWI: the byte of this index is refused
+twi_queue = []     # TWI with interrupt: the events to come, in order
+spi_queue = []     # SPI with interrupt: one READY per byte written to TXD
+twi = {'rx': False, 'stop': False, 'n': 0}
 
 def legacy_write(addr, value):
     offset = addr - BASE[0]
     if offset == T[10]:
         sent.append(value & 0xFF)
+        if legacy == 'twi_int':
+            twi_queue.append('error' if nack_at is not None and len(sent) - 1 == nack_at else 'txdsent')
         if legacy == 'twi_polled':
             if nack_at is not None and len(sent) - 1 == nack_at:
+                errorsrc[0] = 4
                 put(BASE[0] + T[8], 1) # ERROR, data NACK
             else:
                 put(BASE[0] + T[7], 1) # TXDSENT for the byte just written
@@ -105,6 +91,17 @@ def legacy_write(addr, value):
     name = {T[1]: 'startrx', T[2]: 'starttx', T[3]: 'stop', T[4]: 'resume'}.get(offset)
     if name:
         actions.append(name)
+    if legacy == 'twi_int':
+        if name == 'starttx':
+            twi['rx'] = False
+        elif name == 'startrx':
+            twi.update(rx=True, stop=get(BASE[0] + T[11]) & T[13] != 0, n=0)
+            twi_queue.append('rxdready')
+        elif name == 'stop':
+            if twi['rx']:
+                twi['stop'] = True         # STOPPED follows the byte being received
+            elif 'stopped' not in twi_queue and not get(BASE[0] + T[5]):
+                twi_queue.append('stopped')
     if legacy == 'twi_polled':
         if name in ('starttx', 'startrx'):
             at_start.append((get(BASE[0] + T[7]), get(BASE[0] + T[6]), get(BASE[0] + T[11])))
@@ -115,18 +112,44 @@ def legacy_read(uc, access, addr, size, value, data):
     # Polled TWI receive: a byte is always ready
     if legacy == 'twi_polled' and addr == BASE[0] + T[6]:
         put(addr, 1)
+    # TWI with interrupt: reading RXD lets the next byte come, or the STOP
+    if legacy == 'twi_int' and addr == BASE[0] + T[9] and twi['rx']:
+        if twi['stop']:
+            twi['rx'] = False
+            twi_queue.append('stopped')
+        else:
+            twi_queue.append('rxdready')
 
 intenclr = []      # values written to INTENCLR of the SPI and TWI instance
+errorsrc = [0]     # ERRORSRC of the TWI instance: set with ERROR, cleared by writing ones
+
+def read(uc, access, addr, size, value, data):
+    if addr == BASE[0] + o[21]:
+        put(addr, errorsrc[0])
+    legacy_read(uc, access, addr, size, value, data)
+
+inten = [0]        # INTEN of the TWI instance, from INTENSET and INTENCLR
+stop_req = [False] # TWIM: STOP task not answered yet
 
 def write(uc, access, addr, size, value, data):
+    if addr == BASE[0] + o[22]:
+        inten[0] |= value
+    if addr == BASE[0] + o[25]:
+        inten[0] &= ~value
+    if addr in (BASE[0] + o[22], BASE[0] + o[25]):
+        put(BASE[0] + o[22], inten[0])
+        put(BASE[0] + o[25], inten[0])
+    if addr == BASE[0] + o[21]:
+        errorsrc[0] &= ~value
     if addr in (BASE[1] + o[24], BASE[0] + o[25]):
         intenclr.append(value & 0xFFFFFFFF)
-    if legacy in ('twi', 'twi_polled'):
+    if legacy in ('twi_int', 'twi_polled'):
         legacy_write(addr, value)
         return
-    if legacy == 'spi':
+    if legacy == 'spi_int':
         if addr - BASE[1] == S[3]:
             sent.append(value & 0xFF)
+            spi_queue.append(value & 0xFF)
         return
     if active == 1 and S[0] and addr - BASE[1] == S[3] and get(BASE[1] + S[6]) == S[7]:
         # SPI (without EasyDMA) on the SPIM instance: the byte is clocked
@@ -152,6 +175,7 @@ def write(uc, access, addr, size, value, data):
             put(base + o[1], 1)
             put(base + o[2 if kind == 'rx' else 3], 1)
     elif active == 0 and offset in (o[6], o[7]):
+        stop_req[0] = False
         kind, reg = ('rx', base + o[12]) if offset == o[6] else ('tx', base + o[13])
         pending.append((kind, get(reg), get(reg + 4)))
         shorts.append(get(base + o[19]))
@@ -163,72 +187,18 @@ def write(uc, access, addr, size, value, data):
             put(base + (o[9] if kind == 'rx' else o[17]), 1)
     elif active == 0 and offset == o[8]:
         actions.append('stop')
+        stop_req[0] = True
         if polled:
             put(base + o[9], 1)
 
 u.hook_add(UC_HOOK_MEM_WRITE, write)
-u.hook_add(UC_HOOK_MEM_READ, legacy_read)
+u.hook_add(UC_HOOK_MEM_READ, read)
 
 def isr(bus):
     call('isr', bus, 0, sp=0x200F0000)
 
-def spi_finish():
-    """Hardware completes the oldest SPIM block, then the interrupt runs."""
-    kind, ptr, length = pending.pop(0)
-    base = BASE[1]
-    put(base + o[4 if kind == 'rx' else 5] + 8, length)
-    put(base + o[1], 1)
-    put(base + o[2], 1)
-    put(base + o[3], 1)
-    isr(1)
-    assert get(base + o[1]) == 0 and get(base + o[2]) == 0 and get(base + o[3]) == 0
-
 def check(cond, *info):
     assert cond, info
-
-TXBUF_SIZE = [get(symbols['txbuf_size'] + i * 4) for i in range(2)]
-TXBUF = [call('txbuf_address', bus, 0) for bus in range(2)]
-
-def transfer(bus, kind, length, maximum, finish, block_check=None):
-    """Run one interrupt transfer and its DMA blocks, return what TxData returned.
-
-    A transmit that fits the driver copy is checked to be sent from the copy:
-    the caller's buffer is overwritten as soon as the call returns. A longer
-    transmit waits in the driver, its blocks are completed from that wait."""
-    pattern = bytes((0x30 + i) & 0xFF for i in range(length))
-    u.mem_write(BUF, pattern)
-    copied = kind == 'tx' and length <= TXBUF_SIZE[bus]
-    src = TXBUF[bus] if copied else BUF
-    staged = bus == 1 and kind == 'tx'
-    if staged:
-        maximum = min(maximum, TXBUF_SIZE[bus])
-    blocks = sequence(kind, length, maximum)
-
-    def run_blocks():
-        done = 0
-        for i, n in enumerate(blocks):
-            ptr = TXBUF[bus] if staged else src + done
-            check(len(pending) == 1 and pending[0] == (kind, ptr, n), bus, kind, length,
-                  pending, (ptr, n))
-            if staged:
-                check(bytes(u.mem_read(ptr, n)) == pattern[done:done + n], 'staged TX data', done, n)
-            if block_check:
-                block_check(i, i == len(blocks) - 1)
-            check(call('busy', bus) == 1 and call('events', 0) == 0, 'released early', bus, kind, length, i)
-            finish()
-            done += n
-        check(not pending, pending)
-
-    if kind == 'tx' and not copied:
-        r = call_break(kind, (bus, length), 'nRFxSPIAsyncTxWait', run_blocks)
-        check(call('events', 0) == 1, 'long transmit returned before its end', bus, length)
-    else:
-        r = call(kind, bus, length)
-        if copied:
-            u.mem_write(BUF, b'\x55' * len(pattern))
-            check(bytes(u.mem_read(src, len(pattern))) == pattern, 'transmit not sent from a copy', bus, length)
-        run_blocks()
-    return r
 
 def sequence(kind, total, maximum=None):
     blocks = []
@@ -238,36 +208,121 @@ def sequence(kind, total, maximum=None):
         left -= blocks[-1]
     return blocks
 
-# ---- SPI master, interrupt and DMA
-check(call('init', 1, 0, 1, 1) == 1, 'spi init')
+# ---- I2C and SPI master with bIntEn. A transfer is synchronous, its wait
+# functions wait for the interrupt. The model does nothing by itself: when the firmware
+# has run QUANTUM instructions without returning it waits, the test then ends
+# what the controller was doing and runs the interrupt handler when the event
+# is enabled in INTEN, which is what the NVIC does.
+base = BASE[0]
+QUANTUM = 20000
+irq_blocked = [False]  # the interrupt cannot run, as from a handler of higher priority
+# Device 0 of the SPI and of the I2C is one instance, with one INTEN
+check(BASE[0] == BASE[1], 'SPI and I2C device 0 are not one instance', BASE)
+EVENTS = [o[9], o[10], o[11], o[17], o[18], o[1], o[2], o[3]] + \
+         ([T[5], T[6], T[7], T[8]] if T[0] else []) + ([S[1]] if S[0] else [])
+
+def irq_pending():
+    return not irq_blocked[0] and any(
+        get(base + e) and inten[0] & (1 << ((e - 0x100) // 4)) for e in EVENTS)
+
+def run_served(name, args, step, bus=0):
+    """Call name and serve it each time it waits. Returns what it returned,
+    the number of controller steps served and of interrupts run."""
+    setup(name, args, 0x200FF000)
+    pc = symbols[name] | 1
+    steps = irqs = 0
+    while True:
+        u.emu_start(pc, 0xF0000, count=QUANTUM)
+        stopped = u.reg_read(UC_ARM_REG_PC)
+        if stopped == 0xF0000:
+            break
+        ctx = u.context_save()
+        if not irq_pending():
+            check(step() is not None, name, args, 'waits with nothing to serve', steps, irqs)
+            steps += 1
+        if irq_pending():
+            isr(bus)
+            irqs += 1
+        u.context_restore(ctx)
+        pc = stopped | 1
+        check(steps + irqs < 2000, name, args, 'does not end')
+    return signed(u.reg_read(UC_ARM_REG_R0)), steps, irqs
+
+
+rx_value = lambda i: (0x40 + i) & 0xFF
+rx_done = [0]
+blocks_seen = []
+
+def spi_step():
+    """The SPIM ends its oldest block. With an array list the pointer moves on
+    by the block, as the hardware does."""
+    if not pending:
+        return None
+    kind, ptr, n = pending.pop(0)
+    blocks_seen.append((kind, ptr, n))
+    reg = base + (o[4] if kind == 'rx' else o[5])
+    if kind == 'rx':
+        u.mem_write(ptr, bytes(rx_value(rx_done[0] + i) for i in range(n)))
+        rx_done[0] += n
+    put(reg + 8, n)
+    if get(reg + 12) == 1:
+        put(reg, ptr + n)
+    put(base + o[2 if kind == 'rx' else 3], 1)    # ENDRX or ENDTX
+    put(base + o[1], 1)                           # END
+    return True
+
+def spi_init():
+    pending.clear(); blocks_seen.clear(); sent.clear(); rx_done[0] = 0
+    check(call('init', 1, 0, 1, 1) == 1, 'spi init')
+    check(inten[0] & (1 << ((o[1] - 0x100) // 4)), 'SPIM interrupt mask', hex(inten[0]))
+
 active = 1
 for kind, length in [('tx', 10), ('rx', 20), ('tx', min(2 * DMA_MAX + 5, 66000)), ('rx', DMA_MAX + 7), ('tx', DMA_MAX),
-                     ('tx', TXBUF_SIZE[1]), ('tx', TXBUF_SIZE[1] + 1)]:
-    pending.clear()
-    call('init', 1, 0, 1, 1)
-    r = transfer(1, kind, length, DMA_MAX, spi_finish)
-    check(r == -1, kind, length, 'returns', r)
-    check(call('events', 0) == 1, kind, length, 'one completion event')
-    check(call('events', 1) == length, kind, length, 'count', call('events', 1))
-    check(call('events', 3) == (BUF if kind == 'rx' else 0), 'event buffer')
-    check(call('busy', 1) == 0, 'bus not released')
-    if kind == 'tx':
-        check(call('tx_ready', 1) == 1, 'bTxReady')
-# Command then read: the command phase keeps the bus until the data arrives.
-pending.clear()
-call('init', 1, 0, 1, 1)
-def spi_cmd_done():
-    check(len(pending) == 1 and pending[0] == ('tx', pending[0][1], 1), pending)
-    check(call('tx_ready', 1) == 0)
-    spi_finish()
-    check(call('tx_ready', 1) == 1, 'command phase not flagged ready')
-    check(call('busy', 1) == 1, 'bus released after the command phase')
-    check(call('events', 0) == 0, 'command phase reported as a completion')
-r = call_break('read_reg', (1, 8), 'DeviceIntrfWaitTxComplete', spi_cmd_done)
-check(r == -1, 'read returns', r)
-check(pending == [('rx', BUF, 8)], pending)
-spi_finish()
-check(call('events', 0) == 1 and call('events', 1) == 8 and call('busy', 1) == 0, 'read completion')
+                     ('tx', 257)]:
+    spi_init()
+    u.mem_write(BUF, bytes((0x30 + i) & 0xFF for i in range(length)))
+    r, steps, irqs = run_served(kind, (1, length), spi_step, bus=1)
+    check(r == length, 'spi', kind, length, 'returns', r)
+    done = 0
+    for i, n in enumerate(sequence(kind, length)):
+        check(blocks_seen[i] == (kind, BUF + done, n), 'spi block', kind, length, i, blocks_seen[i])
+        done += n
+    check(len(blocks_seen) == i + 1 and steps == i + 1 and irqs >= steps, 'spi steps', kind, length, steps, irqs)
+    if kind == 'rx':
+        check(bytes(u.mem_read(BUF, length)) == bytes(rx_value(i) for i in range(length)), 'spi rx data')
+    check(call('busy', 1) == 0 and call('tx_ready', 1) == 1, 'spi end', kind, length)
+    check(call('events', 0) == 0, 'spi master reports an event', call('events', 0))
+
+# Command then read: one transfer each, the bus kept in between
+spi_init()
+r, steps, irqs = run_served('read_reg', (1, 8), spi_step, bus=1)
+check(r == 8 and [(k, n) for k, p, n in blocks_seen] == [('tx', 1), ('rx', 8)], 'spi read', r, blocks_seen)
+check(blocks_seen[1][1] == BUF and bytes(u.mem_read(BUF, 8)) == bytes(rx_value(i) for i in range(8)), 'spi read data')
+check(call('busy', 1) == 0, 'spi read end')
+
+# Combined write: sent from the buffer DeviceIntrfWrite() builds on its stack
+spi_init()
+u.mem_write(BUF, bytes(range(0x50, 0x56)))
+spi_sent = []
+def spi_write_step():
+    if pending:
+        spi_sent.append(bytes(u.mem_read(pending[0][1], pending[0][2])))
+    return spi_step()
+r, steps, irqs = run_served('write_data', (1, 6), spi_write_step, bus=1)
+check(r == 5 and spi_sent == [bytes(range(0x50, 0x56))] and blocks_seen[0][1] != BUF, 'spi combined write', r, spi_sent)
+
+# An event whose interrupt is held off does not end the wait: the transfer
+# ends on its time limit. The instance is set up again after it.
+spi_init()
+irq_blocked[0] = True
+r, steps, irqs = run_served('tx', (1, 10), lambda: spi_step() or 'idle', bus=1)
+irq_blocked[0] = False
+check(r == 0 and irqs == 0 and call('busy', 1) == 0, 'spi event without its interrupt', r, steps)
+for e in EVENTS:
+    put(base + e, 0)
+spi_init()
+r, steps, irqs = run_served('tx', (1, 4), spi_step, bus=1)
+check(r == 4, 'spi transfer after the time limit', r)
 active = None
 
 # A new configuration clears every interrupt of the previous one (SPI and SPIM,
@@ -293,201 +348,172 @@ if S[0] and CHIP.startswith('NRF52832'):
         check(get(BASE[1] + S[6]) == S[8], 'SPIM not enabled again', irq, get(BASE[1] + S[6]))
         check(call('busy', 1) == 0, 'one byte receive bus', irq)
     # Command then one byte: the command uses the SPIM, the byte the SPI
-    pending.clear(); sent.clear()
-    call('init', 1, 0, 1, 1)
-    r = call_break('read_reg', (1, 1), 'DeviceIntrfWaitTxComplete', spi_finish)
+    spi_init()
+    r, steps, irqs = run_served('read_reg', (1, 1), spi_step, bus=1)
     check(r == 1 and sent == [0xA5] and call('busy', 1) == 0, 'command then one byte', r, sent)
 active = None
 
-# ---- TWIM master, interrupt and DMA
-base = BASE[0]
+# ---- I2C master with bIntEn
+def twim_step(error=False):
+    """The TWIM ends its oldest block, or the STOP asked for."""
+    if pending:
+        kind, ptr, n = pending.pop(0)
+        sh = shorts.pop(0)
+        blocks_seen.append((kind, ptr, n, sh))
+        if error:
+            put(base + (o[12] if kind == 'rx' else o[13]) + 8, 0)
+            errorsrc[0] = 2     # address NACK
+            put(base + o[18], 1)
+            return True
+        if kind == 'rx':
+            u.mem_write(ptr, bytes(rx_value(rx_done[0] + i) for i in range(n)))
+            rx_done[0] += n
+        put(base + (o[12] if kind == 'rx' else o[13]) + 8, n)
+        if kind == 'rx':
+            put(base + o[10], 1)                            # LASTRX
+            put(base + o[9], 1)                             # STOPPED, LASTRX_STOP short
+        else:
+            put(base + o[11], 1)                            # LASTTX
+            put(base + (o[17] if sh == SH_TX_SUSPEND else o[9]), 1)
+        return True
+    if stop_req[0]:
+        stop_req[0] = False
+        put(base + o[9], 1)
+        return True
+    return None
 
-def twim_reset():
-    pending.clear(); shorts.clear(); actions.clear()
+def twim_init():
+    pending.clear(); shorts.clear(); actions.clear(); blocks_seen.clear()
+    stop_req[0] = False; errorsrc[0] = 0; rx_done[0] = 0
     check(call('init', 0, 0, 1, 1) == 1, 'i2c init')
-    check(get(base + o[22]) == TWIM_INTEN, 'TWIM interrupt mask', hex(get(base + o[22])))
-
-def twim_finish(amount=None, event=None, error=False):
-    """Hardware ends the oldest TWIM block, then the interrupt runs."""
-    kind, ptr, length = pending.pop(0)
-    sh = shorts.pop(0)
-    put(base + (o[12] if kind == 'rx' else o[13]) + 8, length if amount is None else amount)
-    if error:
-        put(base + o[18], 1)
-        isr(0)
-        return kind, sh
-    if event is None:
-        event = 'stopped' if kind == 'rx' or sh == SH_TX_STOP else 'suspended'
-    put(base + (o[9] if event == 'stopped' else o[17]), 1)
-    isr(0)
-    check(get(base + o[9]) == 0 and get(base + o[17]) == 0, 'events not cleared')
-    return kind, sh
+    check(inten[0] == TWIM_INTEN, 'TWIM interrupt mask', hex(inten[0]), hex(TWIM_INTEN))
 
 active = 0
-def twim_block(i, last):
-    kind = pending[0][0]
-    if kind == 'tx':
-        check(shorts[0] == (SH_TX_STOP if last else SH_TX_SUSPEND), 'i2c tx shorts', i, hex(shorts[0]))
-    else:
-        check(shorts[0] == SH_RX_STOP, 'i2c rx shorts', hex(shorts[0]))
+# Transmit and receive from the caller's buffer, one DMA block after the other.
+# Each block suspends the bus (transmit) or ends with STOP (receive), as polled.
+for kind, length in [('tx', 4), ('rx', 20), ('rx', TWIM_MAX + 7), ('tx', TWIM_MAX), ('tx', TWIM_MAX + 5)]:
+    twim_init()
+    u.mem_write(BUF, bytes((0x30 + i) & 0xFF for i in range(length)))
+    r, steps, irqs = run_served(kind, (0, length), twim_step)
+    check(r == length, 'i2c', kind, length, 'returns', r)
+    done = 0
+    for i, n in enumerate(sequence(kind, length, TWIM_MAX)):
+        check(blocks_seen[i] == (kind, BUF + done, n, SH_RX_STOP if kind == 'rx' else SH_TX_SUSPEND),
+              'i2c block', kind, length, i, blocks_seen[i])
+        done += n
+    check(len(blocks_seen) == i + 1, blocks_seen)
+    # a transmit then waits for the STOP it asks for, a receive is stopped already
+    check(steps == len(blocks_seen) + (kind == 'tx') and irqs >= steps, 'i2c steps', kind, length, steps, irqs)
+    if kind == 'rx':
+        check(bytes(u.mem_read(BUF, length)) == bytes(rx_value(i) for i in range(length)), 'i2c rx data')
+    check(call('busy', 0) == 0 and call('tx_ready', 0) == 1, 'i2c end', kind, length)
+    check(call('events', 0) == 0, 'i2c master reports an event', call('events', 0))
 
-for operation in ('tx', 'write_data', 'read_command'):
-    twim_reset()
-    r = call(operation, 0, min(TWIM_MAX, TXBUF_SIZE[0]) + 1)
-    check(r == 0 and not pending and not actions and not shorts, 'oversized TWIM command', operation)
-    check(call('busy', 0) == 0 and call('events', 0) == 0, 'rejected TWIM transfer still busy', operation)
+# Register read: the command suspends the bus, then the receive
+twim_init()
+u.mem_write(BUF, b'\x00' * 8)
+r, steps, irqs = run_served('read_reg', (0, 8), twim_step)
+check(r == 8, 'i2c read returns', r)
+check([(k, n, sh) for k, p, n, sh in blocks_seen] == [('tx', 1, SH_TX_SUSPEND), ('rx', 8, SH_RX_STOP)],
+      'i2c read blocks', blocks_seen)
+check(blocks_seen[1][1] == BUF and bytes(u.mem_read(BUF, 8)) == bytes(rx_value(i) for i in range(8)), 'i2c read data')
+check(steps == 2 and call('busy', 0) == 0, 'i2c read end', steps)
 
-for kind, length in [('tx', 4), ('rx', 20), ('rx', TWIM_MAX + 7),
-                     ('tx', min(TWIM_MAX, TXBUF_SIZE[0]))]:
-    twim_reset()
-    r = transfer(0, kind, length, TWIM_MAX, twim_finish, twim_block)
-    check(r == -1, 'i2c', kind, length, 'returns', r)
-    check(actions == [], 'STOP task issued by the driver after the hardware stop', actions)
-    check(call('events', 0) == 1 and call('events', 1) == length, 'i2c completion', kind, length,
-          call('events', 0), call('events', 1))
-    check(call('events', 3) == (BUF if kind == 'rx' else 0), 'i2c event buffer')
-    check(call('busy', 0) == 0, 'i2c bus not released')
-    if kind == 'tx':
-        check(call('tx_ready', 0) == 1, 'i2c bTxReady')
-    check(call('events', 2) == 0, 'i2c TX_READY event')
-
-# Register read: command with bNoStop keeps the bus suspended, then the receive.
-twim_reset()
-def i2c_cmd_done():
-    check(len(pending) == 1 and pending[0] == ('tx', pending[0][1], 1), pending)
-    check(shorts[0] == SH_TX_SUSPEND, 'command must suspend the bus', hex(shorts[0]))
-    check(call('tx_ready', 0) == 0)
-    twim_finish()
-    check(call('tx_ready', 0) == 1, 'command phase not flagged ready')
-    check(call('busy', 0) == 1 and actions == [], 'bus released or stopped after the command', actions)
-    check(call('events', 0) == 0, 'command phase reported as a completion')
-r = call_break('read_reg', (0, 8), 'DeviceIntrfWaitTxComplete', i2c_cmd_done)
-check(r == -1, 'i2c read returns', r)
-check(pending == [('rx', BUF, 8)] and shorts == [SH_RX_STOP], pending, shorts)
-twim_finish()
-check(actions == [] and call('busy', 0) == 0, 'receive end', actions)
-check(call('events', 0) == 1 and call('events', 1) == 8 and call('events', 3) == BUF, 'read completion')
+# Combined write: sent from the buffer DeviceIntrfWrite() builds on its stack
+twim_init()
+u.mem_write(BUF, bytes(range(0x50, 0x56)))
+sent_data = []
+def write_step():
+    if pending:
+        sent_data.append(bytes(u.mem_read(pending[0][1], pending[0][2])))
+    return twim_step()
+r, steps, irqs = run_served('write_data', (0, 6), write_step)
+check(r == 5, 'combined write returns', r)
+check(sent_data == [bytes(range(0x50, 0x56))] and blocks_seen[0][1] != BUF, 'combined write data', sent_data)
+check(call('busy', 0) == 0, 'combined write end')
 
 # Register read longer than one DMA block
-twim_reset()
-r = call_break('read_reg', (0, TWIM_MAX + 3), 'DeviceIntrfWaitTxComplete', lambda: twim_finish())
-check(r == -1, 'long read returns', r)
-twim_finish()
-check(pending == [('rx', BUF + TWIM_MAX, 3)] and call('busy', 0) == 1, 'second block', pending)
-twim_finish()
-check(call('events', 0) == 1 and call('events', 1) == TWIM_MAX + 3 and call('busy', 0) == 0, 'long read')
+twim_init()
+r, steps, irqs = run_served('read_reg', (0, TWIM_MAX + 3), twim_step)
+check(r == TWIM_MAX + 3 and [n for k, p, n, sh in blocks_seen] == [1, TWIM_MAX, 3], 'long read', r, blocks_seen)
+check(blocks_seen[2][1] == BUF + TWIM_MAX and call('busy', 0) == 0, 'long read end')
 
-# Bus error: the driver stops the bus, the completion reports what moved.
-for kind in ('tx', 'rx'):
-    twim_reset()
-    check(call(kind, 0, 10) == -1)
-    twim_finish(amount=3, error=True)
-    check(actions == ['stop'], 'error must stop the bus', kind, actions)
-    check(call('busy', 0) == 1 and call('events', 0) == 0, 'completion before STOPPED', kind)
-    put(base + o[9], 1)
-    isr(0)
-    check(call('busy', 0) == 0 and call('events', 0) == 1 and call('events', 1) == 3, 'error end', kind,
-          call('busy', 0), call('events', 0), call('events', 1))
-    check(actions == ['stop'], 'second STOP task', actions)
-    # The bus can be used again
-    check(call('tx', 0, 2) == -1 and pending == [('tx', TXBUF[0], 2)], 'transfer after an error', pending)
-    twim_finish()
-    check(call('events', 0) == 2 and call('busy', 0) == 0, 'transfer after an error ended')
+# The wait takes an event only through its interrupt: with the interrupt held
+# off, as from a handler of higher priority, the transfer ends on the time
+# limit although the event is in the register.
+twim_init()
+irq_blocked[0] = True
+r, steps, irqs = run_served('tx', (0, 4), lambda: twim_step() or 'idle')
+irq_blocked[0] = False
+check(r == 0 and irqs == 0 and call('busy', 0) == 0, 'i2c event without its interrupt', r, steps)
+pending.clear(); shorts.clear()
+for e in EVENTS:
+    put(base + e, 0)
+twim_init()
+r, steps, irqs = run_served('tx', (0, 2), twim_step)
+check(r == 2, 'i2c transfer after the time limit', r)
 
-# Address NACK on the command of a register read: the read still ends.
-twim_reset()
-def i2c_cmd_nack():
-    twim_finish(amount=0, error=True)
-    put(base + o[9], 1)
-    isr(0)
-    check(call('tx_ready', 0) == 1 and call('events', 0) == 0, 'nacked command')
-r = call_break('read_reg', (0, 4), 'DeviceIntrfWaitTxComplete', i2c_cmd_nack)
-check(r == -1 and pending == [('rx', BUF, 4)], 'read after nack', pending)
-twim_finish(amount=0, error=True)
-put(base + o[9], 1)
-isr(0)
-check(call('events', 0) == 1 and call('events', 1) == 0 and call('busy', 0) == 0, 'nacked read end')
+# Address NACK: the wait stops the bus, DeviceIntrfTx retries, then returns 0.
+# The bus can be used again.
+twim_init()
+r, steps, irqs = run_served('tx', (0, 4), lambda: twim_step(error=bool(pending)))
+check(r == 0 and len(blocks_seen) == 6 and call('busy', 0) == 0, 'i2c nack', r, len(blocks_seen))
+errorsrc[0] = 0
+r, steps, irqs = run_served('tx', (0, 2), twim_step)
+check(r == 2 and call('busy', 0) == 0, 'i2c transfer after a nack', r)
 active = None
 
 # ---- TWI master without EasyDMA, interrupt
 if T[0]:
-    base = BASE[0]
-    legacy = 'twi'
+    legacy = 'twi_int'
+    def twi_step():
+        if not twi_queue:
+            return None
+        ev = twi_queue.pop(0)
+        if ev == 'rxdready':
+            put(base + T[9], rx_value(twi['n']))
+            twi['n'] += 1
+        if ev == 'error':
+            errorsrc[0] = 4     # data NACK
+        put(base + {'rxdready': T[6], 'txdsent': T[7], 'stopped': T[5], 'error': T[8]}[ev], 1)
+        return ev
     def twi_init():
-        actions.clear(); sent.clear()
+        actions.clear(); sent.clear(); twi_queue.clear(); errorsrc[0] = 0
+        twi.update(rx=False, stop=False, n=0)
         check(call('init', 0, 0, 0, 1) == 1, 'twi init')
-        check(get(base + T[14]) == T[15], 'TWI interrupt mask', hex(get(base + T[14])))
+        check(inten[0] == T[15], 'TWI interrupt mask', hex(inten[0]))
         actions.clear()
-    def twi_event(index, rxd=None):
-        if rxd is not None:
-            put(base + T[9], rxd)
-        put(base + T[index], 1)
-        isr(0)
-        check(get(base + T[index]) == 0, 'TWI event not cleared', index)
-
-    for operation in ('tx', 'write_data', 'read_command'):
-        twi_init()
-        r = call(operation, 0, TXBUF_SIZE[0] + 1)
-        check(r == 0 and not actions and not sent, 'oversized TWI command', operation)
-        check(call('busy', 0) == 0 and call('events', 0) == 0, 'rejected TWI transfer still busy', operation)
 
     for length in (1, 3):
         twi_init()
         u.mem_write(BUF, bytes(range(0x10, 0x10 + length)))
-        check(call('tx', 0, length) == -1, 'twi tx')
-        u.mem_write(BUF, b'\x55' * length)  # caller buffer gone
-        check(actions == ['starttx'] and sent == [0x10], 'twi tx start', actions, sent)
-        for i in range(length):
-            check(call('events', 0) == 0 and call('busy', 0) == 1, 'twi tx early end')
-            twi_event(7)
-        check(sent == list(range(0x10, 0x10 + length)), 'twi tx bytes', sent)
-        check(actions == ['starttx', 'stop'], 'twi tx stop', actions, sent)
-        check(call('busy', 0) == 1 and call('events', 0) == 0, 'twi tx released before STOPPED')
-        twi_event(5)
+        r, steps, irqs = run_served('tx', (0, length), twi_step)
+        check(r == length and sent == list(range(0x10, 0x10 + length)), 'twi tx', length, r, sent)
+        check(steps == length + 1 and irqs >= steps, 'twi tx steps', length, steps, irqs)
         check(call('busy', 0) == 0 and call('tx_ready', 0) == 1, 'twi tx end')
-        check(call('events', 0) == 1 and call('events', 1) == length, 'twi tx completion', call('events', 1))
 
     for length in (1, 2, 4):
         twi_init()
-        check(call('rx', 0, length) == -1, 'twi rx')
-        check(actions == ['startrx'], 'twi rx start', actions)
-        check(get(base + T[11]) == (T[12] if length > 1 else T[13]), 'twi rx shorts', length)
-        for i in range(length):
-            actions.clear()
-            twi_event(6, 0x40 + i)
-            left = length - i - 1
-            check(actions == (['resume'] if left else []), 'twi rx resume', length, i, actions)
-            if left:
-                check(get(base + T[11]) == (T[13] if left == 1 else T[12]), 'twi rx shorts', length, i)
-        check(call('busy', 0) == 1 and call('events', 0) == 0, 'twi rx released before STOPPED')
-        twi_event(5)
-        check(call('busy', 0) == 0 and call('events', 0) == 1 and call('events', 1) == length, 'twi rx end')
-        check(call('events', 3) == BUF, 'twi rx buffer')
-        check(bytes(u.mem_read(BUF, length)) == bytes(0x40 + i for i in range(length)), 'twi rx data')
+        u.mem_write(BUF, b'\x00' * length)
+        r, steps, irqs = run_served('rx', (0, length), twi_step)
+        check(r == length and bytes(u.mem_read(BUF, length)) == bytes(rx_value(i) for i in range(length)),
+              'twi rx', length, r)
+        check(steps == length + 1 and irqs >= steps and call('busy', 0) == 0, 'twi rx end', length, steps, irqs)
 
     # Register read: the command keeps the bus, then the receive
     twi_init()
-    def twi_cmd():
-        check(actions == ['starttx'] and sent == [4], actions, sent)
-        twi_event(7)
-        check(call('tx_ready', 0) == 1 and call('busy', 0) == 1 and call('events', 0) == 0, 'twi command')
-        check(actions == ['starttx'], 'twi command stopped the bus', actions)
-    check(call_break('read_reg', (0, 2), 'DeviceIntrfWaitTxComplete', twi_cmd) == -1)
-    check(actions == ['starttx', 'startrx'], 'twi read', actions)
-    twi_event(6, 1)
-    twi_event(6, 2)
-    twi_event(5)
-    check(call('events', 0) == 1 and call('events', 1) == 2 and call('busy', 0) == 0, 'twi read end')
+    r, steps, irqs = run_served('read_reg', (0, 2), twi_step)
+    check(r == 2 and sent == [4] and actions[:2] == ['starttx', 'startrx'], 'twi read', r, sent, actions)
+    check(bytes(u.mem_read(BUF, 2)) == bytes(rx_value(i) for i in range(2)) and call('busy', 0) == 0, 'twi read end')
 
-    # Bus error
+    # A refused byte ends the transmit with the bytes sent before it
     twi_init()
-    check(call('tx', 0, 4) == -1)
-    twi_event(7)
-    twi_event(8)
-    check(actions == ['starttx', 'resume', 'stop'], 'twi error stop', actions)
-    twi_event(5)
-    check(call('events', 0) == 1 and call('events', 1) == 1 and call('busy', 0) == 0, 'twi error end')
+    nack_at = 1
+    r, steps, irqs = run_served('tx', (0, 4), twi_step)
+    nack_at = None
+    check(r == 1 and len(sent) == 2 and call('busy', 0) == 0, 'twi nack', r, sent)
 
+    base = BASE[0]
     # Polled TWI after TWIM transfers: TWI and TWIM are one block, the events
     # a TWIM transfer leaves must not count for the TWI.
     legacy = 'twi_polled'
@@ -519,52 +545,40 @@ if T[0]:
 
 # ---- SPI master without EasyDMA, interrupt
 if S[0]:
-    base = BASE[1]
-    legacy = 'spi'
-    def spi_legacy_init():
-        sent.clear()
-        check(call('init', 1, 0, 0, 1) == 1, 'spi init')
-        check(get(base + S[4]) == S[5], 'SPI interrupt mask', hex(get(base + S[4])))
-    def ready(rxd=0):
-        put(base + S[2], rxd)
+    legacy = 'spi_int'
+    def spi_legacy_step():
+        """The SPI clocks the byte written to TXD and sets READY."""
+        if not spi_queue:
+            return None
+        spi_queue.pop(0)
+        put(base + S[2], rx_value(rx_done[0]))
+        rx_done[0] += 1
         put(base + S[1], 1)
-        isr(1)
-        check(get(base + S[1]) == 0, 'READY not cleared')
+        return True
+    def spi_legacy_init():
+        sent.clear(); spi_queue.clear(); rx_done[0] = 0
+        check(call('init', 1, 0, 0, 1) == 1, 'spi init')
+        check(inten[0] == S[5], 'SPI interrupt mask', hex(inten[0]))
 
     for length in (1, 3):
         spi_legacy_init()
         u.mem_write(BUF, bytes(range(0x10, 0x10 + length)))
-        check(call('tx', 1, length) == -1, 'spi tx')
-        u.mem_write(BUF, b'\x55' * length)  # caller buffer gone
-        for i in range(length):
-            check(sent == list(range(0x10, 0x11 + i)), 'spi tx bytes', sent)
-            check(call('events', 0) == 0 and call('busy', 1) == 1, 'spi tx early end')
-            ready()
-        check(len(sent) == length, sent)
-        check(call('events', 0) == 1 and call('events', 1) == length and call('busy', 1) == 0, 'spi tx end')
-        check(call('tx_ready', 1) == 1 and call('events', 3) == 0, 'spi tx ready')
+        r, steps, irqs = run_served('tx', (1, length), spi_legacy_step, bus=1)
+        check(r == length and sent == list(range(0x10, 0x10 + length)), 'spi tx', length, r, sent)
+        check(steps == length and irqs >= steps, 'spi tx steps', length, steps, irqs)
+        check(call('busy', 1) == 0 and call('tx_ready', 1) == 1, 'spi tx end')
 
     for length in (1, 3):
         spi_legacy_init()
-        check(call('rx', 1, length) == -1, 'spi rx')
-        for i in range(length):
-            check(sent == [0xA5] * (i + 1), 'spi rx dummy', sent)
-            check(call('events', 0) == 0 and call('busy', 1) == 1, 'spi rx early end')
-            ready(0x60 + i)
-        check(call('events', 0) == 1 and call('events', 1) == length and call('busy', 1) == 0, 'spi rx end')
-        check(call('events', 3) == BUF, 'spi rx buffer')
-        check(bytes(u.mem_read(BUF, length)) == bytes(0x60 + i for i in range(length)), 'spi rx data')
+        r, steps, irqs = run_served('rx', (1, length), spi_legacy_step, bus=1)
+        check(r == length and sent == [0xA5] * length, 'spi rx', length, r, sent)
+        check(bytes(u.mem_read(BUF, length)) == bytes(rx_value(i) for i in range(length)), 'spi rx data')
+        check(call('busy', 1) == 0, 'spi rx end')
 
     spi_legacy_init()
-    def spi_legacy_cmd():
-        check(sent == [4], sent)
-        ready()
-        check(call('tx_ready', 1) == 1 and call('busy', 1) == 1 and call('events', 0) == 0, 'spi command')
-    check(call_break('read_reg', (1, 2), 'DeviceIntrfWaitTxComplete', spi_legacy_cmd) == -1)
-    check(sent == [4, 0xA5], sent)
-    ready(1)
-    ready(2)
-    check(call('events', 0) == 1 and call('events', 1) == 2 and call('busy', 1) == 0, 'spi read end')
+    r, steps, irqs = run_served('read_reg', (1, 2), spi_legacy_step, bus=1)
+    check(r == 2 and sent == [4, 0xA5, 0xA5] and call('busy', 1) == 0, 'spi read', r, sent)
+    check(bytes(u.mem_read(BUF, 2)) == bytes(rx_value(i + 1) for i in range(2)), 'spi read data')
     legacy = None
 
 # ---- Polled transfers still work when bIntEn is false

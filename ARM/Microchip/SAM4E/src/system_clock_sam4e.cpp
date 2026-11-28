@@ -36,14 +36,16 @@ SOFTWARE.
 
 #define SAM4E_SLOW_CLOCK_POLLS 10000000U
 
-bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+static uint32_t s_LfUsers;
+
+static bool Sam4eSlowClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t status;
 	uint32_t mode;
 	uint32_t i;
 	bool bypass;
 
-	if (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL && ClkSrc != OSC_TYPE_TCXO)
+	if (s_LfUsers != 0U || (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL && ClkSrc != OSC_TYPE_TCXO))
 	{
 		return false;
 	}
@@ -88,7 +90,64 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	return true;
 }
 
+bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	uint32_t state;
+	bool selected;
+
+	if (__get_IPSR() != 0U)
+	{
+		return false;
+	}
+	state = __get_PRIMASK();
+	__disable_irq();
+	selected = Sam4eSlowClockSelect(ClkSrc, OscFreq);
+	__set_PRIMASK(state);
+	return selected;
+}
+
 void SystemOscInit(void)
 {
 	(void)SystemLowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq);
+}
+
+bool SystemLowFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	(void)SystemResetReason();
+	ready = s_LfUsers != UINT32_MAX && (((SAM4E_SUPC->SUPC_SR & SUPC_SR_OSCSEL) != 0U) == (GetLowFreqOscType() != OSC_TYPE_RC));
+	if (ready)
+	{
+		s_LfUsers++;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+void SystemLowFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (s_LfUsers != 0U)
+	{
+		s_LfUsers--;
+	}
+	__set_PRIMASK(state);
+}
+
+bool SystemLowFreqClockCalibrate(void)
+{
+	return false;
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
 }

@@ -1,7 +1,7 @@
 #include "coredev/timer.h"
 
 static TimerDev_t s_Timer;
-#if TIMER_LINK_DEVNO < 0
+#if TIMER_LINK_DEVNO == -1
 static volatile int s_DevNo;
 #endif
 
@@ -16,13 +16,24 @@ int main(void)
 		.ClkSrc = TIMER_CLKSRC_DEFAULT,
 		.IntPrio = 1
 	};
-#if TIMER_LINK_DEVNO < 0
+#if TIMER_LINK_DEVNO == -1
 	cfg.DevNo = s_DevNo;
 #endif
 	if (!TimerInit(&s_Timer, &cfg))
 	{
 		return 1;
 	}
+#if TIMER_LINK_DEVNO == -2
+	if (!TimerPowerOff(&s_Timer))
+	{
+		return 1;
+	}
+	cfg.DevNo = TimerGetHighFreqDevNo();
+	if (!TimerInit(&s_Timer, &cfg))
+	{
+		return 1;
+	}
+#endif
 	nsTimerEnableTrigger(&s_Timer, 0, 1000000, TIMER_TRIG_TYPE_CONTINUOUS, 0, 0);
 	return (int)TimerGetTickCount(&s_Timer);
 }

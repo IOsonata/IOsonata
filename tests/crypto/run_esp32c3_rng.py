@@ -53,7 +53,11 @@ assert "#include <stdio.h>" not in driver_src
 assert 'extern "C" {' not in driver_src
 assert not any(unsupported in driver_src for unsupported in
                ('csrr %0, 0xC00', 'csrr %0, 0xB00', 'rdcycle'))
-assert "IOSONATA_RISCV_CYCLE_CSR        0x7E2U" in delay_src
+# idelay.h declares the counter read, the port defines it on MPCCR
+assert "uint32_t IOsonataRiscvCycle32(void);" in delay_src
+cycle = system_src[system_src.index("uint32_t IOsonataRiscvCycle32(void)\n{"):]
+cycle = cycle[:cycle.index("\n}\n")]
+assert 'csrr %0, 0x7E2' in cycle
 assert 'csrw 0x7E2' in system_src and 'csrw 0x7E1' in system_src
 
 

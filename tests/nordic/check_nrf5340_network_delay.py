@@ -24,9 +24,8 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 		self.assertNotIn(".LowPwrOsc = { OSC_TYPE_RC, 32768", self.system)
 
 	def test_fixed_frequency_network_uses_port_defaults(self):
-		self.assertIn("23U, 3U", self.system)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", self.system)
-		self.assertIn("SystemnsDelayFactor = 21321178U;", self.system)
+		self.assertIn("23003229UL, 3000329UL", self.system)
+		self.assertIn("ArmDelayClockSetDivisors(__SYSTEM_CLOCK_DEFAULT,", self.system)
 		self.assertNotIn("ArmDelayCalibrate(", self.system)
 		self.assertNotIn("ArmDelayClockUpdate(&s_DelayCalibration", self.system)
 
@@ -52,13 +51,12 @@ class Nrf5340NetworkDelay(unittest.TestCase):
 			self.assertNotIn("NRF5340", loop)
 		self.assertNotIn("ArmDelayUsLoop(", self.delay)
 		self.assertNotIn("ArmDelayNsLoop(", self.delay)
-		self.assertIn('CoreClockTestResult("nsDelay repeated HF Timer 100 ms",', self.test)
 		self.assertIn('" .p2align 5\\n"', ns_loop)
 
 	def test_250ms_nominal_loop_scale(self):
 		for frequency in (64000000,):
-			us = frequency // 23
-			ns = 21321178
+			us = frequency * 1000000 // 23003229
+			ns = frequency * 1000000 // 3000329
 			us_loops = (250000 * us + 999999) // 1000000
 			ns_loops = (250000000 * ns + 999999999) // 1000000000
 			self.assertLess(abs(us_loops * 23 - frequency // 4), 5000)

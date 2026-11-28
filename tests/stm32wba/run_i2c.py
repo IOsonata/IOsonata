@@ -7,7 +7,7 @@ Needs arm-none-eabi-g++, and the python packages unicorn and pyelftools.
 Without them the test prints NOT RUN.
 
 i2c_fw.cpp is built for the Cortex-M33 with the generic STM32 I2C driver
-ARM/ST/src/i2c_stm32.cpp, the GPDMA channel manager, the generic I2C and
+ARM/ST/src/i2c_stm32v2.cpp, the GPDMA channel manager, the generic I2C and
 device interface sources and the STM32 GPIO driver, and run in unicorn. The
 I2C1 and I2C3 registers are a model of the I2C version 2 peripheral of the
 reference manual:
@@ -23,9 +23,11 @@ reference manual:
 - GPDMA1 channels with REQSEL, memory address and count, moving the bytes of
   the TXIS and RXNE requests
 
-The runs: polling, interrupt (the vector is called from the firmware, the
-model has no interrupt controller), DMA with polling, DMA with interrupt, and
-the slave with the events the I2C examples expect.
+The runs: polling, interrupt (the emulator runs the I2C1 and GPDMA1 channel
+vectors when a flag is set with its interrupt enabled, the transfer waits for
+them), DMA with
+polling, DMA with interrupt, and the slave with the events the I2C examples
+expect.
 
 The model records the bus transactions and flags what the reference manual
 does not allow: TXDR written without TXIS, RXDR read without RXNE, START or
@@ -112,7 +114,7 @@ def build(tmp):
            '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/include')]
     objs = []
     cxx = ['arm-none-eabi-g++', *cpu, '-std=gnu++23', '-Wall', '-Werror', '-fno-exceptions', '-fno-rtti', *inc]
-    for src in (HERE / 'i2c_fw.cpp', ROOT / 'ARM/ST/src/i2c_stm32.cpp',
+    for src in (HERE / 'i2c_fw.cpp', ROOT / 'ARM/ST/src/i2c_stm32v2.cpp',
                 ROOT / 'ARM/ST/STM32WBAxx/src/gpdma_stm32wba.cpp',
                 ROOT / 'src/coredev/i2c.cpp', ROOT / 'src/device_intrf.cpp',
                 ROOT / 'ARM/ST/src/iopincfg_stm32.cpp'):
@@ -124,7 +126,10 @@ def build(tmp):
          ROOT / 'ARM/ST/STM32WBAxx/src/system_stm32wbaxx.c', '-o', obj])
     objs.append(obj)
     elf = tmp / 'i2c_fw.elf'
-    run(['arm-none-eabi-g++', *cpu, '-nostartfiles', '-Wl,--gc-sections', '-Wl,-T,' + str(HERE / 'i2c_fw.ld'),
+    # The emulator runs the I2C1 and GPDMA1 vectors, the firmware does not call them
+    keep = ['-Wl,-u,I2C1_EV_IRQHandler'] + [f'-Wl,-u,GPDMA1_Channel{n}_IRQHandler' for n in range(8)]
+    run(['arm-none-eabi-g++', *cpu, '-nostartfiles', '-Wl,--gc-sections', *keep,
+         '-Wl,-T,' + str(HERE / 'i2c_fw.ld'),
          '--specs=nosys.specs', '--specs=nano.specs', *objs, '-o', elf])
     return elf
 
@@ -190,6 +195,9 @@ class I2c:
         self.slave = None
         self.txdr_full = False
         self.sadd = 0
+        # Master bus steps after lag calls of tick(), 0: at once
+        self.lag = 0
+        self.later = []
 
     def v(self, what):
         self.viol.append(f'{self.name}: {what} (mark {self.log.mark})')
@@ -222,7 +230,7 @@ class I2c:
             self.log.add((self.name, 'R', val))
             self.nbytes -= 1
             self.set_nbytes(self.nbytes)
-            self.after_byte()
+            self.defer(self.after_byte)
             return val
         return self.reg[off]
 
@@ -353,7 +361,7 @@ class I2c:
                 self.log.add((self.name, 'NB', nb))
                 if nb == 0:
                     self.v('NBYTES 0 written after TCR')
-                self.next_byte()
+                self.defer(self.next_byte)
             elif self.f['busy']:
                 if ((val ^ self.reg[4]) >> 16) & 0xFF:
                     self.v('NBYTES written while a transfer runs')
@@ -376,20 +384,37 @@ class I2c:
         self.txdr_full = False
         self.log.add((self.name, 'Sr' if restart else 'S', sadd, 'R' if rd else 'W', nb))
         self.slave = self.slaves.get(sadd)
+        self.defer(self.address)
+
+    def address(self):
+        """The address byte is sent: acknowledged or not."""
         if self.slave is None:
             self.f['nackf'] = 1
             self.log.add((self.name, 'NACK'))
             self.auto_stop()
             return
-        if not rd:
+        if not self.rd:
             self.slave.start_write()
-        if nb == 0:
-            if autoend:
+        if self.nbytes == 0:
+            if self.autoend:
                 self.auto_stop()
             else:
                 self.f['tc'] = 1
             return
         self.next_byte()
+
+    def defer(self, fn):
+        """A master bus step, at once or after lag ticks."""
+        if self.lag == 0:
+            fn()
+        else:
+            self.later.append([self.lag, fn])
+
+    def tick(self):
+        if self.later:
+            self.later[0][0] -= 1
+            if self.later[0][0] <= 0:
+                self.later.pop(0)[1]()
 
     def next_byte(self):
         if self.rd:
@@ -432,7 +457,7 @@ class I2c:
             return
         self.nbytes -= 1
         self.set_nbytes(self.nbytes)
-        self.after_byte()
+        self.defer(self.after_byte)
 
     def after_byte(self):
         if self.nbytes > 0:
@@ -647,9 +672,21 @@ def main():
         rcc_log = []
         rcc = hdr('RCC_BASE_NS')
 
+        # Blocks from a master vector that came during a wait to the next
+        # status read of the firmware
+        wake = {'since': None, 'blocks': [], 'missed': 0}
+        # Interrupt run without DMA: blocks between two status reads of the
+        # firmware. Each byte needs the firmware, a wait ends on a vector.
+        gap = {'n': 0, 'max': 0}
+
         def rd(uc, off, size, base):
             a = base + off
             d = devs.get(a & ~0xFF)
+            if d is i2c1 and (a & 0xFF) == 0x18 and not active:
+                gap['n'] = 0
+                if wake['since'] is not None:
+                    wake['blocks'].append(wake['since'])
+                    wake['since'] = None
             if d is not None:
                 return d.rd_reg(a & 0xFF)
             if gbase <= a < gbase + 0x1000:
@@ -685,6 +722,9 @@ def main():
 
         def on_mark(uc, addr, size, user):
             log.mark = uc.reg_read(UC_ARM_REG_R0)
+            # The interrupt runs: the master bus steps take time, so that
+            # the transfer waits for its interrupts
+            i2c1.lag = 24 if log.mark in (13, 16) else 0
             dma_at[log.mark] = gpdma.moved
             if log.mark in (14, 18):
                 i2c3.script = i2c3.master_script(slave_ops)
@@ -703,19 +743,43 @@ def main():
         uc.hook_add(UC_HOOK_CODE, on_done, begin=syms['I2cTestDoneHook'] & ~1, end=syms['I2cTestDoneHook'] & ~1)
 
         active = False
-        pending = False
+        pending = None
         ticks = 0
+        irqs = collections.Counter()
+        tcf, tcie = hdr('DMA_CSR_TCF'), hdr('DMA_CCR_TCIE')
+
+        def line():
+            for n, c in enumerate(gpdma.ch):
+                if c['csr'] & tcf and c['ccr'] & tcie:
+                    return f'GPDMA1_Channel{n}_IRQHandler'
+            cr1, f = i2c1.reg[0], i2c1.f
+            if ((f['txis'] and cr1 & 2) or (f['rxne'] and cr1 & 4) or (f['stopf'] and cr1 & 32) or
+                (f['nackf'] and cr1 & 16) or ((f['tc'] or f['tcr']) and cr1 & 64) or
+                ((f['berr'] or f['arlo'] or f['ovr']) and cr1 & 128)):
+                return 'I2C1_EV_IRQHandler'
+            return None
+
         def dispatch(uc, address, size, ctx):
             nonlocal pending, ticks
-            if active or not int.from_bytes(uc.mem_read(syms['g_I2cTestAutoIrq'], 4), 'little'):
+            if active:
+                return
+            i2c1.tick()
+            if not int.from_bytes(uc.mem_read(syms['g_I2cTestAutoIrq'], 4), 'little'):
+                return
+            if wake['since'] is not None:
+                wake['since'] += 1
+            gap['n'] += 1
+            if log.mark == 13:
+                gap['max'] = max(gap['max'], gap['n'])
+            if gap['max'] > 5000:
+                # A wait that goes on to its bound: stop the run
+                uc.emu_stop()
                 return
             ticks += 1
             if ticks % 16 or uc.reg_read(UC_ARM_REG_PRIMASK):
                 return
-            cr1, f = i2c1.reg[0], i2c1.f
-            if ((f['txis'] and cr1 & 2) or (f['stopf'] and cr1 & 32) or
-                (f['nackf'] and cr1 & 16) or ((f['tc'] or f['tcr']) and cr1 & 64)):
-                pending = True
+            pending = line()
+            if pending:
                 uc.emu_stop()
         uc.hook_add(UC_HOOK_BLOCK, dispatch)
         vec = bytes(uc.mem_read(0x08000000, 8))
@@ -723,20 +787,34 @@ def main():
         pc = int.from_bytes(vec[4:8], 'little')
         try:
             for _ in range(1000):
-                pending = False
+                pending = None
                 uc.emu_start(pc, 0xFFFFFFFF, count=40_000_000)
-                if not pending:
+                if pending is None:
                     break
                 saved = uc.context_save()
                 active = True
+                # The master waits while its interrupts are enabled. A vector
+                # before the status read after the last one: that wait went on.
+                waiting = (i2c1.reg[0] & 0xFE) != 0
+                if wake['since'] is not None:
+                    wake['missed'] += 1
                 uc.reg_write(UC_ARM_REG_LR, 0x081ff001)
-                uc.emu_start(syms['I2C1_EV_IRQHandler'] | 1, 0x081ff000, count=100000)
-                assert uc.reg_read(UC_ARM_REG_PC) == 0x081ff000
+                uc.emu_start(syms[pending] | 1, 0x081ff000, count=100000)
+                assert uc.reg_read(UC_ARM_REG_PC) == 0x081ff000, f'{pending} did not return'
+                irqs[log.mark] += 1
+                irqs[log.mark, pending[:4]] += 1
+                # The vector takes what it ran for: its line is no longer pending
+                if line() == pending:
+                    irqs[log.mark, 'left pending'] += 1
+                wake['since'] = 0 if waiting else None
                 active = False
                 uc.context_restore(saved)
                 pc = uc.reg_read(UC_ARM_REG_PC) | 1
         except Exception as ex:
             raise SystemExit(f'FAIL emulator stopped at {uc.reg_read(UC_ARM_REG_PC):#x}: {ex}')
+        if gap['max'] > 5000:
+            raise SystemExit(f'FAIL interrupt master: no status read for {gap["max"]} blocks, '
+                             f'a wait goes on to its bound (mark {log.mark})')
         if not state['done']:
             raise SystemExit('FAIL firmware did not finish')
 
@@ -838,17 +916,24 @@ def main():
     b = len(res) - 29
     expect(res[b] == 1, 'interrupt master init failed')
     e = log.of(13)
-    expect(res[b + 1] == -1 and res[b + 2] == 5, f'interrupt write results {res[b + 1:b + 3]}')
+    expect(res[b + 1] == 5 and res[b + 2] == 0, f'interrupt write results {res[b + 1:b + 3]}')
     expect(e[:5] == [('S', 0x50, 'W', 0), ('P',), ('S', 0x50, 'W', 5), ('B', tx[0]), ('B', tx[1])],
            f'interrupt write events {e[:6]}')
-    expect(res[b + 3] == -1 and res[b + 4] == 4, f'interrupt read results {res[b + 3:b + 5]}')
+    expect(res[b + 3] == 4 and res[b + 4] == 0, f'interrupt read results {res[b + 3:b + 5]}')
     reads = [x for x in e if x[0] == 'R']
     expect(rx[400:404] == bytes(x[1] for x in reads[:4]), 'interrupt read data differ from the bus')
-    expect(res[b + 5] == -1 and res[b + 6] == 2, f'interrupt refused byte results {res[b + 5:b + 7]}')
-    expect(res[b + 7] == -1 and res[b + 8] == 300, f'interrupt read 300 results {res[b + 7:b + 9]}')
+    expect(res[b + 5] == 2 and res[b + 6] == 0, f'interrupt refused byte results {res[b + 5:b + 7]}')
+    expect(res[b + 7] == 300 and res[b + 8] == 0, f'interrupt read 300 results {res[b + 7:b + 9]}')
     expect(rx2[0][:300] == bytes(x[1] for x in reads[4:]) and len(reads) == 304,
            f'interrupt read 300 data, {len(reads)} bytes on the bus')
-    expect(res[b + 9] == -1 and long_count == 100, f'interrupt write 100: return {res[b + 9]}, callback {long_count}')
+    expect(res[b + 9] == 100 and long_count == 0, f'interrupt write 100: return {res[b + 9]}, events {long_count}')
+    expect(irqs[13] > 0, f'interrupt master: {irqs[13]} vectors run')
+    expect(irqs[13, 'left pending'] == 0 and irqs[16, 'left pending'] == 0,
+           f'vector left its line pending: {irqs[13, "left pending"]}, {irqs[16, "left pending"]}')
+    expect(wake['blocks'] and max(wake['blocks']) < 40 and wake['missed'] == 0,
+           f'the wait does not end on the vector: {max(wake["blocks"], default=None)} blocks, '
+           f'{wake["missed"]} vectors before the status read')
+    expect(gap['max'] < 200, f'interrupt master: {gap["max"]} blocks without a status read')
     expect(res[b + 10] == 0, f'write to an absent device {res[b + 10]}')
 
     # 14 slave on I2C3
@@ -891,7 +976,8 @@ def main():
 
     # 16 DMA master, interrupt
     d += 8
-    expect(res[d:d + 9] == [1, -1, 5, -1, 4, -1, 300, -1, 2], f'DMA interrupt results {res[d:d + 9]}')
+    expect(res[d:d + 9] == [1, 5, 0, 4, 0, 300, 0, 2, 0], f'DMA interrupt results {res[d:d + 9]}')
+    expect(irqs[16] > 0, f'DMA interrupt master: {irqs[16]} vectors run')
     e = log.of(16)
     reads = [x[1] for x in e if x[0] == 'R']
     expect(bytes(reads[:4]) == rx[440:444] and bytes(reads[4:]) == rx2[2][:300], 'DMA interrupt read data differ from the bus')

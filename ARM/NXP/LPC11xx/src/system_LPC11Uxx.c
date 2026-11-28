@@ -59,7 +59,7 @@ __WEAK McuOsc_t g_McuOsc = {
 	true
 };
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated delay-loop iterations per second, defined in ResetEntry.c
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = IRC_FREQ;	// System Clock Frequency (Core Clock)

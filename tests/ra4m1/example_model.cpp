@@ -26,7 +26,14 @@ static std::vector<int> toggles;
 static std::vector<uint8_t> received, echoed;
 static size_t rx_offset;
 #define main ExampleMain
+#if EXAMPLE_KIND==1
+// The Release build of the timer demo logs to the UART, the Debug one to the
+// debugger. assert is enabled again after the example.
+#define NDEBUG
+#endif
 #include EXAMPLE_SOURCE
+#undef NDEBUG
+#include <cassert>
 #undef main
 
 void ExampleWait(void) {throw Finished{};}
@@ -99,6 +106,19 @@ extern "C" int UARTTx(UARTDev_t *,uint8_t *p,int n) {
 	echoed.insert(echoed.end(),p,p+sent);return sent;
 }
 extern "C" void UARTprintf(UARTDev_t *,const char *,...) {++prints;}
+static SysLog sys_log;
+static bool log_ready;
+bool SysLog::Init(const SysLogCfg_t &c,DeviceIntrf *p) {
+	assert(c.pMem && c.MemSize>=SYSLOG_MEMSIZE(1,c.RecordLen) && p);
+	log_ready=true;return true;
+}
+extern "C" SysLog_t *SysLogGet(void) {return (SysLog_t *)&sys_log;}
+extern "C" bool SysLogInitNoTimer(SysLog_t *l,const SysLogCfg_t *c,DevIntrf_t *p,uint32_t,uint32_t) {
+	assert(l==SysLogGet() && c);
+	return sys_log.Init(*c,(DeviceIntrf *)p);
+}
+SysLog *SysLogGetInstance(void) {return &sys_log;}
+int SysLogStatus(SysLog_t *,SysStatus_t,const char *s) {assert(log_ready && s);++prints;return 0;}
 extern "C" uint8_t Prbs8(uint8_t d) {return (uint8_t)(((d<<1)|(((d>>6)^(d>>5))&1))&0x7f);}
 int main() {
 #if EXAMPLE_KIND==1

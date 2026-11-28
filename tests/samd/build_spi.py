@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix='samd-spi-link-') as directory:
                         str(obj), str(archive), '-Wl,--start-group', '-lgcc',
                         '-lc', '-lm', '-Wl,--end-group', '-o', str(elf)], check=True)
         symbols = subprocess.check_output([build.PREFIX + 'nm', str(elf)], text=True)
-        for name in ('__Vectors', 'SamdSpimPolling', 'SamdSpimInt', 'SamdSpisArm',
+        for name in ('__Vectors', 'SamdSpimPolling', 'SamdSpimIrq', 'SamdSpisArm',
                      'SamdSpimDmaWait', 'SamdDmacOpen'):
             assert name in symbols, 'Runtime-selected SPI mode missing: ' + name
         print('SAMD11 C SPI all modes ' + lto + ': link PASS', flush=True)

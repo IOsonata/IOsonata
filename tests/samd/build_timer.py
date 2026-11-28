@@ -37,7 +37,7 @@ def main():
         cases = [('demo' + str(dev), dev, True) for dev in (0, 1, 2, 3, 4)]
         if mode == 'Release':
             cases += [('dev' + str(dev), dev, True) for dev in (0, 1, 2, 3, 4)]
-            cases += [('runtime-lto', -1, True), ('runtime-native', -1, False)]
+            cases += [('rtc-and-tc', -2, True), ('runtime-lto', -1, True), ('runtime-native', -1, False)]
         for name, dev, lto in cases:
             demo = name.startswith('demo')
             obj = target / (name + '.o')
@@ -63,6 +63,8 @@ def main():
             if selected == 4:
                 assert all(n not in symbols for n in ('SamdRtcSetup', 'SamdTcSetup', 'SamdTccSetup'))
                 assert 's_SysTickData' in symbols and 'SystickEnableTrigger' in symbols
+            elif selected == -2:
+                assert 'SamdRtcSetup' in symbols and 'SamdTcSetup' in symbols
             elif selected >= 0:
                 absent = ('SamdTcSetup', 'SamdTccSetup', 'SamdCounterTimerIrq') if selected == 0 else (
                     ('SamdRtcSetup', 'SamdRtcWait', 'SamdRtcTimerIrq', 'SamdTccSetup') if selected < 3
@@ -70,6 +72,13 @@ def main():
                 assert all(n not in symbols for n in absent), (name, 'Unused timer linked')
             else:
                 assert all(n in symbols for n in ('SamdRtcSetup', 'SamdTcSetup', 'SamdTccSetup'))
+            if selected in (-2, 0, 1, 2, 3):
+                for unused in ('s_SysTickData', 's_SysTickEnabled', 'SystickEnableTrigger',
+                               'SysTickTimerInit', 'SystickTimerIrq('):
+                    assert unused not in symbols, (name, unused)
+            if selected == 0:
+                assert 'SysTickTimerPowerOff' not in symbols, (name, 'Unused SysTick shutdown linked')
+                assert 'SamdTimerStorage(int)::tc' not in symbols, (name, 'Unused TC/TCC storage linked')
             if demo:
                 assert 'SamdUartDmaService' not in symbols and 'SamdUartPoll(' not in symbols
                 assert not any(n in symbols for n in ('snprintf', 'vfprintf', 'vfiprintf', '_malloc_r'))

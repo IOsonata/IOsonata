@@ -9,10 +9,10 @@
 
 ## Historical demo notes (pre-migration)
 
-# ESP32-C3 PowerOffDemo
+# ESP32-C3 CorePowerTest
 
 undefinedThis project targets ESP32-C3-DevKitM-1. Import `ioc` as an existing Eclipse
-managed project. Build the ESP32C3 library and PowerOffDemo in the same
+managed project. Build the ESP32C3 library and CorePowerTest in the same
 configuration. UART0 uses TX21/RX20 at 1,000,000 baud, 8N1, through the board's
 USB-to-UART bridge. Open the terminal before resetting the board.
 
@@ -68,7 +68,7 @@ The committed board configuration remains Light-sleep with BOOT/GPIO9.
 
 ## Power/clock review 0.14
 
-PowerOffDemo is the only demo for the configured Light-sleep and
+CorePowerTest is the only demo for the configured Light-sleep and
 Deep-sleep paths. In the resumable Light-sleep profile it now prints
 `UART rate after resume: PASS/FAIL` and
 `CPU/APB clock after resume: PASS/FAIL` in addition to the existing
@@ -82,7 +82,7 @@ specific configurations exercised at that time.
 
 ## System-owned sleep coordination (review 0.14)
 
-For resumable sleep, PowerOffDemo now leaves its UART enabled and calls
+For resumable sleep, CorePowerTest now leaves its UART enabled and calls
 `SystemSleep()` directly after draining pending output. The target system
 coordinates temporary UART suspension and restoration with the driver's
 clock and interrupt state, without changing its enable reference count.

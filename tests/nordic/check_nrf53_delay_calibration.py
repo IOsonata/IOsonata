@@ -39,12 +39,12 @@ class Nrf53DelayCalibration(unittest.TestCase):
 	def test_app_frequency_update_uses_calibrated_loop_factors(self):
 		self.assertIn('#include "idelay.h"', self.app)
 		self.assertIn('#include "idelay.h"', self.net)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 20U, 3U)", self.app)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, cpuHz, 22U, 3U)", self.app)
-		self.assertIn("ArmDelayClockUpdate(&s_DelayCalibration, cpuHz)", self.app)
+		self.assertIn("64000000UL, 2908624UL, 128000000UL, 6399488UL", self.app)
+		self.assertIn("64000000UL, 21330560UL, 128000000UL, 42664106UL", self.app)
+		self.assertIn("SystemnsDelayFactor = CalcDelayFactor(cpuHz,", self.app)
 		self.assertNotIn("ArmDelayCalibrate(", self.app)
 		self.assertNotIn("ArmDelayCalibrate(", self.net)
-		self.assertIn("ArmDelayClockInit(&s_DelayCalibration, SystemCoreClock, 23U, 3U)", self.net)
+		self.assertIn("23003229UL, 3000329UL", self.net)
 		self.assertNotIn("ArmDelayClockUpdate(&s_DelayCalibration", self.net)
 
 

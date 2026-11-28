@@ -31,7 +31,7 @@ SCB_Type test_scb;
 uint32_t test_primask,test_disabled,test_cleared,test_enabled,test_active,test_pending,test_priority[32];
 uint32_t SystemCoreClock=48000000;
 static uint32_t clocks[4]={48000000,24000000,48000000,48000000};
-McuOsc_t g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false};
+McuOsc_t g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false,0};
 uint32_t SystemCoreClockGet(void){return SystemCoreClock;}
 uint32_t SystemPeriphClockGet(int n){assert(n>=0&&n<4);return clocks[n];}
 #define V(n) Ra4m1DefaultIEL##n
@@ -165,7 +165,7 @@ static void reset_model()
 	mstp=0xFFFFFFFF;prcr=8;src=0;loco=0;sosc=1;fail_address=0;fail_once=start_fail=stop_fail=false;
 	step_on_count=step_on_flags=-1;injected_ticks=step_on_compare_write=0;writes=overflow_calls=last_event=0;last_context=nullptr;
 	SystemCoreClock=48000000;clocks[0]=clocks[2]=clocks[3]=48000000;clocks[1]=24000000;
-	g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false};
+	g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false,0};
 	for(unsigned i=0;i<10;++i)g_Ra4m1TimerError[i]=0;
 }
 static void evt(TimerDev_t *,uint32_t e){assert(!test_primask);last_event=e;if(e==TIMER_EVT_COUNTER_OVR)++overflow_calls;else for(unsigned i=0;i<6;++i)if(e==TIMER_EVT_TRIGGER(i))++event_calls[i];}

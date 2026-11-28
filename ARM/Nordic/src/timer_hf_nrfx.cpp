@@ -1328,6 +1328,11 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	{
 		return false;
 	}
+	// A timer held by another Timer object stays with it until its PowerOff
+	if (s_pnRFxTimerDev[devno] != nullptr && s_pnRFxTimerDev[devno] != pTimer)
+	{
+		return false;
+	}
 #if defined(NRF91_SERIES)
 	// A TIMER configured as a counter is in use by the counter driver.
 	if (s_nRFxTimerData[devno].pReg->MODE != TIMER_MODE_MODE_Timer)

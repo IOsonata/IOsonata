@@ -50,7 +50,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// ClockDemo retains USART1. UART wake belongs to PowerOffDemo.
+// CoreClockTest retains USART1. UART wake belongs to CorePowerTest.
 #define UART_DEVNO 1
 #define UART_RX_PORT IOPORTC
 #define UART_RX_PIN 26

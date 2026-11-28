@@ -14,6 +14,15 @@ typedef int IRQn_Type;
 #define TC1_IRQn 18
 #define TC2_IRQn 19
 #define TCC0_IRQn 17
+#define PM_APBAMASK_RTC_Msk 1
+static struct { uint32_t PM_APBCMASK, PM_APBAMASK; } s_Pm;
+#define PM_REGS (&s_Pm)
+static int s_LastDisabledChannel = -1;
+static bool SamdGclkChannelDisable(uint8_t channel)
+{
+	s_LastDisabledChannel = channel;
+	return true;
+}
 #define PM_APBCMASK_TC1_Msk 1
 #define PM_APBCMASK_TC2_Msk 2
 #define PM_APBCMASK_TCC0_Msk 4
@@ -45,7 +54,15 @@ static unsigned s_Closes;
 static bool s_CancelNext;
 static bool s_ResetInHandler;
 static uint32_t s_Pending;
-static unsigned s_SysTickStops;
+static bool s_SysTickRunning;
+bool SysTickTimerEnabled(void) { return s_SysTickRunning; }
+bool SysTickTimerPowerOff(TimerDev_t *timer)
+{
+	s_SysTickRunning = false;
+	timer->PowerOff = nullptr;
+	timer->DevNo = -1;
+	return true;
+}
 static uint32_t s_MainFreq = 48000000;
 static uint32_t s_LfFreq = 32768;
 static bool s_SetupFail;
@@ -53,6 +70,7 @@ static bool s_StopFail;
 static bool s_StartFail;
 static bool s_ResetFail;
 static bool s_RtcWaitFail;
+static bool s_RtcCompareSyncBusy;
 static int s_RtcRunSyncFail = -1;
 bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg);
 static uint32_t SystemPeriphClockGet(int);
@@ -64,17 +82,30 @@ static void NVIC_SetPriority(int, unsigned);
 static unsigned NVIC_GetPriority(int);
 static void NVIC_SetPendingIRQ(int);
 static void NVIC_ClearPendingIRQ(int);
+static unsigned s_TestHfUsers;
+static unsigned s_TestLfUsers;
+extern "C" bool SystemHighFreqClockEnable() { ++s_TestHfUsers; return true; }
+extern "C" bool SystemLowFreqClockEnable() { ++s_TestLfUsers; return true; }
+extern "C" void SystemHighFreqClockDisable() { assert(s_TestHfUsers); --s_TestHfUsers; }
+extern "C" void SystemLowFreqClockDisable() { assert(s_TestLfUsers); --s_TestLfUsers; }
+static uint32_t s_TestStartUs;
+extern "C" uint32_t SystemHighFreqClockStartTime() { return s_TestStartUs; }
+extern "C" uint32_t SystemLowFreqClockStartTime() { return s_TestStartUs; }
+#define IRQ_PRIO_LOW 5
+static void __WFI();
 #include "timer_driver.h"
+#include "sdelay_driver.h"
 
 static void StopSysTick(TimerDev_t *)
 {
-	s_SysTickStops++;
+	s_SysTickRunning = false;
 }
 
 bool SysTickTimerInit(TimerDev_t *pTimer, const TimerCfg_t *)
 {
 	pTimer->DevNo = 0;
 	pTimer->Disable = StopSysTick;
+	s_SysTickRunning = true;
 	pTimer->Freq = 48000000;
 
 	return true;
@@ -121,8 +152,12 @@ static bool ModelOverflow(SamdTimerData_t *d)
 	s_Count[d->pTimer->DevNo].Overflow = false;
 	return flag;
 }
-static bool ModelArm(SamdTimerData_t *d, int n, bool)
+static bool ModelArm(SamdTimerData_t *d, int n, bool enable)
 {
+	if (enable && d->pTimer->DevNo == 0)
+	{
+		s_RtcCompareSyncBusy = true;
+	}
 	s_Count[d->pTimer->DevNo].Matched &= ~(1U << n);
 	return true;
 }
@@ -143,8 +178,18 @@ static bool ModelMatched(SamdTimerData_t *d, int n)
 COUNTER_OPS(SamdRtc)
 COUNTER_OPS(SamdTc)
 COUNTER_OPS(SamdTcc)
-bool SamdRtcWait(SamdTimerData_t *, bool) { return !s_RtcWaitFail; }
-void SamdRtcResume(SamdTimerData_t *) {}
+bool SamdRtcWait(SamdTimerData_t *, bool)
+{
+	s_RtcCompareSyncBusy = false;
+	return !s_RtcWaitFail;
+}
+void SamdRtcResume(SamdTimerData_t *)
+{
+	if (s_RtcCompareSyncBusy)
+	{
+		NVIC_SetPendingIRQ(RTC_IRQn);
+	}
+}
 bool SamdRtcEvent(SamdTimerData_t *d)
 {
 	return s_Count[d->pTimer->DevNo].Matched != 0 || s_Count[d->pTimer->DevNo].Overflow;
@@ -187,48 +232,99 @@ static void Event(TimerDev_t *timer, uint32_t event)
 }
 static void Advance(int DevNo, uint64_t Ticks)
 {
-	SamdTimerData_t *d = &g_SamdTimerData[DevNo];
+	SamdTimerData_t *d = s_SamdTimerData[DevNo];
 	uint64_t next = s_Count[DevNo].Count + Ticks;
-	uint64_t span = 1ULL << d->CntBits;
+	uint64_t span = (uint64_t)d->CountMask + 1U;
 
 	s_Count[DevNo].Overflow = next >= span;
 	s_Count[DevNo].Count = (uint32_t)(next & (span - 1));
 	s_Count[DevNo].Matched = (1U << d->NbTrig) - 1;
 	SamdTimerIrq(DevNo);
 }
+// The sDelay timer reaches its trigger during the wait
+static int s_WfiDevNo = -1;
+static uint64_t s_WfiTicks;
+static void __WFI()
+{
+	s_WfiDevNo = s_SDelayTimer.DevNo;
+	s_WfiTicks = s_SamdTimerData[s_SDelayTimer.DevNo]->pTrig[0].Ticks;
+	Advance(s_SDelayTimer.DevNo, s_WfiTicks);
+}
 int main()
 {
 	TimerDev_t timer = {};
 	TimerCfg_t cfg = { .DevNo = 0, .IntPrio = 1, .EvtHandler = Event };
 
+	// A long compare followed immediately by WFI must have no pending
+	// synchronization interrupt. Only advancing to the deadline fires it.
+	cfg.Freq = 1024;
+	assert(TimerInit(&timer, &cfg));
+	assert(nsTimerEnableTrigger(&timer, 0, 1000000000ULL, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
+	assert((s_Pending & (1U << RTC_IRQn)) == 0);
+	Advance(0, 1024);
+	assert(s_Events[0][0] == 1);
+	assert(TimerPowerOff(&timer));
+	cfg.Freq = 0;
+	assert(sDelay(0));
+	assert(sDelay(1));
+	// The low power timer, the RTC, released at the end
+	assert(s_WfiDevNo == 0 && s_SamdTimerData[0] == nullptr);
+	assert(s_TestLfUsers == 0 && s_TestHfUsers == 0);
+	// The clock start time is part of the delay
+	uint64_t fullTicks = s_WfiTicks;
+	s_TestStartUs = 250000;
+	assert(sDelay(1));
+	assert(s_WfiTicks < fullTicks && s_WfiTicks * 4 > fullTicks * 3 - 4);
+	s_TestStartUs = 2000000;
+	s_WfiDevNo = -1;
+	assert(sDelay(1) && s_WfiDevNo == -1);
+	s_TestStartUs = 0;
+	// The RTC held by the application, sDelay takes a free TC and leaves the RTC
+	assert(TimerInit(&timer, &cfg));
+	TimerDisable(&timer);
+	assert(sDelay(1));
+	assert(s_WfiDevNo == TimerGetHighFreqDevNo());
+	assert(s_SamdTimerData[0] != nullptr && s_SamdTimerData[0]->pTimer == &timer);
+	assert(s_SamdTimerData[s_WfiDevNo] == nullptr);
+	assert(TimerPowerOff(&timer));
+	s_Events[0][0] = 0;
 	for (int dev = 0; dev < 4; dev++)
 	{
+		if (dev > 0) TimerDisable(&timer);
 		cfg.DevNo = dev;
 		assert(TimerInit(&timer, &cfg));
-		assert(g_SamdTimerData[dev].pOps == (dev == 0 ? &s_SamdRtcOps : dev < 3 ? &s_SamdTcOps : &s_SamdTccOps));
-		assert(g_SamdTimerData[dev].pTickOps == nullptr);
-		assert(SamdTimerAllowStandby() == (dev == 0));
+		assert(!TimerInit(&timer, &cfg));
+		// A disabled timer stays with its Timer object until PowerOff
+		TimerDev_t other = {};
+		TimerDisable(&timer);
+		assert(!TimerInit(&other, &cfg));
+		assert(TimerPowerOff(&timer));
+		assert(!TimerEnable(&timer));
+		assert(TimerInit(&other, &cfg));
+		assert(TimerPowerOff(&other));
+		assert(TimerInit(&timer, &cfg));
+		assert(s_SamdTimerData[dev]->pOps == (dev == 0 ? &s_SamdRtcOps : dev < 3 ? &s_SamdTcOps : &s_SamdTccOps));
+		assert(s_SamdTimerData[dev]->pTickOps == nullptr);
 		assert(TimerGetMaxTrigger(&timer) == (dev == 0 ? 1 : dev < 3 ? 2 : 4));
 		assert(nsTimerEnableTrigger(&timer, 0, 1000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
-		uint32_t ticks = g_SamdTimerData[dev].pTrig[0].Ticks;
+		uint32_t ticks = s_SamdTimerData[dev]->pTrig[0].Ticks;
 		Advance(dev, ticks);
 		assert(s_Events[dev][0] == 1);
 		Advance(dev, ticks * 3);
 		assert(s_Events[dev][0] == 2);
-		assert(g_SamdTimerData[dev].pTrig[0].Deadline == (uint64_t)ticks * 5);
+		assert(s_SamdTimerData[dev]->pTrig[0].Deadline == (uint64_t)ticks * 5);
 		TimerDisableTrigger(&timer, 0);
 		assert(nsTimerEnableTrigger(&timer, 0, 1000000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
 		Advance(dev, ticks);
-		assert(!g_SamdTimerData[dev].pTrig[0].bActive);
+		assert(!s_SamdTimerData[dev]->pTrig[0].bActive);
 		assert(s_Events[dev][0] == 3);
 		TimerReset(&timer);
-		s_Count[dev].Count = (uint32_t)((1ULL << g_SamdTimerData[dev].CntBits) - 2);
+		s_Count[dev].Count = s_SamdTimerData[dev]->CountMask - 1U;
 		uint64_t before = TimerGetTickCount(&timer);
 		Advance(dev, 4);
 		assert(TimerGetTickCount(&timer) == before + 4);
 		TimerDisable(&timer);
-		assert(!g_SamdTimerData[dev].bRunning);
-		assert(SamdTimerAllowStandby());
+		assert(!s_SamdTimerData[dev]->bRunning);
 		assert(TimerEnable(&timer));
 		// A changed source needs a new frequency selection before restart.
 		assert(nsTimerEnableTrigger(&timer, 0, 1000000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
@@ -239,24 +335,24 @@ int main()
 
 		source /= 2;
 		assert(!TimerEnable(&timer));
-		assert(!g_SamdTimerData[dev].bRunning);
+		assert(!s_SamdTimerData[dev]->bRunning);
 		uint32_t actual = timer.SetFrequency(&timer, requested);
 
-		assert(actual != 0 && g_SamdTimerData[dev].BaseFreq == source);
-		assert(g_SamdTimerData[dev].bRunning && TimerGetTickCount(&timer) == 0);
-		assert(g_SamdTimerData[dev].pTrig[0].Ticks == actual);
-		assert(g_SamdTimerData[dev].pTrig[0].Info.nsPeriod == 1000000000);
+		assert(actual != 0 && s_SamdTimerData[dev]->BaseFreq == source);
+		assert(s_SamdTimerData[dev]->bRunning && TimerGetTickCount(&timer) == 0);
+		assert(s_SamdTimerData[dev]->pTrig[0].Ticks == actual);
+		assert(s_SamdTimerData[dev]->pTrig[0].Info.nsPeriod == 1000000000);
 		TimerDisable(&timer);
 		source = 0;
 		assert(!TimerEnable(&timer));
 		assert(timer.SetFrequency(&timer, requested) == 0);
-		assert(!g_SamdTimerData[dev].bRunning);
-		assert(g_SamdTimerData[dev].BaseFreq == original / 2);
+		assert(!s_SamdTimerData[dev]->bRunning);
+		assert(s_SamdTimerData[dev]->BaseFreq == original / 2);
 		source = original;
 		s_SetupFail = true;
 		assert(timer.SetFrequency(&timer, requested) == 0);
-		assert(g_SamdTimerData[dev].BaseFreq == 0);
-		assert(!TimerEnable(&timer) && !g_SamdTimerData[dev].bRunning);
+		assert(s_SamdTimerData[dev]->BaseFreq == 0);
+		assert(!TimerEnable(&timer) && !s_SamdTimerData[dev]->bRunning);
 		s_SetupFail = false;
 		assert(timer.SetFrequency(&timer, requested) != 0);
 		// Each hardware failure must prevent Enable on an unchanged source.
@@ -266,12 +362,12 @@ int main()
 		{
 			*failure = true;
 			assert(timer.SetFrequency(&timer, requested) == 0);
-			assert(g_SamdTimerData[dev].BaseFreq == 0);
+			assert(s_SamdTimerData[dev]->BaseFreq == 0);
 			*failure = false;
 			assert(!TimerEnable(&timer));
 			assert(timer.SetFrequency(&timer, requested) != 0);
-			assert(g_SamdTimerData[dev].BaseFreq == source);
-			assert(g_SamdTimerData[dev].bRunning);
+			assert(s_SamdTimerData[dev]->BaseFreq == source);
+			assert(s_SamdTimerData[dev]->bRunning);
 		}
 		if (dev == 0)
 		{
@@ -287,8 +383,8 @@ int main()
 				{
 					TimerDisable(&timer);
 				}
-				assert(!g_SamdTimerData[dev].bRunning);
-				assert(g_SamdTimerData[dev].BaseFreq == 0);
+				assert(!s_SamdTimerData[dev]->bRunning);
+				assert(s_SamdTimerData[dev]->BaseFreq == 0);
 				s_RtcRunSyncFail = -1;
 				s_RtcWaitFail = false;
 				assert(!TimerEnable(&timer));
@@ -302,51 +398,67 @@ int main()
 	assert(s_Opens == 1);
 	cfg.DevNo = 0;
 	cfg.bTickInt = true;
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
 	assert(s_Closes == 1 && s_Opens == 2);
 	assert(!TimerEnableExtTrigger(&timer, 2, TIMER_EXTTRIG_SENSE_TOGGLE));
 	assert(TimerEnableExtTrigger(&timer, 2, TIMER_EXTTRIG_SENSE_DISABLE));
 	cfg.bTickInt = false;
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
 	assert(s_Closes == 2 && s_Opens == 2);
 	// A callback changing another due trigger suppresses its old event.
 	cfg.DevNo = 1;
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
 	for (int i = 0; i < 2; i++)
 	{
 		assert(nsTimerEnableTrigger(&timer, i, 1000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
 	}
 	s_CancelNext = true;
-	Advance(1, g_SamdTimerData[1].pTrig[0].Ticks);
+	Advance(1, s_SamdTimerData[1]->pTrig[0].Ticks);
 	assert(s_Events[1][1] == 0);
 	s_CancelNext = false;
 	s_ResetInHandler = true;
-	Advance(1, g_SamdTimerData[1].pTrig[0].Ticks);
+	Advance(1, s_SamdTimerData[1]->pTrig[0].Ticks);
 	assert(TimerGetTickCount(&timer) == 0);
 	// SysTick follows the existing hardware device numbers.
 	assert(TimerGetLowFreqDevCount() == 1);
 	assert(TimerGetHighFreqDevCount() == 4);
 	cfg.DevNo = SAMD_SYSTICK_TIMER_DEVNO;
+	TimerDisable(&timer);
 	assert(cfg.DevNo == 4 && TimerInit(&timer, &cfg));
-	assert(!SamdTimerAllowStandby());
 	assert(timer.DevNo == 4 && timer.Freq == 48000000);
-	assert(g_SamdTimerData[1].pTimer == nullptr);
-	assert(!g_SamdTimerData[1].bRunning);
+	assert(s_SamdTimerData[1] == nullptr);
 	TimerDev_t other = {};
 	assert(!TimerInit(&other, &cfg));
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
-	assert(s_SysTickStops == 1);
+	assert(SysTickTimerEnabled());
 	cfg.bTickInt = true;
 	assert(!TimerInit(&timer, &cfg));
-	assert(s_SysTickStops == 1);
+	assert(SysTickTimerEnabled());
 	cfg.bTickInt = false;
 	cfg.DevNo = 2;
+	TimerDisable(&timer);
 	assert(TimerInit(&timer, &cfg));
-	assert(s_SysTickStops == 2 && s_SamdSysTickOwner == nullptr);
-	assert(!SamdTimerAllowStandby());
+	assert(!SysTickTimerEnabled() && s_SamdSysTickOwner == nullptr);
 	cfg.DevNo = 4;
 	assert(TimerInit(&other, &cfg));
 	cfg.DevNo = 5;
 	assert(!TimerInit(&timer, &cfg));
+	assert(TimerPowerOff(&other));
+	assert(!TimerPowerOff(&other));
+	assert(!SysTickTimerEnabled());
+	cfg.DevNo = 1;
+	assert(TimerInit(&other, &cfg));
+	s_Pm.PM_APBCMASK = PM_APBCMASK_TC1_Msk | PM_APBCMASK_TC2_Msk;
+	s_LastDisabledChannel = -1;
+	assert(TimerPowerOff(&other));
+	assert(s_LastDisabledChannel == -1);
+	assert(s_Pm.PM_APBCMASK == PM_APBCMASK_TC2_Msk);
+	assert(TimerPowerOff(&timer));
+	assert(s_LastDisabledChannel == GCLK_CLKCTRL_ID_TC1_TC2_Val);
+	assert(s_Pm.PM_APBCMASK == 0U);
 	puts("SAMD timer family selection, rollover, triggers, routing and reinitialization: PASS");
 }

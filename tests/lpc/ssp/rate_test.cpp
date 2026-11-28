@@ -66,9 +66,9 @@ void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
 }
 
-#include "../../../ARM/NXP/src/spi_lpcxx.c"
+#include "../../../ARM/NXP/src/spi_lpcxx.cpp"
 #ifndef TEST_LPC17
-#include "../../../ARM/NXP/LPC11xx/src/spi_lpc11uxx.c"
+#include "../../../ARM/NXP/LPC11xx/src/spi_lpc11uxx.cpp"
 #endif
 
 // Simulate status in mapped peripheral memory, retaining the vendor's

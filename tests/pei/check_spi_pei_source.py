@@ -63,8 +63,10 @@ def main():
     assert "pDev->Cfg.DataSize != 8U" in prep
     assert "pDev->Cfg.bIntEn" in prep
     assert "RxLen > NRFX_SPI_DMA_MAXCNT" in prep
-    assert "TxLen > NRFX_SPI_TXBUF_SIZE" in prep
-    assert "memcpy(dev->TxBuf, pTx, TxLen);" in prep
+    assert "TxLen > NRFX_SPI_DMA_MAXCNT" in prep
+    # TX is sent from the caller's buffer, the driver has no copy of it
+    assert "TxBuf" not in prep and "memcpy" not in prep
+    assert "(uint32_t)(uintptr_t)pTx" in prep
     assert "dev->pDmaReg->RXD.PTR =" in prep
     assert "dev->pDmaReg->TXD.PTR =" in prep
     assert "dev->pDmaReg->TASKS_START" not in prep

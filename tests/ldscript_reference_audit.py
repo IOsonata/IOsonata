@@ -45,6 +45,19 @@ def resolve_eclipse_script(path, name, reference):
         return None
     return (path.parent / name / reference).resolve()
 
+# Vendor SDKs are installed beside the repository, in the IOcomposer
+# external folder. A reference into an SDK that is not installed is skipped.
+EXTERNAL = Path(__file__).resolve().parents[1].parent / "external"
+
+
+def sdk_missing(target):
+    try:
+        relative = target.relative_to(EXTERNAL)
+    except ValueError:
+        return False
+    return len(relative.parts) > 0 and not (EXTERNAL / relative.parts[0]).is_dir()
+
+
 def check_project(path):
     errors = []
     checked = 0
@@ -80,7 +93,7 @@ def check_project(path):
                 skipped += 1
                 continue
             target = resolve_eclipse_script(path, name, reference)
-            if target is None:
+            if target is None or sdk_missing(target):
                 skipped += 1
                 continue
             checked += 1

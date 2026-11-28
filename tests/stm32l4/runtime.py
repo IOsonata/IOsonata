@@ -30,7 +30,7 @@ uint32_t SystemnsDelayFactor;
 struct {struct {uint32_t Freq;} CoreOsc;} g_McuOsc{{24000000}};
 const uint32_t MSIRangeTable[]={100000,200000,400000,800000,1000000,2000000,4000000,8000000,16000000,24000000,32000000,48000000};
 void SetFlashWaitState(uint32_t){} void SystemPeriphClockSet(int,uint32_t){}
-'''+('\n#define SYSTEM_NSDELAY_CORE_FACTOR 34UL\n#define SYSTEM_CORE_CLOCK_MAX 120000000UL\n' if 'plus' in name else '\n#define SYSTEM_NSDELAY_CORE_FACTOR 40UL\n#define SYSTEM_CORE_CLOCK_MAX 80000000UL\n')+function((ROOT/'ARM/include/idelay.h').read_text(),'ArmDelayClockSetDivisors')+function((BASE/'src'/name).read_text(),'SystemCoreClockUpdate')+r'''
+'''+('\n#define SYSTEM_NSDELAY_CORE_FACTOR 34UL\n#define SYSTEM_CORE_CLOCK_MAX 120000000UL\n' if 'plus' in name else '\n#define SYSTEM_NSDELAY_CORE_FACTOR 40UL\n#define SYSTEM_CORE_CLOCK_MAX 80000000UL\n')+function((ROOT/'ARM/include/system_core_clock_calibration.h').read_text(),'ArmDelayClockSetDivisors')+function((BASE/'src'/name).read_text(),'SystemCoreClockUpdate')+r'''
 int main(){
  rcc.CR=RCC_CR_MSIRGSEL|(11<<RCC_CR_MSIRANGE_Pos);
  rcc.PLLCFGR=RCC_PLLCFGR_PLLSRC_HSE|(10<<RCC_PLLCFGR_PLLN_Pos);

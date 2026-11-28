@@ -39,6 +39,16 @@ static void EnableInterrupt(uint32_t Previous)
 {
 	s_Mask = Previous;
 }
+static struct { uint32_t SCR; } s_Scb;
+#define SCB (&s_Scb)
+#define SCB_SCR_SLEEPDEEP_Msk 4U
+#define SCB_SCR_SLEEPONEXIT_Msk 2U
+static uint32_t __get_PRIMASK() { return s_Mask; }
+static uint32_t __get_IPSR() { return 0U; }
+static void __disable_irq() { s_Mask = 1U; }
+static void __set_PRIMASK(uint32_t value) { s_Mask = value; }
+static void __ISB() {}
+static void __WFI() { assert(s_Mask && !(SCB->SCR & 6U)); }
 static void __DSB() {}
 static void __WFE()
 {
@@ -76,6 +86,9 @@ McuOsc_t g_McuOsc = {};
 
 int main()
 {
+	SCB->SCR = 7U;
+	SystemSleep();
+	assert(SCB->SCR == 7U && s_Mask == 0U);
 	static const uint32_t reasons[] = {
 		SYSTEM_RESET_POWERON, SYSTEM_RESET_WAKE_PIN, SYSTEM_RESET_WDT,
 		SYSTEM_RESET_SOFT, SYSTEM_RESET_PIN

@@ -35,8 +35,7 @@ typedef struct {
 
 #define ARM_DELAY_CAL_LOOPS	8192U
 
-// Measured cycles for ARM_DELAY_CAL_LOOPS iterations. The fallback uses
-// documented per-target assembly-loop cycles until measurement succeeds.
+// Cycles of ARM_DELAY_CAL_LOOPS iterations, measured by ArmDelayCalibrate.
 typedef struct {
 	uint32_t UsCycles;
 	uint32_t NsCycles;
@@ -74,90 +73,6 @@ static inline bool ArmDelayClockUpdate(ArmDelayCalibration_t *pCal, uint32_t Cpu
 	return true;
 }
 
-// Per-target documented loop-cycle fallback.
-// Each clock owner invokes this once and calls ArmDelayClockUpdate whenever
-// the CPU clock changes. Reinitialization clears an earlier measurement.
-static inline bool ArmDelayClockInit(ArmDelayCalibration_t *pCal,
-	uint32_t CpuHz, uint32_t UsLoopCycles, uint32_t NsLoopCycles)
-{
-	if (pCal == NULL || UsLoopCycles == 0U || NsLoopCycles == 0U ||
-		UsLoopCycles > UINT32_MAX / ARM_DELAY_CAL_LOOPS ||
-		NsLoopCycles > UINT32_MAX / ARM_DELAY_CAL_LOOPS)
-	{
-		return false;
-	}
-
-	pCal->UsCycles = UsLoopCycles * ARM_DELAY_CAL_LOOPS;
-	pCal->NsCycles = NsLoopCycles * ARM_DELAY_CAL_LOOPS;
-	pCal->CpuHz = 0U;
-	pCal->Measured = false;
-
-	return ArmDelayClockUpdate(pCal, CpuHz);
-}
-
-// A port with two measured CPU speeds can interpolate both delay factors.
-// Factors are loop iterations per second measured at actual CPU frequencies, not the
-// oscillator's input frequency. Clamp to an endpoint outside the measured
-// range: extrapolation is not supported. No runtime measurement is done.
-typedef struct {
-	uint32_t CpuHz;
-	uint32_t UsLoopsPerSecond;
-	uint32_t NsLoopsPerSecond;
-} ArmDelayPoint_t;
-
-static inline bool ArmDelayClockInterpolate(uint32_t CpuHz,
-	const ArmDelayPoint_t *pLow, const ArmDelayPoint_t *pHigh)
-{
-	uint32_t span;
-	uint32_t lowWeight;
-	uint32_t highWeight;
-	uint64_t us;
-	uint64_t ns;
-
-	if (pLow == NULL || pHigh == NULL || CpuHz == 0U ||
-		pLow->CpuHz == 0U || pHigh->CpuHz <= pLow->CpuHz ||
-		pLow->UsLoopsPerSecond == 0U || pLow->NsLoopsPerSecond == 0U ||
-		pHigh->UsLoopsPerSecond == 0U || pHigh->NsLoopsPerSecond == 0U)
-	{
-		return false;
-	}
-
-	if (CpuHz <= pLow->CpuHz)
-	{
-		SystemMicroSecLoopCnt = pLow->UsLoopsPerSecond;
-		SystemnsDelayFactor = pLow->NsLoopsPerSecond;
-
-		return true;
-	}
-
-	if (CpuHz >= pHigh->CpuHz)
-	{
-		SystemMicroSecLoopCnt = pHigh->UsLoopsPerSecond;
-		SystemnsDelayFactor = pHigh->NsLoopsPerSecond;
-
-		return true;
-	}
-
-	span = pHigh->CpuHz - pLow->CpuHz;
-	lowWeight = pHigh->CpuHz - CpuHz;
-	highWeight = CpuHz - pLow->CpuHz;
-
-	us = ((uint64_t)pLow->UsLoopsPerSecond * lowWeight +
-		(uint64_t)pHigh->UsLoopsPerSecond * highWeight + span / 2U) / span;
-	ns = ((uint64_t)pLow->NsLoopsPerSecond * lowWeight +
-		(uint64_t)pHigh->NsLoopsPerSecond * highWeight + span / 2U) / span;
-
-	if (us == 0U || ns == 0U || us > UINT32_MAX || ns > UINT32_MAX)
-	{
-		return false;
-	}
-
-	SystemMicroSecLoopCnt = (uint32_t)us;
-	SystemnsDelayFactor = (uint32_t)ns;
-
-	return true;
-}
-
 // Generic factor calculation using a target's existing loop divisors in
 // cycles-per-iteration * 1000000. Preserve their previous calibration
 // constants exactly, and call after every successful CPU frequency change.
@@ -174,8 +89,21 @@ static inline bool ArmDelayClockSetDivisors(uint32_t CpuHz,
 		return false;
 	}
 
-	usFactor = ((uint64_t)CpuHz * 1000000ULL) / UsDivisor;
-	nsFactor = ((uint64_t)CpuHz * 1000000ULL) / NsDivisor;
+#ifdef __GNUC__
+	// Integral cycles per loop cancel the common million in both ratios.
+	if (__builtin_constant_p(UsDivisor) && __builtin_constant_p(NsDivisor) &&
+		UsDivisor % 1000000U == 0U && NsDivisor % 1000000U == 0U &&
+		UsDivisor / 1000000U <= UINT32_MAX && NsDivisor / 1000000U <= UINT32_MAX)
+	{
+		usFactor = CpuHz / (uint32_t)(UsDivisor / 1000000U);
+		nsFactor = CpuHz / (uint32_t)(NsDivisor / 1000000U);
+	}
+	else
+#endif
+	{
+		usFactor = ((uint64_t)CpuHz * 1000000ULL) / UsDivisor;
+		nsFactor = ((uint64_t)CpuHz * 1000000ULL) / NsDivisor;
+	}
 
 	if (usFactor == 0U || nsFactor == 0U ||
 		usFactor > UINT32_MAX || nsFactor > UINT32_MAX)
@@ -347,6 +275,30 @@ static inline bool DelayCalibrationFromTimer(uint32_t CpuHz,
 	pPoint->UsLoopsPerSecond = (uint32_t)us;
 	pPoint->NsLoopsPerSecond = (uint32_t)ns;
 	pPoint->Measured = true;
+	return true;
+}
+
+// Set the delay factors of a point, to time the delays with them. The
+// factors in use are saved in pOld first when it is not NULL, a later call
+// with them puts them back.
+static inline bool DelayCalibrationApply(const DelayCalibrationPoint_t *pPoint,
+	DelayCalibrationPoint_t *pOld)
+{
+	if (pPoint == NULL || pPoint->UsLoopsPerSecond == 0U ||
+		pPoint->NsLoopsPerSecond == 0U)
+	{
+		return false;
+	}
+	if (pOld != NULL)
+	{
+		pOld->CpuHz = SystemCoreClockGet();
+		pOld->UsLoopsPerSecond = SystemMicroSecLoopCnt;
+		pOld->NsLoopsPerSecond = SystemnsDelayFactor;
+		pOld->Measured = false;
+	}
+	SystemMicroSecLoopCnt = pPoint->UsLoopsPerSecond;
+	SystemnsDelayFactor = pPoint->NsLoopsPerSecond;
+
 	return true;
 }
 

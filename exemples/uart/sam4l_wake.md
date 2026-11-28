@@ -33,9 +33,9 @@ from RC32K or OSC32K. The sender must wait for application
 acknowledgement before sending more data. PICOUART holds only one
 received byte during the transition.
 
-## PowerOffDemo profile
+## CorePowerTest profile
 
-Set `POWER_DEMO_UART_WAKE=1` in SAM4LCxC or SAM4LSxC PowerOffDemo
+Set `POWER_DEMO_UART_WAKE=1` in SAM4LCxC or SAM4LSxC CorePowerTest
 `src/board.h` (or the application project symbols). The SAM4LCxC board.h selects PICOUART wake by default on the 0.14
 review branch. Override `POWER_DEMO_UART_WAKE=0` to return to its
 previously validated EIC button-wake profile. Rebuild the matching

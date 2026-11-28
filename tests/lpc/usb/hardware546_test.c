@@ -47,7 +47,7 @@ SOFTWARE.
 #define TEST_VD5_READY (1U << 9)
 
 uint32_t g_IrqMasked;
-McuOsc_t g_McuOsc = {{OSC_TYPE_XTAL, 12000000, 20, 0}, {OSC_TYPE_RC, 32768, 20, 0}, true};
+McuOsc_t g_McuOsc = {{OSC_TYPE_XTAL, 12000000, 20, 0}, {OSC_TYPE_RC, 32768, 20, 0}, true, 0};
 static uint32_t s_Priority;
 static bool s_Enabled;
 // NVIC state of the other controller

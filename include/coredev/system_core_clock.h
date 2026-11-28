@@ -242,6 +242,11 @@ SYSTEM_POWER_MODE SystemPowerModeGet(void);
  * Selects the MCU core clock source. This does not enable or disable
  * optional shared oscillators or adjust their reference counts.
  *
+ * Startup function of the MCU port, not an application or driver service.
+ * The clock sources are those of g_McuOsc. Ports without a caller in their
+ * own startup do not define it. To be removed from this header once the
+ * remaining ports keep it private.
+ *
  * @param	ClkSrc : Clock source selection
  *						OSC_TYPE_RC - Internal RC
  *						OSC_TYPE_XTAL - External crystal
@@ -255,6 +260,9 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
 
 /**
  * @brief	Select low frequency clock oscillator type
+ *
+ * Startup function of the MCU port, not an application or driver service.
+ * See SystemCoreClockSelect.
  *
  * @param	ClkSrc : Clock source selection
  *						OSC_TYPE_RC - Internal RC
@@ -302,10 +310,33 @@ bool SystemLowFreqClockEnable(void);
 /** @brief Disable one shared low-frequency clock requirement. */
 void SystemLowFreqClockDisable(void);
 
+/**
+ * @brief Time the last SystemHighFreqClockEnable waited for the oscillator.
+ *
+ * The clock code measures the wait while it starts the oscillator. A call
+ * that found the oscillator running gives 0, as does a port that starts its
+ * oscillators once in SystemInit. A delay that starts the clock subtracts
+ * this time, so the call lasts the requested time.
+ *
+ * @return Wait in microseconds.
+ */
+uint32_t SystemHighFreqClockStartTime(void);
+
+/**
+ * @brief Time the last SystemLowFreqClockEnable waited for the oscillator.
+ *
+ * As SystemHighFreqClockStartTime, for the low-frequency clock.
+ *
+ * @return Wait in microseconds.
+ */
+uint32_t SystemLowFreqClockStartTime(void);
+
 /** @brief Calibrate the configured high-frequency RC clock.
  *
- * Called by a higher-level subsystem when it needs recalibration.
- * This operation does not own a timer or start periodic work.
+ * For periodic calibration of the RC oscillator. One call runs one
+ * calibration. The application or subsystem that needs it handles the
+ * period and calls this function each time. This operation does not own a
+ * timer or start periodic work.
  * Call from thread/foreground context, never a timer interrupt callback.
  *
  * @return true if calibration completed, false when unavailable or failed.
@@ -315,9 +346,9 @@ bool SystemHighFreqClockCalibrate(void);
 /** @brief Calibrate the configured low-frequency RC clock.
  *
  * The LF clock must already be enabled. The implementation preserves its
- * existing users and does not take ownership of their timers. A higher-level
- * subsystem chooses the calibration interval and calls from foreground
- * context, not from an interrupt.
+ * existing users and does not take ownership of their timers. One call runs
+ * one calibration. The application or subsystem that needs it handles the
+ * period and calls from foreground context, not from an interrupt.
  *
  * @return true if calibration completed, false when unavailable or failed.
  */
@@ -329,6 +360,46 @@ bool SystemLowFreqClockCalibrate(void);
  * @return	Core frequency in Hz.
  */
 uint32_t SystemCoreClockGet(void);
+
+/**
+ * @brief	Delay factor at a CPU frequency from two calibration points.
+ *
+ * A delay factor measured at the lowest and at the highest CPU frequency
+ * gives the factor at any frequency between them, linear, without a
+ * calibration at each frequency. Outside the two points, the factor of the
+ * nearest one is scaled to CpuHz: the measured CPU cycles per loop are kept.
+ * The port stores the result in its delay factor.
+ *
+ * @param	CpuHz      : CPU frequency the factor is for
+ * @param	LowHz      : CPU frequency of the low calibration point
+ * @param	LowFactor  : Delay factor measured at LowHz
+ * @param	HighHz     : CPU frequency of the high calibration point
+ * @param	HighFactor : Delay factor measured at HighHz
+ *
+ * @return	Delay factor at CpuHz.
+ */
+static inline uint32_t CalcDelayFactor(uint32_t CpuHz, uint32_t LowHz,
+	uint32_t LowFactor, uint32_t HighHz, uint32_t HighFactor)
+{
+	uint32_t span;
+
+	if (CpuHz <= LowHz || HighHz <= LowHz)
+	{
+		if (LowHz == 0U)
+		{
+			return LowFactor;
+		}
+		return (uint32_t)(((uint64_t)LowFactor * CpuHz + LowHz / 2U) / LowHz);
+	}
+	if (CpuHz >= HighHz)
+	{
+		return (uint32_t)(((uint64_t)HighFactor * CpuHz + HighHz / 2U) / HighHz);
+	}
+	span = HighHz - LowHz;
+
+	return (uint32_t)(((uint64_t)LowFactor * (HighHz - CpuHz) +
+		(uint64_t)HighFactor * (CpuHz - LowHz) + span / 2U) / span);
+}
 
 /**
  * @brief	Get peripheral clock frequency (PCLK)
@@ -354,8 +425,7 @@ uint32_t SystemPeriphClockGet(int Idx);
  * 				   have more than 1 peripheral clock settings.
  * @param	Freq : Clock frequency in Hz.
  *
- * @return	Actual frequency set in Hz.
- * 			0 - Failed
+ * @return	Actual peripheral clock frequency in Hz, the best match available.
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq);
 
@@ -420,16 +490,14 @@ void SystemPowerOff(void);
 /**
  * @brief Enter a low-power state that resumes execution on wakeup.
  *
- * MCU-specific implementation uses the deepest interrupt-resumable sleep
- * mode supported by the port. Wake sources must be configured and enabled
- * before this call. When a wake event is serviced, execution resumes after
- * this function. RAM and stack remain valid.
+ * Before calling, the application prepares its peripherals through their
+ * drivers, waits for any transfers that must finish, and configures the
+ * intended wake sources. The application decides when it is ready to sleep.
  *
- * Peripheral drivers own their clock and power resources. Supported drivers
- * prepare and restore sleep-related hardware from the target implementation.
- * Applications configure wake sources and finish outstanding transfers, not
- * target-specific clock or peripheral restoration. This function does not
- * alter reset reasons or select wake sources.
+ * The MCU port handles sleep entry and clocks. Execution resumes after this
+ * call with RAM and stack intact. The wake sources are the device interrupts
+ * the application enabled through the device drivers, a pin interrupt of
+ * coredev/iopincfg.h for a wake pin. Reset reasons are preserved.
  *
  * Unlike SystemPowerOff, this operation never requests a reset-on-wake
  * state. It is optional on MCUs without a supported resumable sleep mode.
@@ -437,37 +505,13 @@ void SystemPowerOff(void);
 void SystemSleep(void);
 
 /**
- * @brief Sleep for a number of seconds using a temporary low-frequency timer.
+ * @brief	Wakeup pin of ports not yet converted
  *
- * The entire elapsed call (timer setup, sleeping, wake and release) is the
- * requested duration. No CPU busy-wait loop, DWT or SysTick is used.
- * Unsupported targets, interrupt context, masked interrupts or unavailable
- * timers return false. Zero seconds succeeds immediately.
- *
- * Implemented initially for the Nordic nRF52 and both nRF5340 cores.
- * CoreClockTest can measure an MCU-specific overhead correction; normal
- * operation never performs calibration.
- */
-bool sDelay(uint32_t Seconds);
-
-/**
- * @brief	Low-power wakeup pin
- *
- * Selects a pin that wakes the MCU from its implemented low-power state
- * (SystemPowerOff or SystemSleep). Configure the pin as an input with
- * IOPinConfig first. Where the MCU wakes up only on dedicated
- * pins or on one level, other pins and levels are refused. Where the pin
- * configuration is lost in power off, its pull resistor is kept if the MCU
- * can.
- *
- * @param	PortNo	: Port number
- * @param	PinNo	: Pin number
- * @param	Sense	: IOPINSENSE of coredev/iopincfg.h
- * 					  IOPINSENSE_LOW_TRANSITION - wake up when the pin goes low
- * 					  IOPINSENSE_HIGH_TRANSITION - wake up when the pin goes high
- * 					  IOPINSENSE_DISABLE - the pin no longer wakes the MCU
- *
- * @return	true - success, false - the pin or the level cannot wake the MCU
+ * Not an application service. The application makes a pin wake the MCU by
+ * enabling its interrupt with the pin driver, IOPinEnableInterrupt or
+ * IOPinAllocateInterrupt of coredev/iopincfg.h. This declaration only keeps
+ * the ports that still define the function building. It is removed with the
+ * last of them.
  */
 bool SystemWakePin(int PortNo, int PinNo, int Sense);
 

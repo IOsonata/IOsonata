@@ -28,7 +28,7 @@ initialization, RX drops, error clearing, and partial IRQ allocation cleanup.
 The baud-rate check uses an independent exhaustive BRR/MDDR calculation.
 
 Build and link Blinky, TimerDemo, UartPrbsTxTest, PulseTrain, UartRetargetDemo,
-I2CMasterDemo, SPIMasterDemo and PowerOffDemo for Cortex-M0+ with the normal linker script,
+I2CMasterDemo, SPIMasterDemo and CorePowerTest for Cortex-M0+ with the normal linker script,
 then inspect the resulting ELF sections and option bytes:
 
 ```sh
@@ -306,7 +306,7 @@ Missing target/common linker-script search paths in Blinky, DfuBoot,
 UartPrbsTxTest and UartSlipPrbsRxTest were corrected.
 
 The example image checker also covers all nine timer selections and the new
-PowerOffDemo for each package. Register-model checks cover Sleep/Standby
+CorePowerTest for each package. Register-model checks cover Sleep/Standby
 selection, all ten external IRQ wake mappings, reset reason caching, SRAM-bank
 settings, and interrupt/protection restoration. These are compiler and model
 checks, not Eclipse IDE execution or hardware results.
@@ -320,7 +320,7 @@ The power register model was also run at `-O0` and `-Os`, both with and without
 `CHIP_VERSION_WS1`, covering Boost exit, debug refusal, transition failure and
 the WS1 CCC requirement. This verifies register sequences, not physical wake.
 
-PowerOffDemo uses P4.10 (IRQ2/IRQ2-DS, SW3 on EK-RE01). The six managed
+CorePowerTest uses P4.10 (IRQ2/IRQ2-DS, SW3 on EK-RE01). The six managed
 application configurations compile/link in their default resumable mode and
 with `POWER_DEMO_RESUME_WAKE=0` for reset-on-wake Deep Standby. Define that
 option in the application compiler settings; the board header supplies the

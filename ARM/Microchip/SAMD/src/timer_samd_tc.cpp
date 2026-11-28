@@ -122,6 +122,8 @@ bool SamdTcSetup(SamdTimerData_t *pData)
 bool SamdTcRun(SamdTimerData_t *pData, bool bRun)
 {
 	tc_count16_registers_t *reg = (tc_count16_registers_t *)pData->pReg;
+	uint32_t count;
+	bool stopping = !bRun && (reg->TC_CTRLA & TC_CTRLA_ENABLE_Msk) != 0U;
 
 	if (bRun)
 	{
@@ -132,13 +134,28 @@ bool SamdTcRun(SamdTimerData_t *pData, bool bRun)
 		reg->TC_INTENCLR = TC_INTENCLR_OVF_Msk;
 	}
 
+	if (stopping && !SamdTcRead(pData, &count))
+	{
+		return false;
+	}
 	if (!SamdTcSync(reg))
 	{
 		return false;
 	}
 	reg->TC_CTRLA = SamdTcCtrla(pData, bRun);
 
-	return SamdTcSync(reg);
+	if (!SamdTcSync(reg))
+	{
+		return false;
+	}
+	if (stopping)
+	{
+		// Preload COUNT while disabled so Enable resumes at the saved tick.
+		reg->TC_COUNT = (uint16_t)count;
+		return SamdTcSync(reg);
+	}
+
+	return true;
 }
 
 bool SamdTcReset(SamdTimerData_t *pData)

@@ -57,9 +57,11 @@ __WEAK McuOsc_t g_McuOsc = {
 	0
 };
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated delay-loop iterations per second, defined in ResetEntry.c
 extern uint32_t SystemMicroSecLoopCnt;
 
+static uint32_t s_HfUsers;
+static SYSTEM_POWER_MODE s_PowerMode;
 uint32_t SystemCoreClock = SYSTEM_CORE_CLOCK;
 uint32_t SystemnsDelayFactor = 1000000UL;
 static bool Sam4eClockWait(uint32_t Mask, uint32_t Value)
@@ -226,10 +228,32 @@ static bool Sam4eClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 {
+	uint32_t state;
 	bool result;
 
+	if (__get_IPSR() != 0U)
+	{
+		return false;
+	}
+	state = __get_PRIMASK();
+
+	__disable_irq();
+	if (ClkSrc == GetHighFreqOscType() && Freq == GetHighFreqOscFreq() &&
+		(SAM4E_PMC->PMC_MCKR & PMC_MCKR_CSS_Msk) == PMC_MCKR_CSS_PLLA_CLK &&
+		(SAM4E_PMC->PMC_SR & (PMC_SR_LOCKA | PMC_SR_MCKRDY)) == (PMC_SR_LOCKA | PMC_SR_MCKRDY))
+	{
+		__set_PRIMASK(state);
+		return true;
+	}
+	if (s_HfUsers || s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER ||
+		SAM4E_PMC->PMC_PCSR0 != 0U || SAM4E_PMC->PMC_PCSR1 != 0U)
+	{
+		__set_PRIMASK(state);
+		return false;
+	}
 	result = Sam4eClockSelect(ClkSrc, Freq);
 	SystemCoreClockUpdate();
+	__set_PRIMASK(state);
 	return result;
 }
 
@@ -239,7 +263,8 @@ void SystemInit(void)
 	(void)SystemResetReason();
 	SystemOscInit();
 	SAM4E_WDT->WDT_MR = WDT_MR_WDDIS;
-	(void)SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq);
+	(void)Sam4eClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq);
+	SystemCoreClockUpdate();
 
 #if (__FPU_USED == 1)
 	SCB->CPACR |= (3UL << 20) | (3UL << 22);
@@ -363,3 +388,101 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 	return SystemPeriphClockGet(Idx);
 }
 
+
+bool SystemHighFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	ready = s_HfUsers != UINT32_MAX && (SystemCoreClockGet() != 0U);
+	if (ready)
+	{
+		s_HfUsers++;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (s_HfUsers != 0U)
+	{
+		s_HfUsers--;
+	}
+	__set_PRIMASK(state);
+}
+
+bool SystemHighFreqClockCalibrate(void)
+{
+	return false;
+}
+
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}
+
+static bool Sam4eSetRunningMode(SYSTEM_POWER_MODE Mode)
+{
+	static uint32_t performance;
+	uint32_t previous = SAM4E_PMC->PMC_MCKR;
+	uint32_t divider;
+
+	if (s_HfUsers || SAM4E_PMC->PMC_PCSR0 != 0U || SAM4E_PMC->PMC_PCSR1 != 0U ||
+		(SAM4E_PMC->PMC_SCSR & (PMC_SCSR_UDP | PMC_SCSR_PCK0 | PMC_SCSR_PCK1 | PMC_SCSR_PCK2)) ||
+		(SAM4E_PMC->PMC_WPMR & PMC_WPMR_WPEN))
+	{
+		return false;
+	}
+	divider = performance;
+	if (Mode == SYSTEM_POWER_MODE_LOW_POWER)
+	{
+		performance = previous & PMC_MCKR_PRES_Msk;
+		if (performance >= PMC_MCKR_PRES_CLK_64)
+		{
+			return false;
+		}
+		divider = performance + PMC_MCKR_PRES_CLK_2;
+	}
+	SAM4E_PMC->PMC_MCKR = (previous & ~PMC_MCKR_PRES_Msk) | divider;
+	if (!Sam4eClockWait(PMC_SR_MCKRDY, PMC_SR_MCKRDY) ||
+		(SAM4E_PMC->PMC_MCKR & PMC_MCKR_PRES_Msk) != divider)
+	{
+		SAM4E_PMC->PMC_MCKR = previous;
+		(void)Sam4eClockWait(PMC_SR_MCKRDY, PMC_SR_MCKRDY);
+		SystemCoreClockUpdate();
+		return false;
+	}
+	SystemCoreClockUpdate();
+	s_PowerMode = Mode;
+	return true;
+}
+
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t state;
+	bool result;
+
+	if (__get_IPSR() != 0U ||
+		(Mode != SYSTEM_POWER_MODE_LOW_POWER && Mode != SYSTEM_POWER_MODE_PERFORMANCE))
+	{
+		return false;
+	}
+	state = __get_PRIMASK();
+	__disable_irq();
+	result = Mode == s_PowerMode || Sam4eSetRunningMode(Mode);
+	__set_PRIMASK(state);
+	return result;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return s_PowerMode;
+}

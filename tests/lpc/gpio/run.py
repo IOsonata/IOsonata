@@ -30,7 +30,7 @@ for compiler, standard in [('gcc', '-std=gnu11'), ('g++', '-std=c++17')]:
                             '-fsanitize=undefined', '-fno-sanitize-recover=all',
                             *['-I' + str(root / p) for p in includes],
                             str(root / 'tests/lpc/gpio/lpc17_control_test.c'),
-                            str(root / 'ARM/NXP/LPC17xx/src/iopincfg.c'),
+                            str(root / 'ARM/NXP/LPC17xx/src/iopincfg_lpc17xx.c'),
                             '-o', exe], check=True)
             subprocess.run([exe], check=True)
 

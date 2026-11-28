@@ -41,6 +41,9 @@ EXAMPLES = {
     # host model does not have.
     'NvmDemo': ('exemples/storage/data_nvm_demo.cpp', 0),
     'SPIMasterSlave': ('exemples/spi/spi_master_slave.cpp', 0),
+    # The generic clock and power validation examples, run on hardware
+    'CoreClockTest': ('exemples/misc/core_clock_test.cpp', 0),
+    'CorePowerTest': ('exemples/misc/core_power_test.cpp', 0),
 }
 # Sources linked from an example's own src folder besides board.h, with the
 # reason. None at present.

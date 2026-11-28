@@ -18,6 +18,8 @@ Copyright (c) 2026 I-SYST inc. All rights reserved.
 #include "component/supc.h"
 #include "component/wdt.h"
 
+#include "idelay.h"
+
 // Supplied by ARM startup in firmware builds.
 uint32_t SystemMicroSecLoopCnt = 1000000UL;
 
@@ -95,6 +97,8 @@ static struct {
 	MckRegister PMC_MCKR;
 	StatusRegister PMC_SR;
 	uint32_t PMC_SCSR;
+	uint32_t PMC_PCSR0;
+	uint32_t PMC_PCSR1;
 	uint32_t PMC_WPMR;
 	uint32_t PMC_USB;
 } s_Pmc;
@@ -105,6 +109,9 @@ static Sam4eWdt s_Wdt;
 #define SAM4E_EFC (&s_Efc)
 #define SAM4E_SUPC (&s_Supc)
 #define SAM4E_WDT (&s_Wdt)
+#undef __I
+#undef __WEAK
+#include "core_cm4.h"
 #include "../../ARM/Microchip/SAM4E/src/system_sam4e.c"
 uint32_t SystemResetReason(void) { return 0; }
 void SystemOscInit(void) {}
@@ -141,7 +148,18 @@ int main(void)
 	assert(s_Efc.EEFC_FMR & EEFC_FMR_FRDY);
 	assert(s_Wdt.WDT_MR == WDT_MR_WDDIS);
 	// A second selection must leave PLLA before modifying its source.
+	assert(SystemHighFreqClockEnable());
+	assert(SystemHighFreqClockEnable());
+	assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 16000000));
+	SystemHighFreqClockDisable();
+	assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 16000000));
+	SystemHighFreqClockDisable();
+	SystemHighFreqClockDisable();
 	assert(SystemCoreClockSelect(OSC_TYPE_XTAL, 16000000));
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+	assert(SystemCoreClockGet() == 60000000U);
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+	assert(SystemCoreClockGet() == 120000000U);
 	assert(SystemCoreClock == 120000000);
 	for (i = 0; i < sizeof(requests) / sizeof(requests[0]); i++)
 	{

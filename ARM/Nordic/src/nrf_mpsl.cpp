@@ -52,9 +52,15 @@ SOFTWARE.
 #if defined(NRF52_SERIES)
 #include "mpsl_clock.h"
 
+#if defined(NRFX_LFRC_CAL_LOG)
+#include "app_evt_handler.h"
+#include "syslog.h"
+#endif
+
 // The nRF52 SDC library accepts external HFCLK and LFCLK control.
-// The MCU clock implementation calibrates LFRC using HFXO and the
-// shared POWER_CLOCK interrupt. LFXO does not require calibration.
+// The MCU clock code runs one LFRC calibration per request, using HFXO and
+// the shared POWER_CLOCK interrupt. The period is handled here, see
+// MpslLfCalibrationIrq. LFXO does not require calibration.
 static void MpslExternalLfCalibrationStart(void)
 {
 	nRFxMpslLfclkCalibrationStart();
@@ -63,6 +69,45 @@ static void MpslExternalLfCalibrationStart(void)
 static bool MpslExternalLfCalibrationIsEnabled(void)
 {
 	return nRFxMpslLfclkCalibrationIsEnabled();
+}
+
+#if defined(NRFX_LFRC_CAL_LOG)
+// Report calibration in the foreground. Never format or transmit UART data
+// from the POWER_CLOCK interrupt handler.
+static void MpslLfCalibrationLog(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+	SysLogPrintf(SysLogGet(), "LFRC calibration: completed=%lu\r\n",
+		(unsigned long)nRFxMpslLfclkCalibrationCount());
+}
+#endif
+
+// Clock interrupt: periodic LFRC calibration for the radio. MPSL asks for
+// the first calibration and for more after temperature changes. The repeat
+// every four seconds runs on the calibration interval timer of CLOCK.
+static void MpslLfCalibrationIrq(void)
+{
+	if (!nRFxMpslExternalClockGet())
+	{
+		return;
+	}
+	if (NRF_CLOCK->EVENTS_CTTO != 0U)
+	{
+		NRF_CLOCK->EVENTS_CTTO = 0U;
+		nRFxMpslLfclkCalibrationStart();
+	}
+	if (nRFxMpslClockIrq())
+	{
+#if defined(NRFX_LFRC_CAL_LOG)
+		(void)AppEvtHandlerQue(0U, nullptr, MpslLfCalibrationLog);
+#endif
+		// CTIV is specified in 0.25-second units on nRF52.
+		NRF_CLOCK->CTIV = 16U;
+		NRF_CLOCK->EVENTS_CTTO = 0U;
+		NRF_CLOCK->INTENSET = CLOCK_INTENSET_CTTO_Msk;
+		NRF_CLOCK->TASKS_CTSTART = 1U;
+	}
 }
 
 static mpsl_clock_lfclk_ctrl_source_t s_MpslExternalLf = {
@@ -558,7 +603,7 @@ bool MpslInit(void)
 
 #if defined(NRF52_SERIES)
 	// LFRC needs an initial calibration after MPSL starts. The clock
-	// interrupt completes it and the calibration timer schedules repeats.
+	// interrupt completes it and MpslLfCalibrationIrq schedules repeats.
 	if (externalClock && lfosc->Type == OSC_TYPE_RC)
 	{
 		nRFxMpslLfclkCalibrationStart();
@@ -665,7 +710,7 @@ void POWER_CLOCK_IRQHandler()
 {
 	DEBUG_PRINTF("MPSL_IRQ_CLOCK_Handler\r\n");
 #if defined(NRF52_SERIES)
-	nRFxMpslClockIrq();
+	MpslLfCalibrationIrq();
 #endif
 	MPSL_IRQ_CLOCK_Handler();
 }

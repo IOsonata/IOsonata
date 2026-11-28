@@ -128,7 +128,7 @@ by comparing the current count with each trigger's scheduled count.
 From the repository root:
 
 ```sh
-c++ -std=c++20 -O2 -IARM/Microchip/SAM4L/include -Iinclude \
+c++ -std=c++20 -O2 -IARM/Microchip/SAM4L/include -Iinclude -IARM/include \
   tests/sam4l/timer_test.cpp -o /tmp/sam4l_timer_test
 /tmp/sam4l_timer_test
 python3 tests/sam4l/timer_build_test.py --toolchain-prefix arm-none-eabi-
@@ -166,3 +166,116 @@ list and library defines come from the managed library project. The check
 compiles selected library sources, not the full library or IOcomposer projects.
 TaktOS is optional; without its path, UsbCdcLoopbackTaktOS is reported as
 skipped. These builds do not establish hardware validation.
+
+## I2C master interrupt check
+
+```sh
+python3 tests/sam4l/run_i2c_irq.py [--cxx arm-none-eabi-g++]
+```
+
+`i2c_irq_fixture.cpp` builds the production `i2c_sam4l.cpp` and
+`device_intrf.cpp` for the SAM4L at `-O1` and `-Os`; `run_i2c_irq.py` runs it
+in an Arm emulator (Python packages `unicorn` and `pyelftools`) with a TWIM and
+PDCA register model: a command, THR, RHR, the status, interrupt and clear
+registers, and the PDCA moving bytes to THR and from RHR. A master transfer is
+synchronous and waits; each time the firmware has run for a while without
+returning, the model takes the next TWIM or PDCA step and runs the TWIM
+interrupt handler when an enabled status flag is set.
+
+It covers, with interrupt and with interrupt and PDCA: transmit and receive
+from the caller's buffer over one and several commands (up to 600 bytes),
+with START, STOP and ACKLAST on the right commands; a 10-bit read with its
+address command; the register read of `DeviceIntrfRead()` with the read queued
+in NCMDR; the combined write of `DeviceIntrfWrite()`; an address NACK followed
+by a new transfer; a status flag whose interrupt is held off, which does not
+end the wait, the transfer ends on its time limit; no event reported by the
+master, and the interrupts masked after each transfer. It also runs polled
+transfers. Bus timing is not modelled; this is not hardware validation.
+
+## SPI master interrupt check
+
+```sh
+python3 tests/sam4l/run_spi_irq.py [--cxx arm-none-eabi-g++]
+```
+
+`spi_irq_fixture.cpp` builds the production `spi_sam4l.cpp` and
+`device_intrf.cpp` for the SAM4L at `-O1` and `-Os`; `run_spi_irq.py` runs it
+in an Arm emulator with a SPI and PDCA register model: TDR, RDR, the status
+with its read-to-clear error flags, the interrupt registers, the two PDCA
+channels moving halfwords to TDR and from RDR, and the NVIC enable registers.
+A master transfer is synchronous and waits; each time the firmware has run
+for a while without returning, the model takes its next steps and runs the
+handler of an enabled line with an enabled flag set, again while the line
+stays pending.
+
+It covers the four master modes (polled, interrupt, PDCA, PDCA with
+interrupt): transmit up to 300 bytes over several PDCA chunks, receive, the
+command and read of `DeviceIntrfRead()`, 16-bit words, a receive overflow in
+the second PDCA chunk, which ends the transfer with the bytes received; in
+interrupt mode a flag whose interrupt is held off does not end the wait, the
+transfer ends on its time limit; no event reported by the master, and the
+interrupts masked after each transfer. Each of 9 changes to the waits and the
+handlers makes the check fail. Bus timing is not modelled; this is not
+hardware validation.
+
+## I2C slave check
+
+```sh
+python3 tests/sam4l/run_i2c_slave.py [--cxx arm-none-eabi-g++]
+```
+
+`i2c_slave_fixture.cpp` builds the production `i2c_sam4l.cpp` for the SAM4L
+at `-O1` and `-Os` with the register memory event handler of the
+I2CMasterSlave example; `run_i2c_slave.py` runs it in an Arm emulator with a
+TWIS and PDCA register model that plays the bus master, one bus step at a
+time, and runs the TWIS or PDCA receive handler when an enabled flag is set.
+The transmit holding register keeps its byte across transfers, and a PDCA
+transmit channel loads it as soon as it is empty, while the byte before is
+still on the bus.
+
+It covers the slave in interrupt and in DMA mode: a register write, reads of
+1, 2 and 8 bytes at the same offset, reads without a command that continue
+after the last one, reads of 15 to 65 bytes each followed by a read, the data
+on the bus, the count of each completion and no byte left in the transmit
+holding register after a read. With the earlier slave transmit DMA it gives
+the bytes of the hardware run below. Bus timing is not modelled; this is not
+hardware validation.
+
+## Hardware runs of the synchronous masters
+
+The I2C and SPI hardware validation of 2026-10-08 was made with the earlier
+master drivers, which completed an interrupt transfer from the handler. With
+the synchronous masters, on SAM4L8 Xplained Pro (SAM4LC8C), 2026-11-26:
+ClockDisplayDemo with OLED1 on EXT2 works with the SPI master in interrupt and
+DMA mode (`DISPLAY_SPI_INT_ENABLE` and `DISPLAY_SPI_DMA_ENABLE` set), as
+reported by the maintainer. Not run on hardware yet: the SPI master in
+polling, interrupt only and DMA only mode, and SPILoopback.
+
+I2CMasterSlave, TWIM3 master to TWIS1 slave on EXT4, 100 kHz, 2026-11-26,
+as reported by the maintainer: the master in polling, interrupt, DMA and DMA
+with interrupt mode passes against the slave in interrupt mode (register
+write and reads of 1, 2 and 8 bytes, receives without a command, reads of 15
+to 65 bytes, writes of 0 to 254 bytes, a refused address and a read after
+it). Against the slave in DMA mode each of the four master modes fails the
+same way: the first read is right, and each later read starts with one extra
+byte, the byte after the last one the previous read took, the data following
+it. The slave transmit DMA loaded the next byte into the TWIS transmit holding
+register while the byte before was on the bus; when the master refused the
+last byte, that byte stayed there and went out first in the next read, and
+the completion count included it. The October I2CMasterSlave did one register
+read and one read continuing from it, where the two errors cancel. The slave
+now transmits from the interrupt in both modes and keeps the DMA for the
+bytes received; `run_i2c_slave.py` gives the failing bytes with the earlier
+code and passes with the new one. With it, 2026-11-27, as reported by the
+maintainer: all eight master and slave combinations pass, the slave in DMA
+mode included. I2CMasterSlave now starts each output line with the time since
+start, from timer DevNo 0 (AST) unless board.h sets `TIMER_DEVNO`, to compare
+the time each test takes between the combinations. In the first stamped run
+the four combinations with the master interrupt on took 57 s against 8.7 s:
+the example still waited for a master completion event after the command
+only write and the refused address, which return 0, and the wait ran to its
+count, 24 s each time. The masters send no event; the example now takes the
+returned count. Run of 2026-11-27 after that change, Debug build with the
+output by semihosting, as reported by the maintainer: all eight pass, each
+in 8.8 to 9.0 s, no gap between two lines over 0.42 s. The 0.2 s between
+lines is the semihosting output.

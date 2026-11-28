@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	board.h
 
-@brief	Board definitions for nRF5340 Audio DK and standard DK PowerOffDemo
+@brief	Board definitions for nRF5340 Audio DK and standard DK CorePowerTest
 
 The Audio DK (PCA10121) uses UARTE0, P1.04 RX, P1.05 TX and
 PLAY/PAUSE button P0.04. The standard DK (PCA10095) uses

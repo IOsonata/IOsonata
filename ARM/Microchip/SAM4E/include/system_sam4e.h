@@ -56,10 +56,11 @@ void SystemInit(void);
 void SystemCoreClockUpdate(void);
 
 
+extern uint32_t SystemCoreClock; // System Clock Frequency (Core Clock) in Hz
+
 #ifdef __cplusplus
 }
 #endif
 
-extern uint32_t SystemCoreClock; // System Clock Frequency (Core Clock) in Hz
 
 #endif // __SYSTEM_SAM4E_H__

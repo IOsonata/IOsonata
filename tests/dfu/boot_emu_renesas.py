@@ -281,8 +281,26 @@ def re01_w(uc, access, addr, size, value, ud):
             st["err"] |= 1 << 14
             fc["state"] = "idle"
 
+# SYSTEM clock registers of RE01_1500KB.h. Reset: MOCO selected, HOCO, the
+# main oscillator and the PLL stopped. A running oscillator reads stable in
+# OSCSF. The power mode stays ALLPWON: a Boost request is not granted.
+SYS = 0x4001E000
+SCKSCR, PLLCR, MOSCCR, HOCOCR, MOCOCR = SYS + 0x26, SYS + 0x2A, SYS + 0x32, SYS + 0x36, SYS + 0x38
+OSCSF, PWSTF, SOSCCR, LOCOCR = SYS + 0x3C, SYS + 0x421, SYS + 0x480, SYS + 0x490
+
+def re01_clock_reset():
+    for addr, val in ((SCKSCR, 1), (PLLCR, 1), (MOSCCR, 1), (HOCOCR, 1), (MOCOCR, 0),
+                      (SOSCCR, 1), (LOCOCR, 0)):
+        uc.mem_write(addr, bytes([val]))
+
 def re01_r(uc, access, addr, size, value, ud):
-    if addr == FSTATR:
+    if addr == OSCSF:
+        on = lambda reg: uc.mem_read(reg, 1)[0] == 0
+        uc.mem_write(OSCSF, bytes([(1 if on(HOCOCR) else 0) | (8 if on(MOSCCR) else 0) |
+                                   (0x20 if on(PLLCR) else 0)]))
+    elif addr == PWSTF:
+        uc.mem_write(PWSTF, bytes([1]))
+    elif addr == FSTATR:
         dbfull = fc["inject"] == "dbfull" and fc["state"] == "data"
         w32(FSTATR, (0 if fc["busy"] else 0x8000) | st["err"] |
             (0x400 if dbfull else 0))
@@ -437,6 +455,7 @@ def run_from_reset():
         uc.reg_write(UC_RISCV_REG_MSTATUS, 0)
         uc.emu_start(sym["__dfu_boot_start"], app_entry, timeout=1_800_000_000)
     else:
+        re01_clock_reset()
         sp, rpc = struct.unpack("<II", uc.mem_read(sym["__dfu_boot_start"], 8))
         uc.reg_write(UC_ARM_REG_SP, sp)
         uc.reg_write(UC_ARM_REG_PRIMASK, 0)

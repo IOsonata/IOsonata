@@ -42,7 +42,9 @@ extern "C" {
 	void UARTprintf(UARTDev_t *,const char *,...);
 	uint8_t Prbs8(uint8_t);
 }
-class UART {
+// The timer demo logs to the UART through SysLog, a DeviceIntrf
+#include "syslog.h"
+class UART : public DeviceIntrf {
 	UARTDev_t vDev{};
 public:
 	UART() {vDev.pObj=this;}

@@ -51,13 +51,13 @@ SOFTWARE.
 extern "C" volatile int32_t g_SpiTestResult[SPI_TEST_MAX_RESULT];
 extern "C" volatile uint8_t g_SpiTestRx[512];
 extern "C" volatile uint32_t g_SpiTestDone;
+extern "C" volatile uint32_t g_SpiTestAutoIrq;
 extern "C" volatile uint8_t g_SpiTestRx2[4][320];
 extern "C" volatile int32_t g_SpiTestSlvEvt[64];
 extern "C" volatile int32_t g_SpiTestSlvCnt;
 extern "C" volatile uint8_t g_SpiTestSlvRx[24];
 extern "C" volatile uint8_t g_SpiTestSlvSnap[4][24];
 
-extern "C" void SPI1_IRQHandler(void);
 extern "C" void SPI3_IRQHandler(void);
 extern "C" void SpiTestMark(int Id) __attribute__((noinline));
 extern "C" void SpiTestSlaveStep(void) __attribute__((noinline));
@@ -66,6 +66,7 @@ extern "C" void SpiTestDoneHook(void) __attribute__((noinline));
 volatile int32_t g_SpiTestResult[SPI_TEST_MAX_RESULT];
 volatile uint8_t g_SpiTestRx[512];
 volatile uint32_t g_SpiTestDone;
+volatile uint32_t g_SpiTestAutoIrq;
 volatile uint8_t g_SpiTestRx2[4][320];
 volatile int32_t g_SpiTestSlvEvt[64];
 volatile int32_t g_SpiTestSlvCnt;
@@ -113,28 +114,16 @@ static uint8_t s_SlvTx[8];
 
 static int s_SlvDone;
 static volatile int s_MasterDone;
-static volatile int s_MasterCount;
 
+// A master reports no completion, its transfers return their count
 static int MasterCb(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuff, int Len)
 {
 	if (Evt == DEVINTRF_EVT_COMPLETED)
 	{
-		s_MasterCount = Len;
-		s_MasterDone = 1;
+		s_MasterDone = s_MasterDone + 1;
 	}
 
 	return 0;
-}
-
-// Interrupt mode: the vector is called from here, the emulator has no NVIC
-static int WaitMaster(void)
-{
-	for (int i = 0; i < 200000 && !s_MasterDone; i++)
-	{
-		SPI1_IRQHandler();
-	}
-
-	return s_MasterDone ? s_MasterCount : -2;
 }
 
 // Slave events recorded by the callback: 1 arm, 2 completed, and the length
@@ -287,22 +276,23 @@ extern "C" int main(void)
 	g_SpiTestResult[r++] = SPITx(&s_Spi3, 0, s_Tx, 3);
 	g_SpiTestResult[r++] = SPIRx(&s_Spi3, 0, (uint8_t*)&g_SpiTestRx[48], 3);
 
-	// 12 : interrupt master on SPI1, the end is the completed event
+	// 12 : interrupt master on SPI1, the emulator runs the vector of an
+	// enabled flag. Each call returns its count, no event.
 	SpiTestMark(12);
 	SPICfg_t cfgi = MakeCfg(0, s_Spi1Pins, 5, 1000000);
 	cfgi.bIntEn = true;
 	cfgi.EvtCB = MasterCb;
 	g_SpiTestResult[r++] = SPIInit(&s_Spi1, &cfgi) ? 1 : 0;
+	g_SpiTestAutoIrq = 1;
 	s_MasterDone = 0;
 	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 5);
-	g_SpiTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
+	g_SpiTestResult[r++] = s_MasterDone;
 	g_SpiTestResult[r++] = SPIRx(&s_Spi1, 0, (uint8_t*)&g_SpiTestRx[64], 6);
-	g_SpiTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
+	g_SpiTestResult[r++] = s_MasterDone;
 	g_SpiTestResult[r++] = SPIRx(&s_Spi1, 0, (uint8_t*)g_SpiTestRx2[0], 300);
-	g_SpiTestResult[r++] = WaitMaster();
+	g_SpiTestResult[r++] = s_MasterDone;
 	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 300);
+	g_SpiTestAutoIrq = 0;
 
 	// 13 : DMA master, polling wait, then 12 bit data
 	SpiTestMark(13);
@@ -317,18 +307,19 @@ extern "C" int main(void)
 	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 6);
 	g_SpiTestResult[r++] = SPIRx(&s_Spi1, 0, (uint8_t*)&g_SpiTestRx[96], 4);
 
-	// 14 : DMA master, interrupt
+	// 14 : DMA master, interrupt, each call returns its count, no event
 	SpiTestMark(14);
 	cfgd.DataSize = 8;
 	cfgd.bIntEn = true;
 	cfgd.EvtCB = MasterCb;
 	g_SpiTestResult[r++] = SPIInit(&s_Spi1, &cfgd) ? 1 : 0;
+	g_SpiTestAutoIrq = 1;
 	s_MasterDone = 0;
 	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 129);
-	g_SpiTestResult[r++] = WaitMaster();
-	s_MasterDone = 0;
+	g_SpiTestResult[r++] = s_MasterDone;
 	g_SpiTestResult[r++] = SPIRx(&s_Spi1, 0, (uint8_t*)g_SpiTestRx2[2], 129);
-	g_SpiTestResult[r++] = WaitMaster();
+	g_SpiTestResult[r++] = s_MasterDone;
+	g_SpiTestAutoIrq = 0;
 
 	// 15 : slave on SPI3, polling transfers of the interrupt, a scripted master
 	SpiTestMark(15);

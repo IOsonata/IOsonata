@@ -225,20 +225,21 @@ UARTDev_t const *UARTGetInstance(int DevNo);
 /**
  * @brief Enable or disable UART reception as a system sleep wake source.
  *
- * Does not enter sleep or change normal UART operation. Call SystemSleep()
- * separately. The driver prepares its wake receiver on sleep entry and
- * restores the normal UART rate before SystemSleep() returns. Wake data is
- * available through UARTRx(). Wake remains enabled until explicitly disabled
- * or the UART is disabled, powered off or reinitialized.
+ * The application arms the wake through the UART driver. SystemSleep() does
+ * not call the UART driver. Call with true just before SystemSleep(), with
+ * pending transfers finished, and with false after it returns. Between the
+ * two calls the UART is in its wake receive state: on an MCU with a separate
+ * low power receiver, normal reception and transmission are stopped and the
+ * receive format and rate are those of that receiver. Disabling the wake
+ * restores normal operation. Wake data is then available through UARTRx().
+ * Disabling, powering off or reinitializing the UART also disables the wake.
  *
- * Finish pending transfers before sleeping. The driver may refuse sleep entry
- * if it cannot safely pause the UART. The application does not switch UART
- * clocks, rates or operating modes for wake. Wake pins and sleep receiver
- * formats depend on the MCU. The sender must wait for acknowledgement before sending payload.
- * An RX callback may run during resume with interrupts masked; do not block.
+ * Wake pins and wake receive formats depend on the MCU. The sender must wait
+ * for acknowledgement before sending payload. An RX callback may run from the
+ * disabling call with interrupts masked; do not block.
  *
- * @return true when the request is accepted; false if unsupported or invalid.
- *         Acceptance does not guarantee that a later sleep attempt succeeds.
+ * @return true when the wake receiver is armed or released; false if it is
+ *         unsupported, the UART settings do not allow it or the UART is busy.
  */
 bool UARTEnableWake(UARTDev_t *pDev, bool bEnable);
 

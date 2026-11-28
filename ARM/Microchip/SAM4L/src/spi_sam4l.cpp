@@ -7,9 +7,13 @@ The SAM4L has one dedicated SPI controller. This port implements the
 IOsonata polling, interrupt and PDCA master paths using GPIO chip selects.
 The hardware peripheral-select field is kept on CSR0 so every device attached
 to one IOsonata SPI object uses the same configured transfer format and rate.
-With INT enabled, RX and TX up to 256 bytes return -1 and complete by callback.
-Larger TX and Read command phases finish synchronously to preserve TX ownership.
-PDCA moves bounded halfword chunks; INT selects asynchronous completion.
+Master transfers are synchronous in every mode: TxData and RxData return the
+count when the transfer is done. With INT enabled each wait, for a status flag
+or for the end of a PDCA chunk, waits for the SPI or PDCA interrupt; the
+handler masks the interrupt and tells the wait, which then reads the status as
+in polling mode. The application sets the interrupt priority: a transfer is
+not called from an interrupt of the same or a higher priority. PDCA moves
+bounded halfword chunks.
 Slave mode supports 8-bit interrupt/PDCA transfers, framed by NPCS0.
 Slave PDCA uses byte buffers up to 65535 bytes; larger frames use interrupts.
 STATECHG supplies buffers before clocks start; COMPLETED reports RX at NSS rising.
@@ -45,7 +49,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
-#include <string.h>
 #include <limits.h>
 
 #include "sam4lxxx.h"
@@ -60,7 +63,6 @@ SOFTWARE.
 #define SAM4L_SPI_WAIT_COUNT	100000U
 #define SAM4L_SPI_PCS0		0x0EU
 #define SAM4L_SPI_DMA_WORDS	64
-#define SAM4L_SPI_TX_SIZE		256
 #define SAM4L_SPI_ERRORS		(SPI_SR_MODF | SPI_SR_OVRES)
 
 // UART owns channels 0..3; I2C owns 4..11 (master/slave share per DevNo).
@@ -77,25 +79,19 @@ typedef struct __Sam4l_Spi_Dev
 	int Count;
 	int Step;
 	int ChunkWords;
-	bool Active;
-	bool Async;
+	volatile bool bIrq;		// Master interrupt mode: an interrupt came since the wait started
 	bool DmaInitialized;
 	bool SlaveReady;
 	bool SlaveError;
 	bool SlaveDmaFrame;
 	bool SlaveRxDma;
-	bool bSleepPaused;		//!< Master stopped temporarily for SystemSleep
-	uint32_t SleepInterrupts;	//!< SPI interrupt mask before sleep
 	int SlaveTxLength;
-	uint8_t TxBuffer[SAM4L_SPI_TX_SIZE];
 	uint16_t DmaTx[SAM4L_SPI_DMA_WORDS];
 	uint16_t DmaRx[SAM4L_SPI_DMA_WORDS];
 } Sam4lSpiDev_t;
 
-static Sam4lSpiDev_t s_SpiDev = {
-	.pReg = SAM4L_SPI,
-	.pSpiDev = nullptr,
-};
+// Zero initialized, it takes no flash. SPIInit sets the register pointer.
+static Sam4lSpiDev_t s_SpiDev;
 
 static void Sam4lSpiCancel(Sam4lSpiDev_t *dev);
 static void Sam4lSpiSlaveArm(Sam4lSpiDev_t *dev);
@@ -143,14 +139,25 @@ static inline void Sam4lSpiClockDisable(void)
 		SAM4L_PM->PM_PBAMASK & ~PM_PBAMASK_SPI);
 }
 
-static bool Sam4lSpiWait(Spi *pReg, uint32_t Mask)
+// Master status flag, false on timeout. In interrupt mode the wait is for the
+// interrupt of the flag, the status is read again after it.
+static bool Sam4lSpiWait(Sam4lSpiDev_t *dev, uint32_t Mask)
 {
-	uint32_t timeout = SAM4L_SPI_WAIT_COUNT;
-	do
+	Spi *reg = dev->pReg;
+	const bool irq = dev->pSpiDev->DevIntrf.bIntEn;
+
+	for (uint32_t i = 0; i < SAM4L_SPI_WAIT_COUNT; ++i)
 	{
-		if ((pReg->SPI_SR & Mask) == Mask)
+		if ((reg->SPI_SR & Mask) == Mask)
 			return true;
-	} while (--timeout != 0U);
+		if (irq)
+		{
+			dev->bIrq = false;
+			reg->SPI_IER = Mask;
+			while (!dev->bIrq && ++i < SAM4L_SPI_WAIT_COUNT)
+				;
+		}
+	}
 	return false;
 }
 
@@ -232,58 +239,12 @@ static void Sam4lSpiConfigure(Sam4lSpiDev_t *dev)
 	reg->SPI_CR = SPI_CR_SPIEN;
 }
 
-// SPI has no asynchronous slave wake resource. Refuse deep sleep with
-// an enabled slave; an idle master can keep all its register settings.
-bool Sam4lSpiSuspendSleep(void)
-{
-	Sam4lSpiDev_t *dev = &s_SpiDev;
-	SPIDev_t *pDev = dev->pSpiDev;
-
-	if (pDev == nullptr || atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
-		(SAM4L_PM->PM_PBAMASK & PM_PBAMASK_SPI) == 0U)
-	{
-		return true;
-	}
-	if (pDev->Cfg.Mode != SPIMODE_MASTER ||
-		atomic_flag_test(&pDev->DevIntrf.bBusy) ||
-		dev->bSleepPaused || dev->Active ||
-		(dev->pReg->SPI_SR & SPI_SR_TXEMPTY) == 0U)
-	{
-		return false;
-	}
-	if (dev->DmaInitialized &&
-		((Sam4lSpiRxChannel()->PDCA_SR & PDCA_SR_TEN) != 0U ||
-		 (Sam4lSpiTxChannel()->PDCA_SR & PDCA_SR_TEN) != 0U))
-	{
-		return false;
-	}
-	dev->SleepInterrupts = dev->pReg->SPI_IMR;
-	dev->pReg->SPI_IDR = 0xFFFFFFFFU;
-	dev->pReg->SPI_CR = SPI_CR_SPIDIS;
-	Sam4lSpiClockDisable();
-	dev->bSleepPaused = true;
-	return true;
-}
-
-void Sam4lSpiResumeSleep(void)
-{
-	Sam4lSpiDev_t *dev = &s_SpiDev;
-
-	if (dev->bSleepPaused)
-	{
-		Sam4lSpiClockEnable();
-		dev->pReg->SPI_CR = SPI_CR_SPIEN;
-		dev->pReg->SPI_IER = dev->SleepInterrupts;
-		dev->bSleepPaused = false;
-	}
-}
-
 static void Sam4lSpiDisable(DevIntrf_t * const pDev)
 {
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
 	Sam4lSpiCancel(dev);
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_MASTER)
-		(void)Sam4lSpiWait(dev->pReg, SPI_SR_TXEMPTY);
+		(void)Sam4lSpiWait(dev, SPI_SR_TXEMPTY);
 	dev->pReg->SPI_CR = SPI_CR_SPIDIS;
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
@@ -348,7 +309,7 @@ static void Sam4lSpiDeselect(DevIntrf_t * const pDev)
 
 	if (spi->Cfg.Mode == SPIMODE_SLAVE)
 		return;
-	(void)Sam4lSpiWait(dev->pReg, SPI_SR_TXEMPTY);
+	(void)Sam4lSpiWait(dev, SPI_SR_TXEMPTY);
 	if (spi->Cfg.ChipSel != SPICSEL_MAN && spi->CurDevCs >= 0)
 	{
 		const IOPinCfg_t &pin =
@@ -381,11 +342,11 @@ static inline void Sam4lSpiStopTx(DevIntrf_t * const pDev)
 static bool Sam4lSpiTransferWord(Sam4lSpiDev_t *dev, uint16_t Tx, uint16_t *pRx)
 {
 	Spi *reg = dev->pReg;
-	if (!Sam4lSpiWait(reg, SPI_SR_TDRE))
+	if (!Sam4lSpiWait(dev, SPI_SR_TDRE))
 		return false;
 
 	reg->SPI_TDR = SPI_TDR_TD(Tx) | SPI_TDR_PCS(SAM4L_SPI_PCS0);
-	if (!Sam4lSpiWait(reg, SPI_SR_RDRF))
+	if (!Sam4lSpiWait(dev, SPI_SR_RDRF))
 		return false;
 
 	const uint16_t rx = static_cast<uint16_t>(reg->SPI_RDR & SPI_RDR_RD_Msk);
@@ -498,54 +459,21 @@ static void Sam4lSpiRxWord(Sam4lSpiDev_t *dev, uint16_t Word)
 
 static void Sam4lSpiFinish(Sam4lSpiDev_t *dev, bool Error)
 {
-	DevIntrf_t *intrf = &dev->pSpiDev->DevIntrf;
-	const bool async = dev->Async;
-	const bool read = dev->pRx != nullptr;
-	uint8_t *buffer = dev->pRx;
-	const int count = dev->Count;
 	dev->pReg->SPI_IDR = 0xFFFFFFFFU;
 	Sam4lSpiDmaStop(dev);
 	if (Error)
 		Sam4lSpiConfigure(dev);
-	dev->Active = false;
-	intrf->bTxReady = true;
-	if (!async)
-		return;
-
-	// The generic stop helpers own the busy flag. Release before callbacks.
-	if (read)
-		DeviceIntrfStopRx(intrf);
-	else
-		DeviceIntrfTxComplete(intrf);
-	if (intrf->EvtCB != nullptr)
-		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, buffer, count);
 }
 
 static void Sam4lSpiCancel(Sam4lSpiDev_t *dev)
 {
 	// Cancellation is silent: caller is resetting/disabling the interface.
-	// Mask the whole transfer before inspecting state shared with the ISR.
+	// Mask the interrupts before the slave state shared with the ISR changes.
 	const uint32_t primask = __get_PRIMASK();
 	__disable_irq();
 	dev->pReg->SPI_IDR = 0xFFFFFFFFU;
 	Sam4lSpiDmaStop(dev);
 	dev->SlaveReady = false;
-	if (dev->Active)
-	{
-		DevIntrf_t *intrf = &dev->pSpiDev->DevIntrf;
-		const bool async = dev->Async;
-		const bool read = dev->pRx != nullptr;
-		dev->Active = false;
-		Sam4lSpiConfigure(dev);
-		intrf->bTxReady = true;
-		if (async)
-		{
-			if (read)
-				DeviceIntrfStopRx(intrf);
-			else
-				DeviceIntrfStopTx(intrf);
-		}
-	}
 	NVIC_ClearPendingIRQ(SPI_IRQn);
 	NVIC_ClearPendingIRQ(PDCA_12_IRQn);
 	NVIC_ClearPendingIRQ(PDCA_13_IRQn);
@@ -570,11 +498,6 @@ static void Sam4lSpiDmaChunk(Sam4lSpiDev_t *dev)
 	rx->PDCA_TCR = words;
 	tx->PDCA_TCR = words;
 	__DMB();
-	if (dev->Async)
-	{
-		rx->PDCA_IER = PDCA_IER_TRC | PDCA_IER_TERR;
-		tx->PDCA_IER = PDCA_IER_TERR;
-	}
 	// Every transmitted word produces receive data, even for a TX-only API.
 	// Arm RX first so the first character cannot overrun RDR.
 	rx->PDCA_CR = PDCA_CR_TEN;
@@ -593,10 +516,41 @@ static void Sam4lSpiDmaCollect(Sam4lSpiDev_t *dev)
 	dev->ChunkWords = 0;
 }
 
-static int Sam4lSpiTransfer(Sam4lSpiDev_t *dev, const uint8_t *Tx,
-						   uint8_t *Rx, int Length, bool Async)
+// Wait of a PDCA chunk: true when the receive channel has moved it, false on
+// a channel or SPI error or on the time limit. In interrupt mode the wait is
+// for the receive channel end, a channel error or a SPI error interrupt, the
+// channels and the status are read again after it.
+static bool Sam4lSpiDmaWait(Sam4lSpiDev_t *dev)
 {
-	if (dev->Active || Length <= 0)
+	PdcaChannel *rx = Sam4lSpiRxChannel();
+	PdcaChannel *tx = Sam4lSpiTxChannel();
+	const bool irq = dev->pSpiDev->DevIntrf.bIntEn;
+
+	for (uint32_t i = 0; i < SAM4L_SPI_WAIT_COUNT; ++i)
+	{
+		if (((rx->PDCA_ISR | tx->PDCA_ISR) & PDCA_ISR_TERR) != 0U ||
+			(dev->pReg->SPI_SR & SAM4L_SPI_ERRORS) != 0U)
+			return false;
+		if (rx->PDCA_TCR == 0U)
+			return true;
+		if (irq)
+		{
+			dev->bIrq = false;
+			rx->PDCA_IER = PDCA_IER_TRC | PDCA_IER_TERR;
+			tx->PDCA_IER = PDCA_IER_TERR;
+			dev->pReg->SPI_IER = SAM4L_SPI_ERRORS;
+			while (!dev->bIrq && ++i < SAM4L_SPI_WAIT_COUNT)
+				;
+		}
+	}
+	return false;
+}
+
+// PDCA transfer in chunks of SAM4L_SPI_DMA_WORDS. Returns the bytes received.
+static int Sam4lSpiTransfer(Sam4lSpiDev_t *dev, const uint8_t *Tx,
+						   uint8_t *Rx, int Length)
+{
+	if (Length <= 0)
 		return 0;
 	dev->Step = dev->pSpiDev->Cfg.DataSize > 8U ? 2 : 1;
 	dev->Length = Length - Length % dev->Step;
@@ -606,48 +560,20 @@ static int Sam4lSpiTransfer(Sam4lSpiDev_t *dev, const uint8_t *Tx,
 	dev->ChunkWords = 0;
 	dev->pRx = Rx;
 	dev->pTx = Tx;
-	dev->Async = Async;
-	if (Async && Tx != nullptr)
-	{
-		memcpy(dev->TxBuffer, Tx, dev->Length);
-		dev->pTx = dev->TxBuffer;
-	}
-	dev->Active = true;
-	dev->pSpiDev->DevIntrf.bTxReady = false;
 
-	if (Async)
-		dev->pReg->SPI_IER = SAM4L_SPI_ERRORS;
-	if (dev->pSpiDev->Cfg.bDmaEn)
+	do
 	{
-		do
+		Sam4lSpiDmaChunk(dev);
+		const bool done = Sam4lSpiDmaWait(dev);
+		Sam4lSpiDmaCollect(dev);
+		if (!done)
 		{
-			Sam4lSpiDmaChunk(dev);
-			if (Async)
-				return -1;
-			uint32_t timeout = SAM4L_SPI_WAIT_COUNT;
-			bool error = false;
-			do
-			{
-				error = ((Sam4lSpiRxChannel()->PDCA_ISR |
-					Sam4lSpiTxChannel()->PDCA_ISR) & PDCA_ISR_TERR) != 0U ||
-					(dev->pReg->SPI_SR & SAM4L_SPI_ERRORS) != 0U;
-				if (error || Sam4lSpiRxChannel()->PDCA_TCR == 0U)
-					break;
-			} while (--timeout != 0U);
-			Sam4lSpiDmaCollect(dev);
-			if (error || timeout == 0U)
-			{
-				Sam4lSpiFinish(dev, true);
-				return dev->Count;
-			}
-		} while (dev->Count < dev->Length);
-		Sam4lSpiFinish(dev, !Sam4lSpiWait(dev->pReg, SPI_SR_TXEMPTY));
-		return dev->Count;
-	}
-	// Interrupt mode allows only one outstanding character. RDRF advances it.
-	dev->pReg->SPI_IER = SPI_IER_RDRF;
-	dev->pReg->SPI_TDR = Sam4lSpiTxWord(dev, 0);
-	return -1;
+			Sam4lSpiFinish(dev, true);
+			return dev->Count;
+		}
+	} while (dev->Count < dev->Length);
+	Sam4lSpiFinish(dev, !Sam4lSpiWait(dev, SPI_SR_TXEMPTY));
+	return dev->Count;
 }
 
 static int Sam4lSpiTxData(DevIntrf_t * const pDev, const uint8_t *Data, int Length)
@@ -657,11 +583,9 @@ static int Sam4lSpiTxData(DevIntrf_t * const pDev, const uint8_t *Data, int Leng
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
 	if (dev->pSpiDev->Cfg.Mode != SPIMODE_MASTER)
 		return 0;
-	// Long TX stays synchronous so no caller buffer survives this call.
-	const bool async = pDev->bIntEn && Length <= SAM4L_SPI_TX_SIZE;
-	if (!pDev->bDma && !async)
+	if (!pDev->bDma)
 		return Sam4lSpiCommand(pDev, Data, Length);
-	return Sam4lSpiTransfer(dev, Data, nullptr, Length, async);
+	return Sam4lSpiTransfer(dev, Data, nullptr, Length);
 }
 
 static int Sam4lSpiRxData(DevIntrf_t * const pDev, uint8_t *Buffer, int Length)
@@ -670,10 +594,10 @@ static int Sam4lSpiRxData(DevIntrf_t * const pDev, uint8_t *Buffer, int Length)
 		return 0;
 	if (static_cast<Sam4lSpiDev_t *>(pDev->pDevData)->pSpiDev->Cfg.Mode != SPIMODE_MASTER)
 		return 0;
-	if (!pDev->bDma && !pDev->bIntEn)
+	if (!pDev->bDma)
 		return Sam4lSpiPollingRx(pDev, Buffer, Length);
 	return Sam4lSpiTransfer(static_cast<Sam4lSpiDev_t *>(pDev->pDevData),
-		nullptr, Buffer, Length, pDev->bIntEn);
+		nullptr, Buffer, Length);
 }
 
 static void Sam4lSpiSlaveArm(Sam4lSpiDev_t *dev)
@@ -822,36 +746,15 @@ static void Sam4lSpiSlaveIrq(Sam4lSpiDev_t *dev, uint32_t Status)
 extern "C" void SPI_Handler(void)
 {
 	Sam4lSpiDev_t *dev = &s_SpiDev;
-	const uint32_t status = dev->pReg->SPI_SR;
-	const uint32_t pending = status & dev->pReg->SPI_IMR;
 	if (dev->pSpiDev != nullptr && dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
-		Sam4lSpiSlaveIrq(dev, status);
+		Sam4lSpiSlaveIrq(dev, dev->pReg->SPI_SR);
 		return;
 	}
-	if (!dev->Active || !dev->Async)
-		return;
-	if ((pending & SAM4L_SPI_ERRORS) != 0U)
-	{
-		if (dev->pSpiDev->Cfg.bDmaEn && dev->ChunkWords > 0)
-			Sam4lSpiDmaCollect(dev);
-		Sam4lSpiFinish(dev, true);
-		return;
-	}
-	if ((pending & SPI_SR_RDRF) != 0U)
-	{
-		Sam4lSpiRxWord(dev, static_cast<uint16_t>(dev->pReg->SPI_RDR));
-		if (dev->Count < dev->Length)
-			dev->pReg->SPI_TDR = Sam4lSpiTxWord(dev, dev->Count);
-		else
-		{
-			dev->pReg->SPI_IDR = SPI_IDR_RDRF;
-			dev->pReg->SPI_IER = SPI_IER_TXEMPTY;
-		}
-		return; // Re-read TXEMPTY on the next IRQ, never use stale status.
-	}
-	if ((pending & SPI_SR_TXEMPTY) != 0U)
-		Sam4lSpiFinish(dev, false);
+	// Master: the interrupt is masked and the wait told. The status is not
+	// read here, a read clears the error flags the wait checks.
+	dev->pReg->SPI_IDR = 0xFFFFFFFFU;
+	dev->bIrq = true;
 }
 
 static void Sam4lSpiDmaIrq(void)
@@ -884,21 +787,10 @@ static void Sam4lSpiDmaIrq(void)
 		}
 		return;
 	}
-	if (!dev->Active || !dev->Async)
-		return;
-	if (((rx | tx) & PDCA_ISR_TERR) != 0U)
-	{
-		Sam4lSpiDmaCollect(dev);
-		Sam4lSpiFinish(dev, true);
-		return;
-	}
-	if ((rx & PDCA_ISR_TRC) == 0U)
-		return;
-	Sam4lSpiDmaCollect(dev);
-	if (dev->Count < dev->Length)
-		Sam4lSpiDmaChunk(dev);
-	else
-		dev->pReg->SPI_IER = SPI_IER_TXEMPTY;
+	// Master: the channel interrupts are masked and the wait told
+	Sam4lSpiRxChannel()->PDCA_IDR = 0xFFFFFFFFU;
+	Sam4lSpiTxChannel()->PDCA_IDR = 0xFFFFFFFFU;
+	dev->bIrq = true;
 }
 
 extern "C" void PDCA_12_Handler(void)
@@ -926,11 +818,12 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 		pCfgData->BitOrder != SPIDATABIT_MSB ||
 		pCfgData->DataSize < 8U || pCfgData->DataSize > 16U ||
 		pCfgData->Rate == 0U ||
-		pCfgData->pIOPinMap == nullptr || pCfgData->NbIOPins < SPI_CS_IOPIN_IDX ||
-		s_SpiDev.Active)
+		pCfgData->pIOPinMap == nullptr || pCfgData->NbIOPins < SPI_CS_IOPIN_IDX)
 	{
 		return false;
 	}
+
+	s_SpiDev.pReg = SAM4L_SPI;
 	// Slave wide words need their own external-clock validation.
 	if (pCfgData->Mode == SPIMODE_SLAVE &&
 		(pCfgData->DataSize != 8U ||
@@ -955,8 +848,6 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	pDev->CurDevCs = -1;
 	pDev->FirstRdData = -1;
 	s_SpiDev.pSpiDev = pDev;
-	s_SpiDev.bSleepPaused = false;
-	s_SpiDev.SleepInterrupts = 0U;
 	pDev->DevIntrf.pDevData = &s_SpiDev;
 
 	Sam4lSpiClockEnable();

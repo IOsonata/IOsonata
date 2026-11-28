@@ -73,6 +73,7 @@ struct Sam4l_TimerData_t {
 	IRQn_Type Irq;
 	uint32_t ClockMask, BaseFreq, Select, Epoch;
 	bool Running, Healthy, Overflow, StartPending;
+	bool ClockEnabled;
 	Sam4lTimerTrigger Trigger[3];
 };
 extern Sam4l_TimerData_t g_Sam4lTimerData[SAM4L_TIMER_MAXCNT];

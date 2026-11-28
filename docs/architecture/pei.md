@@ -416,8 +416,8 @@ driver-owned DMA transaction. SPIS ACQUIRE/RELEASE remain with the
 slave interrupt handler, which owns its semaphore and buffers.
 
 SPIM preparation requires an 8-bit master with manual CS,
-noninterrupt EasyDMA, a stable caller-owned RX buffer if used,
-and a single TX block copied into the existing private TX buffer.
+noninterrupt EasyDMA, and stable caller-owned TX and RX buffers
+in RAM for a single block.
 Disconnect PPI routes before SPIReleasePeiTransfer(). The nRF52832
 PeiSpiDemo exercises BUT1 -> SPIM2 START, END -> STOP and LED1,
 STOPPED -> RGB blue, without any slave peripheral. Target compilation
@@ -433,9 +433,8 @@ serial peripheral base addresses are not interchangeable modes.
 
 TWIM STARTRX/STARTTX/STOP/SUSPEND/RESUME are hardware PEI
 destinations only after I2CPreparePeiTransfer() reserves the
-ordinary I2C busy flag and stages one TX or RX buffer. TX is copied
-into the driver's existing private 64-byte buffer, and RX is
-caller-owned RAM. The driver configures one seven-bit address and
+ordinary I2C busy flag and stages one TX or RX buffer. Both are
+caller-owned RAM that stays valid until the transfer is released. The driver configures one seven-bit address and
 LASTTX_STOP or LASTRX_STOP hardware shortcut, but no START task.
 ERROR can connect directly to STOP over PPI on NACK; no CPU
 event-forwarding ISR is introduced. All routes must be disabled

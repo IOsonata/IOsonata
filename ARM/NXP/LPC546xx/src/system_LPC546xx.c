@@ -125,7 +125,7 @@ static const uint32_t s_FlashTimFreq[] = {
 	12000000UL, 24000000UL, 36000000UL, 60000000UL, 96000000UL,
 	120000000UL, 144000000UL, 168000000UL, 180000000UL
 };
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Calibrated delay-loop iterations per second, defined in ResetEntry.c
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = DEFAULT_SYSTEM_CLOCK;

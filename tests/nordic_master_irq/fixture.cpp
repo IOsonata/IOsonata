@@ -121,11 +121,6 @@ extern "C" unsigned address(unsigned bus, unsigned dev)
 	return bus ? (unsigned)g_nRFxSPIDev[dev].pDmaReg : (unsigned)s_nRFxI2CDev[dev].pDmaReg;
 }
 extern "C" const unsigned dma_max = NRFX_SPI_DMA_MAXCNT;
-extern "C" const unsigned txbuf_size[] = { NRFX_I2C_TXBUF_SIZE, NRFX_SPI_TXBUF_SIZE };
-extern "C" unsigned txbuf_address(unsigned bus, unsigned dev)
-{
-	return bus ? (unsigned)g_nRFxSPIDev[dev].TxBuf : (unsigned)s_nRFxI2CDev[dev].TxBuf;
-}
 
 // Export offsets from the real MDK instead of hand-written register layouts.
 #define OFS(type, field) offsetof(type, field)
@@ -166,7 +161,8 @@ extern "C" const uint32_t offsets[] = {
 };
 extern "C" const uint32_t twim[] = {
 	NRFX_I2C_DMA_MAXCNT, TWIM_SHORTS_LASTTX_SUSPEND_Msk, TWIM_SHORTS_LASTTX_STOP_Msk,
-	TWIM_SHORTS_LASTRX_STOP_Msk, TWIM_INTEN_SUSPENDED_Msk | TWIM_INTEN_ERROR_Msk | TWIM_INTEN_STOPPED_Msk,
+	TWIM_SHORTS_LASTRX_STOP_Msk, TWIM_INTEN_LASTTX_Msk | TWIM_INTEN_LASTRX_Msk |
+	TWIM_INTEN_SUSPENDED_Msk | TWIM_INTEN_ERROR_Msk | TWIM_INTEN_STOPPED_Msk,
 };
 
 // Master without EasyDMA, where the MCU has the TWI and SPI peripherals

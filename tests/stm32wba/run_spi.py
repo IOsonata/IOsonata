@@ -17,8 +17,14 @@ reference manual:
 - TXP, RXP, EOT and OVR flags; the receive FIFO holds 8 bytes and an
   overrun is flagged when the driver lets more than that come in
 - a received item can be read 20 status reads after it was sent, so the
-  receive FIFO fills when the driver sends too far ahead of what it reads
+  receive FIFO fills when the driver sends too far ahead of what it reads;
+  400 in the interrupt runs, so that the transfer waits for its interrupts
 - the GPIO BSRR writes of the chip select pins are logged with the transfers
+
+In the interrupt runs the emulator runs the SPI1 and GPDMA1 channel vectors
+when a flag is set with its interrupt enabled, the transfer waits for them,
+and the items received come in with the time of the run, not only with the
+status reads.
 
 The model flags what the reference manual does not allow: CR2, CFG1 or CFG2
 written with SPE set, CSTART with SPE clear, TXDR written when no item is
@@ -118,7 +124,10 @@ def build(tmp):
          ROOT / 'ARM/ST/STM32WBAxx/src/system_stm32wbaxx.c', '-o', obj])
     objs.append(obj)
     elf = tmp / 'spi_fw.elf'
-    run(['arm-none-eabi-g++', *cpu, '-nostartfiles', '-Wl,--gc-sections', '-Wl,-T,' + str(HERE / 'spi_fw.ld'),
+    # The emulator runs the SPI1 and GPDMA1 vectors, the firmware does not call them
+    keep = ['-Wl,-u,SPI1_IRQHandler'] + [f'-Wl,-u,GPDMA1_Channel{n}_IRQHandler' for n in range(8)]
+    run(['arm-none-eabi-g++', *cpu, '-nostartfiles', '-Wl,--gc-sections', *keep,
+         '-Wl,-T,' + str(HERE / 'spi_fw.ld'),
          '--specs=nosys.specs', '--specs=nano.specs', *objs, '-o', elf])
     return elf
 
@@ -164,6 +173,8 @@ class Spi:
         self.rxq = []
         self.flags = 0
         self.polls = 0
+        # Status reads before a received item can be read
+        self.lat = 20
 
     def v(self, what):
         self.viol.append(f'{self.name}: {what} (mark {self.log.mark})')
@@ -332,7 +343,7 @@ class Spi:
             self.v(f'TXDR write of {size} bytes, data size needs {self.item_bytes()}')
         rx = (3 * self.sent + 1) & self.mask()
         self.log.add((self.name, 'X', val, rx))
-        self.rxq.append((rx, self.polls + 20))
+        self.rxq.append((rx, self.polls + self.lat))
         if len(self.rxq) * self.item_bytes() > RX_FIFO_BYTES:
             self.flags |= self.SR_OVR
             self.v('receive FIFO overrun')
@@ -363,9 +374,9 @@ class Gpio:
 def main():
     arm = shutil.which('arm-none-eabi-g++')
     try:
-        from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
+        from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE, UC_HOOK_BLOCK
         from unicorn.arm_const import UC_CPU_ARM_CORTEX_M33
-        from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_SP, UC_ARM_REG_PC
+        from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_SP, UC_ARM_REG_PC, UC_ARM_REG_LR, UC_ARM_REG_PRIMASK
         from elftools.elf.elffile import ELFFile
     except ImportError as e:
         print(f'NOT RUN: {e}. pip install unicorn pyelftools')
@@ -406,9 +417,16 @@ def main():
         rcc_log = []
         rcc = hdr('RCC_BASE_NS')
 
+        # Blocks from a master vector that came during a wait to the next
+        # status read of the firmware
+        wake = {'since': None, 'blocks': [], 'missed': 0}
+
         def rd(uc, off, size, base):
             a = base + off
             d = devs.get(a & ~0xFF)
+            if d is spi1 and (a & 0xFF) == 0x14 and not active and wake['since'] is not None:
+                wake['blocks'].append(wake['since'])
+                wake['since'] = None
             if d is not None:
                 return d.rd_reg(a & 0xFF, size)
             if gbase <= a < gbase + 0x1000:
@@ -449,6 +467,7 @@ def main():
 
         def on_mark(uc, addr, size, user):
             log.mark = uc.reg_read(UC_ARM_REG_R0)
+            spi1.lat = 400 if log.mark in (12, 14) else 20
             dma_at[log.mark] = gpdma.moved
             if log.mark == 12:
                 cfg1_at12.append(len(spi1.cfg1w))
@@ -470,11 +489,67 @@ def main():
         uc.hook_add(UC_HOOK_CODE, on_step, begin=syms['SpiTestSlaveStep'] & ~1, end=syms['SpiTestSlaveStep'] & ~1)
         uc.hook_add(UC_HOOK_CODE, on_done, begin=syms['SpiTestDoneHook'] & ~1, end=syms['SpiTestDoneHook'] & ~1)
 
+        active = False
+        pending = None
+        ticks = 0
+        irqs = collections.Counter()
+        tcf, tcie = hdr('DMA_CSR_TCF'), hdr('DMA_CCR_TCIE')
+
+        def dispatch(uc, address, size, ctx):
+            nonlocal pending, ticks
+            if active or not int.from_bytes(uc.mem_read(syms['g_SpiTestAutoIrq'], 4), 'little'):
+                return
+            if wake['since'] is not None:
+                wake['since'] += 1
+            # Time goes on while the firmware waits: the items come in
+            spi1.polls += 1
+            spi1.dma_service()
+            ticks += 1
+            if ticks % 16 or uc.reg_read(UC_ARM_REG_PRIMASK):
+                return
+            for n, c in enumerate(gpdma.ch):
+                if c['csr'] & tcf and c['ccr'] & tcie:
+                    pending = f'GPDMA1_Channel{n}_IRQHandler'
+                    uc.emu_stop()
+                    return
+            if spi1.rd_reg(0x14, 4) & spi1.reg[0x10]:
+                pending = 'SPI1_IRQHandler'
+                uc.emu_stop()
+        uc.hook_add(UC_HOOK_BLOCK, dispatch)
         vec = bytes(uc.mem_read(0x08000000, 8))
         uc.reg_write(UC_ARM_REG_SP, int.from_bytes(vec[0:4], 'little'))
         pc = int.from_bytes(vec[4:8], 'little')
         try:
-            uc.emu_start(pc, 0xFFFFFFFF, count=400_000_000)
+            for _ in range(100000):
+                pending = None
+                uc.emu_start(pc, 0xFFFFFFFF, count=400_000_000)
+                if pending is None:
+                    break
+                saved = uc.context_save()
+                active = True
+                # The master waits while its interrupts are enabled. A vector
+                # before the status read after the last one: that wait went on.
+                waiting = spi1.reg[0x10] != 0
+                if wake['since'] is not None:
+                    wake['missed'] += 1
+                uc.reg_write(UC_ARM_REG_LR, 0x081ff001)
+                uc.emu_start(syms[pending] | 1, 0x081ff000, count=100000)
+                assert uc.reg_read(UC_ARM_REG_PC) == 0x081ff000, f'{pending} did not return'
+                irqs[log.mark, pending[:4]] += 1
+                # The vector takes what it ran for: its line is no longer pending
+                if pending == 'SPI1_IRQHandler':
+                    left = spi1.rd_reg(0x14, 4) & spi1.reg[0x10]
+                else:
+                    c = gpdma.ch[int(pending[len('GPDMA1_Channel')])]
+                    left = c['csr'] & tcf and c['ccr'] & tcie
+                if left:
+                    irqs[log.mark, 'left pending'] += 1
+                wake['since'] = 0 if waiting else None
+                active = False
+                uc.context_restore(saved)
+                pc = uc.reg_read(UC_ARM_REG_PC) | 1
+            else:
+                raise SystemExit('FAIL vector dispatch budget exhausted')
         except Exception as ex:
             raise SystemExit(f'FAIL emulator stopped at {uc.reg_read(UC_ARM_REG_PC):#x}: {ex}')
         if not state['done']:
@@ -592,7 +667,13 @@ def main():
         return bytes((3 * i + 1) & 0xFF for i in range(n))
 
     # 12 interrupt master
-    expect(res[28:36] == [1, -1, 5, -1, 6, -1, 300, 300], f'interrupt results {res[28:36]}')
+    expect(res[28:36] == [1, 5, 0, 6, 0, 300, 0, 300], f'interrupt results {res[28:36]}')
+    expect(irqs[12, 'SPI1'] > 0, 'interrupt master: no SPI1 vector ran')
+    expect(irqs[12, 'left pending'] == 0 and irqs[14, 'left pending'] == 0,
+           f'vector left its line pending: {irqs[12, "left pending"]}, {irqs[14, "left pending"]}')
+    expect(wake['blocks'] and max(wake['blocks']) < 40 and wake['missed'] == 0,
+           f'the wait does not end on the vector: {max(wake["blocks"], default=None)} blocks, '
+           f'{wake["missed"]} vectors before the status read')
     e12 = P(12)
     k = e12.index(('GPIO', 'A12', 0))
     expect(e12[k:k + 8] == cs_frame('A12', 5, [X(tx[i], i) for i in range(5)]), f'interrupt tx events {e12[k:k + 8]}')
@@ -610,7 +691,8 @@ def main():
     expect(dma_at[14] - dma_at[13] == 10 + 600 + 600 + 12 + 8, f'bytes moved by DMA {dma_at[14] - dma_at[13]}')
 
     # 14 DMA master, interrupt
-    expect(res[43:48] == [1, -1, 129, -1, 129], f'DMA interrupt results {res[43:48]}')
+    expect(res[43:48] == [1, 129, 0, 129, 0], f'DMA interrupt results {res[43:48]}')
+    expect(irqs[14, 'GPDM'] > 0, 'DMA interrupt master: no GPDMA1 vector ran')
     expect(rx2[2][:129] == seq(129), 'DMA interrupt rx data')
     expect(dma_at[15] - dma_at[14] == 129 * 4, f'bytes moved by DMA in interrupt mode {dma_at[15] - dma_at[14]}')
 

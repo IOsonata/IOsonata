@@ -429,8 +429,9 @@ extern "C" bool Esp32UartPrepareSleep(void)
 {
 	ESP32_UARTDEV *dev;
 	UARTDev_t *udev;
+	int i;
 
-	for (int i = 0; i < s_NbUartDev; i++)
+	for (i = 0; i < s_NbUartDev; i++)
 	{
 		dev = &s_Esp32UartDev[i];
 		udev = dev->pUartDev;
@@ -448,7 +449,7 @@ extern "C" bool Esp32UartPrepareSleep(void)
 			return false;
 		}
 	}
-	for (int i = 0; i < s_NbUartDev; i++)
+	for (i = 0; i < s_NbUartDev; i++)
 	{
 		dev = &s_Esp32UartDev[i];
 		udev = dev->pUartDev;
@@ -468,7 +469,9 @@ extern "C" bool Esp32UartPrepareSleep(void)
 extern "C" void Esp32UartResumeSleep(void)
 {
 	ESP32_UARTDEV *dev;
-	for (int i = 0; i < s_NbUartDev; i++)
+	int i;
+
+	for (i = 0; i < s_NbUartDev; i++)
 	{
 		dev = &s_Esp32UartDev[i];
 		if (dev->bSleepPaused)

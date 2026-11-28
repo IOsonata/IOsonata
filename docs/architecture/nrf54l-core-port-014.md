@@ -38,10 +38,12 @@ are unchanged and MCU-independent. UART default is 1,000,000 baud.
   no stale interrupt dispatch points to a handle whose DevNo has changed.
   Live timers or armed triggers cannot be rebound, and another Timer handle
   cannot take an occupied group.
-- `sDelay()` uses that generic TimerInit/EnableTrigger/DisableTrigger/Disable
-  sequence. GRTC runs at 1 MHz, independently of the nRF52/nRF53 LFCLK
-  startup-compensation logic; no unsupported fixed LFCLK compensation is
-  applied to this target.
+- `sDelay()` is the generic `src/sdelay.cpp` (November 27, 2026). It
+  requests the LF clock before the GRTC Init and subtracts the start time
+  the clock code measured, so a cold LFXO start is part of the delay. The
+  fixed cold-start compensation of the earlier Nordic sDelay, 434,775 ticks
+  on nRF54L15 and 433,611 on nRF54LM20A, is removed. While MPSL is
+  initialized, TimerInit refuses GRTC timer 3 and TIMER10.
 - The nRF54L System Core backend implements resumable `SystemSleep` using
   existing NVIC wake sources and advertises `SYSTEM_POWER_CAP_SLEEP` plus
   `SYSTEM_POWER_CAP_TIMER_WAKE`.
@@ -693,9 +695,9 @@ independent HF timer (DWT when available). MCU implementations that support
 **safe runtime CPU frequency changes**, such as certain STM32 families,
 should visit both endpoints in one run, retain their measured factors in
 System Core, and interpolate the us/ns loop rates upon subsequent frequency
-changes. The generic implementation currently has
-`ArmDelayClockInterpolate()`, but that does not by itself prove a target
-has installed measured endpoints or uses interpolation at runtime.
+changes. The generic implementation has `CalcDelayFactor()` in
+`system_core_clock.h`, but that does not by itself prove a target has
+installed measured endpoints or uses interpolation at runtime.
 
 The Nordic nRF54LM20A/B clock is different: the product specification
 lists a 64/128-MHz `PLL.FREQ` CPU frequency selection **on boot**.
@@ -750,7 +752,7 @@ The HF-timer calibration reported **7,998,400 us loops/s** and
 At 128 MHz, previously validated values are **15,999,360 us loops/s**
 and **42,664,533 ns loops/s**. Both measured endpoint pairs now reside
 in the nRF54LM20A System Core and are used by
-`ArmDelayClockInterpolate()`, independently for microseconds and
+`CalcDelayFactor()`, independently for microseconds and
 nanoseconds. Runtime factors select the matching endpoint or
 interpolate at intermediate CPU frequencies.
 

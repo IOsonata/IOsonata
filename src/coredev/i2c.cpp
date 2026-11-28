@@ -39,6 +39,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "iopinctrl.h"
 #include "coredev/i2c.h"
 
+// Each SCL half-period and the SDA setup time use the same 5 us delay.
+static __attribute__((noinline)) void I2CBusHalfPeriod(void)
+{
+	usDelay(5);
+}
+
 void I2CBusReset(I2CDev_t * const pDev)
 {
 	if (pDev == NULL)
@@ -61,14 +67,14 @@ void I2CBusReset(I2CDev_t * const pDev)
     for (int i = 0; i < 10; i++)
     {
         IOPinSet(sclport, sclpin);
-        usDelay(5);
+        I2CBusHalfPeriod();
         IOPinClear(sclport, sclpin);
-        usDelay(5);
+        I2CBusHalfPeriod();
     }
 
     IOPinConfig(sdaport, sdapin, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
     IOPinClear(sdaport, sdapin);
-    usDelay(5);
+    I2CBusHalfPeriod();
     IOPinSet(sclport, sclpin);
     usDelay(2);
     IOPinSet(sdaport, sdapin);

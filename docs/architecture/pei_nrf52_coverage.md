@@ -323,8 +323,8 @@ SPIS ACQUIRE/RELEASE tasks are not connected through PEI: the
 existing slave ISR owns the semaphore and DMA pointer updates.
 
 SPIM START, STOP, SUSPEND and RESUME may be connected after
-SPIPreparePeiTransfer() arms one block with the existing private TX
-buffer (max 256 bytes) and optionally caller-owned RX RAM. The
+SPIPreparePeiTransfer() arms one block with caller-owned TX and
+optionally RX RAM, each within the EasyDMA MAXCNT. The
 configured SPI must be MASTER, 8-bit, noninterrupt EasyDMA and
 manual-CS; the caller owns chip select, RX lifetime and PPI teardown.
 nRF52832 one-byte RX anomaly 58 is rejected where the driver's CPU
@@ -351,9 +351,8 @@ I2C HAL mode is initialized and hardware ENABLE is valid.
 
 TWIM exposes STARTRX, STARTTX, STOP, SUSPEND and RESUME as task
 destinations after I2CPreparePeiTransfer() has armed a single
-seven-bit RX or TX EasyDMA transfer. TX uses the existing 64-byte
-driver staging buffer, bounded by the selected EasyDMA MAXCNT;
-RX memory remains caller-owned, DMA-capable RAM. The prepare method
+seven-bit RX or TX EasyDMA transfer, bounded by the selected EasyDMA
+MAXCNT. TX and RX memory remain caller-owned, DMA-capable RAM. The prepare method
 loads TWIM.ADDRESS, RXD/TXD.PTR and MAXCNT and either LASTTX_STOP
 or LASTRX_STOP shortcut, clears old events, and does not issue a
 START task. No I2C interrupt is needed for a one-block transaction.

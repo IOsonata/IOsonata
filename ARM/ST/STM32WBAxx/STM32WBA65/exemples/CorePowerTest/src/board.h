@@ -1,6 +1,6 @@
 /**-------------------------------------------------------------------------
 @file	board.h
-@brief	STM32WBA65I-DK1 PowerOffDemo with external PC13 wake button
+@brief	STM32WBA65I-DK1 CorePowerTest with external PC13 wake button
 
 Connect Arduino D4 (PC13) momentarily to GND to wake from Standby.
 The VCOM is USART1 on PA8 RX and PB12 TX.

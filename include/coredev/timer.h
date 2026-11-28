@@ -272,7 +272,9 @@ extern "C" {
  * @brief   Timer initialization.
  *
  * Init starts a new or disabled timer. Disable a running timer before
- * calling Init again to change its configuration.
+ * calling Init again to change its configuration. Init refuses a DevNo
+ * held by another TimerDev_t until that one is powered off, so a timer in
+ * use is never taken from its owner.
  *
  * @param	pTimer	: Pointer to Timer device private data (timer handle)
  * @param	pCfg	: Pointer timer configuration data.

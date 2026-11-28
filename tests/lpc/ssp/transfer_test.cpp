@@ -135,8 +135,8 @@ static void ModelWrite(LpcSSPReg_t *, const char *Field, uint32_t Value)
 #define LPCSSP_WRITE(Reg, Field, Value) ModelWrite(Reg, #Field, Value)
 #define IOPinSet ModelPinSet
 #define IOPinClear ModelPinClear
-#include "../../../ARM/NXP/src/spi_lpcxx.c"
-#include "../../../ARM/NXP/LPC11xx/src/spi_lpc11uxx.c"
+#include "../../../ARM/NXP/src/spi_lpcxx.cpp"
+#include "../../../ARM/NXP/LPC11xx/src/spi_lpc11uxx.cpp"
 #include "../../../src/device_intrf.cpp"
 
 static void ModelReset(DevIntrf_t *Dev)

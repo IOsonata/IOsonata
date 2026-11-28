@@ -714,6 +714,8 @@ int UartEvthandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int B
 			break;
 		case DEVINTRF_EVT_STATECHG:
 			break;
+		default:
+			break;
 	}
 
 	return cnt;

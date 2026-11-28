@@ -22,6 +22,8 @@ create another HAL build. The nRF91 modem integration provides explicit
 `Debug_TaktOS` and `Release_TaktOS` variants for its modem OS adapter; match
 those to the application. See [modem build selection](../bluetooth-user-guide.md#nrf91-modem-os-library-build-selection).
 
+See [Power & Clock ownership](system-clock-timer-lifecycle.md#purpose-and-ownership) for the division of responsibilities between the application, peripheral drivers and MCU port.
+
 ## Core design rules
 
 ### MCU target, not board target

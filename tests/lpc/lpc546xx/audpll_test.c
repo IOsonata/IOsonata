@@ -53,6 +53,8 @@ static struct { uint32_t CPACR, VTOR; } s_Scb;
 #define SCB (&s_Scb)
 void *__Vectors;
 uint32_t g_IrqMasked;
+// Defined by ResetEntry.c in the library
+uint32_t SystemMicroSecLoopCnt;
 
 #pragma GCC diagnostic ignored "-Wpointer-to-int-cast"
 #include "../../../ARM/NXP/LPC546xx/src/system_LPC546xx.c"

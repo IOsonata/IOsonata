@@ -27,37 +27,149 @@ private timer allocation, DWT runtime delay code, or UART flush workarounds.
 
 ## CoreClockTest coverage
 
-- Startup CPU/peripheral frequencies, configured/RC source selection and
-  restoration, peripheral-clock bounds and requests.
-- Shared HF/LF clock Enable/Disable ownership and CPU reduced-speed mode
-  where supported.
-- DWT only as an optional **calibration measurement**; independent HF timer
-  measurement validates real `msDelay` and `nsDelay` call sites, with
-  interrupt masking during that timing. No DWT in runtime delays.
-- Calibration factors at highest/lowest observed CPU speed, with an
-  interpolated value when two distinct speeds are supported.
-- `sDelay(1)` cold and warm, with end-to-end HF timer reference. A further
-  `sDelay(1)` call after releasing the LF clock verifies temporary
-  timer reuse; this is a separate timing sample.
-- **All enumerated LF/HF timers:** initialize, set frequency, Enable/Disable,
-  verify elapsed time, counter and periodic IRQs across LF clock selection
-  and restoration. Independently compare LF timing against the HF reference.
-- **Timer implementation:** verify an available trigger, single-shot callback,
-  continuous callback, counter progression, stopping callbacks, and trigger
-  slot reuse using the generic Timer API. These are automated assertions;
-  TimerDemo is not a validation dependency.
-- Independent timer clock ownership.
-- **After** the timer matrix, only if every advertised LF timer was
-  initialized successfully: verify `sDelay(0)` succeeds and that
-  `sDelay(1)` refuses to take an initialized-but-disabled timer. Both
-  disabled ownership and all-LF-timers-occupied results must be PASS.
-  If this exact ownership condition cannot be established, print
-  UNSUPPORTED rather than falsely passing it. The test is deliberately
-  last: `TimerDisable` is not a generic deinitialization API.
+- Startup CPU frequency, CPU reduced-speed mode and performance restoration.
+- Shared LF and HF clock enable and disable. For each available timer class,
+  use one timer and check that it keeps counting after the test releases its
+  clock requests.
+- `usDelay`, `msDelay` and `nsDelay` of 100 ms at the highest and the lowest
+  CPU frequency, timed by the HF timer with the interrupts off, each within
+  2 percent (98,000 to 102,000 us). A port without a low power mode is
+  checked at its one frequency.
+- Numbered peripheral clock requests, actual rate, readback, restoration
+  and invalid indices.
+- One calibration request for each configured RC oscillator where supported.
+- With `CORE_CLOCK_TEST_DELAY_CALIBRATION`, during porting: at both
+  frequencies the delay factors are measured, with DWT where available or
+  from the HF timer times. The delays are timed again with the measured
+  factors, within 2 percent, before the factors, the divisors and the two
+  `CalcDelayFactor` points are printed. The factors of the code are back
+  after each measurement. The port puts the printed values in its code,
+  and a second run without calibration checks them. A flash-limited MCU can
+  leave calibration off.
 
-The ownership test uses only the public `TimerInit`, `TimerDisable`,
-`TimerGetLowFreqDevCount`, and `sDelay` interface. No Nordic RTC
-registers or Claim/Release APIs appear in CoreClockTest.
+Timer trigger modes, callbacks, rollover and device power-off belong in the
+timer tests. On SAM D, run `python3 tests/samd/run_timer.py` for those drivers.
+
+### CoreClockTest measurements used by the ports
+
+The table gives the measured microsecond and nanosecond loop divisors,
+in cycles per loop multiplied by one million. Ports that interpolate
+store the equivalent loop rates in iterations per second.
+These measurements came from CoreClockTest. TimerTest measures sDelay
+separately.
+
+| Target | CPU (Hz) | us divisor | ns divisor |
+| --- | ---: | ---: | ---: |
+| nRF52840 DK | 64,000,000 | 13,001,174 | 3,000,210 |
+| nRF5340 application | 64,000,000 | 22,003,531 | 3,000,390 |
+| nRF5340 application | 128,000,000 | 20,001,600 | 3,000,180 |
+| nRF5340 network | 64,000,000 | 23,003,229 | 3,000,329 |
+| nRF9160 DK and nRF91x1 DK | 64,000,000 | 16,001,920 | 3,000,270 |
+| SAMD11D14AM | 24,000,000 | 13,008,200 | 3,002,010 |
+| SAMD11D14AM | 48,000,000 | 13,004,165 | 3,000,990 |
+| SAM4LC8C | 19,804,096 | 14,005,468 | 3,000,780 |
+| SAM4LC8C | 39,608,192 | 14,002,244 | 3,000,390 |
+
+CoreClockTest also measured a 100 ms delay on each board with runtime
+calibration disabled. All seven targets reported zero failures. Times below
+are in microseconds.
+
+| Target | CPU (Hz) | usDelay | msDelay | nsDelay |
+| --- | ---: | ---: | ---: | ---: |
+| nRF52840 DK | 64,000,000 | 99,998 | 100,000 | 99,999 |
+| nRF5340 application | 128,000,000 | 99,998 | 100,000 | 100,000 |
+| nRF5340 application | 64,000,000 | 99,996 | 100,000 | 99,999 |
+| nRF5340 network | 64,000,000 | 99,996 | 100,001 | 100,000 |
+| nRF9160 DK | 64,000,000 | 99,997 | 100,000 | 100,000 |
+| nRF91x1 DK | 64,000,000 | 99,997 | 100,000 | 100,000 |
+| SAMD11D14AM | 48,000,000 | 99,995 | 100,011 | 100,000 |
+| SAMD11D14AM | 24,000,000 | 99,995 | 100,016 | 99,994 |
+| SAM4LC8C | 39,614,848 | 99,996 | 100,000 | 100,000 |
+| SAM4LC8C | 19,807,424 | 99,984 | 99,990 | 99,997 |
+
+SAM4L Xplained Pro again after e8cfe4baa, where `CalcDelayFactor` keeps the
+measured cycles per loop outside its two points. The RC clock gave 39,586,432
+and 19,793,216 Hz on this boot. The low rate is under the 19,804,096 Hz
+point, so the factors there come from the scaled point: usDelay 99,985 us,
+msDelay 99,991 us and nsDelay 99,997 us. At 39,586,432 Hz they were 99,997,
+99,997 and 100,000 us. The divisors measured on this boot, 14,001,828 and
+14,003,369 for usDelay and 3,000,390 and 3,000,690 for nsDelay, are within
+0.02 percent of the ones in the code. 0 failures.
+
+SAMD11 Xplained Pro after e8cfe4baa, calibration off: the same times as the
+run above, 99,995, 100,011 and 100,000 us at 48 MHz and 99,995, 100,016 and
+99,994 us at 24 MHz, as both rates are measured points. 0 failures.
+
+## TimerTest coverage
+
+`exemples/misc/timer_test.cpp`, the TimerTest project of each target, tests
+the timers and the Timer API on hardware. It uses the generic interfaces
+only, board.h gives the UART pins. For every DevNo, the low power timers
+first:
+
+- Init at the highest rate, `TimerSetFrequency` to half of it gives the
+  closest rate and `TimerGetFrequency` returns it, the highest rate again.
+- Init of the same DevNo by another `TimerDev_t` is refused while the timer
+  runs and while it is disabled.
+- The count over 200 ms is within 2 percent of a reference timer, the first
+  high frequency timer or another one when that is under test. At the
+  highest rate a 16-bit counter wraps many times in the window.
+- A single trigger of 10 ms fires once. A continuous trigger of 10 ms fires
+  10 times, plus or minus one, in 105 ms, and no more once disabled.
+- Enable after Disable counts again. After `TimerPowerOff`, Enable fails and
+  another `TimerDev_t` can take the DevNo.
+
+`sDelay(1)`, timed by the first high frequency timer, is within 2 percent:
+as the first call after reset, with the low frequency clock held running by
+the test, and with every low power timer held, so sDelay takes a high
+frequency timer. Each line prints the time and its difference from 1 s.
+
+TimerTest projects exist for the Nordic targets, SAMD21, SAM4LCxC,
+SAM4LSxC and SAM4E16E. It uses `UARTprintf` and does not fit the 16 KB
+SAMD11D14AM.
+
+Hardware runs, Nov. 27, 2026, reported by the maintainer: validated on the
+SAMD11 (CoreClockTest, there is no TimerTest project), SAMD21, SAM4L,
+nRF52840 and nRF52832. On SAM D and SAM4L the TimerTest Disable and Enable
+check found the TC and TCC counts lost across Disable and Enable, fixed in
+3020ba575 and 8158ceee0 before these runs. The SAMD11 also passed separate
+TC1, TC2 and TCC0 resume checks and the one- and two-second sDelay checks.
+
+nRF52832 TimerTest, 0 failures, 3 RTC and 5 TIMER:
+
+| sDelay(1) | Time | From 1 s |
+| --- | --- | --- |
+| First call, LFXO stopped | 1,002,612 us | +2,612 us |
+| LF clock held running | 1,000,030 us | +30 us |
+| Every RTC held, a TIMER used | 1,000,071 us | +71 us |
+
+The first call was 1,262,331 us before the clock start time was subtracted.
+The RTC counts over 200 ms were 200,012 to 200,043 us against TIMER0 at
+199,999 us. The 10 ms continuous trigger fired 10 times in 105 ms on every
+timer, with a period of 10,009 us on the RTC (the closest 32,768 Hz tick)
+and 10,000 us on the TIMER.
+
+### Additional Nordic hardware runs
+
+Each run below finished with zero TimerTest failures. The last three columns
+give the signed error in microseconds for a one-second delay. A positive
+value means the delay ran long.
+
+| Board and core | Commit | LF / HF timers | First call (us) | LF clock running (us) | All LF timers held (us) |
+| --- | --- | --- | ---: | ---: | ---: |
+| nRF5340 Audio DK, application | `4e5f27ac4` | 2 / 3 | +2,045 | -337 | +96 |
+| nRF5340 Audio DK, network | `4e5f27ac4` | 2 / 3 | -276 | -283 | +192 |
+| IBK-nRF54L15 | `4e5f27ac4` | 4 / 7 | -110 | -131 | +400 |
+| nRF54LM20A DK | `4e5f27ac4` | 4 / 7 | +35 | +10 | +894 |
+| nRF9160 DK | `3a69e3751` | 2 / 3 | +3,572 | +184 | +150 |
+| nRF91x1 DK | `3a69e3751` | 2 / 3 | +4,206 | +186 | +150 |
+
+On the IBK-nRF54L15, a separate 64 MHz CoreClockTest run verified the
+compiled-in delay factors with calibration disabled. For 100 ms, usDelay
+measured 99,994 us, msDelay 99,993 us and nsDelay 100,000 us. The run
+finished with zero failures. Commit `3a69e3751` includes those factors.
+
+The nRF54LM20B and SAM4E16E still lack board runs.
 
 ## TimerDemo
 
@@ -90,7 +202,3 @@ substitute for automated, pass/fail checks in CoreClockTest.
 - Hardware runs establish behavior only for the tested target/core,
   configuration, and build. Do not generalize one MCU's calibrated
   delay factors or clock support to another MCU.
-
-Existing successful nRF52832 and nRF5340 CoreClockTest timings remain valid
-for their reported scope. The expanded timer trigger checks have not yet
-been run on hardware and must pass before signoff.

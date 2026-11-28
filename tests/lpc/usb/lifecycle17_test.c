@@ -10,7 +10,7 @@
 #include "LPC17xx.h"
 #include "usb_data_lpc17xx.h"
 
-McuOsc_t g_McuOsc = {{OSC_TYPE_XTAL, 16000000, 0, 0}, {0}, false};
+McuOsc_t g_McuOsc = {{OSC_TYPE_XTAL, 16000000, 0, 0}, {0}, false, 0};
 typedef void (*IAPENTRY)(IAP_CMD_STATUS *, IAP_CMD_STATUS *);
 extern IAPENTRY IapEntry;
 static unsigned s_UidCalls;

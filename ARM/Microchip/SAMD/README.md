@@ -41,41 +41,57 @@ reset). Reset reasons are optional diagnostics, **not** a substitute for
 power management.
 
 The sleep implementation enters Standby through SLEEPDEEP/WFI and resumes
-after an interrupt. `SystemWakePin()` configures a selected asynchronous
-EIC level wake source; EIC line ownership and the ordinary GPIO interrupt
-configuration must be preserved. The existing generic
-`exemples/misc/power_off_demo.cpp` has a board-selected resumable mode,
-with Eclipse managed PowerOffDemo projects for D11 and D21. No separate
-reset-only application is required.
+after an interrupt. `SystemSleep()` only enters Standby: it calls no
+device driver. A wake source is a device interrupt the application enabled
+through the driver of that device.
+
+A pin interrupt enabled with `IOPinEnableInterrupt()` or
+`IOPinAllocateInterrupt()` wakes the MCU. The EIC is a user of the low
+frequency clock: the pin driver requests it when the first pin interrupt or
+event is enabled and releases it with the last one. That clock keeps running
+in Standby (its 32 kHz oscillator is set to run in Standby when the clock
+setup starts it), so the EIC detects the edge there. Pin edges are therefore
+sampled at 32 kHz, awake or asleep: about 0.1 ms from the edge to the
+interrupt with the filter, and a shorter pulse is not seen. The shared CorePowerTest runs three RTC wake cycles
+and then three button wake cycles on boards configured for timed wake.
+Press and release the button at each Standby button prompt. The pin interrupt
+callback records the press. Each cycle also checks the clocks, UART rate,
+and static and stack data after wake.
 
 SAMD11 Xplained Pro uses its onboard SW0/PA14, the dedicated EIC NMI input.
 No external wiring is needed. SAMD21 Xplained Pro uses its
 onboard PA15 button (EXTINT15). Monitor SAMD11 EDBG VCOM at the default
 1,000,000 baud; SAMD21 currently selects 115200 baud in its board.h.
 
-PRIMASK cannot mask SW0's NMI on D11. During Standby entry the NMI handler
-therefore leaves EIC_IRQn pending so an edge handled just before WFI cannot
-be consumed before the CPU sleeps. Entry also checks the current button
-level. After WFI, the previous EIC NVIC enable state is restored; a prior
-pending IRQ or a real EIC pin interrupt is preserved. The NMI itself is
-acknowledged normally. D21 continues to use its ordinary masked EIC IRQ.
+On D11, PA14 has no EXTINT line; its pin interrupt uses the NMI. PRIMASK
+does not hold an NMI, so the NMI handler only acknowledges it and sets the
+EIC interrupt pending. The pin handler runs from the EIC interrupt, and a
+pending EIC interrupt wakes a WFI entered with interrupts disabled. D21 uses
+its ordinary masked EIC interrupt.
 
-`python3 tests/samd/run_standby_entry.py` checks the extracted production
-entry functions with a host register model: 128 cases at O0 and O2. This
-models event timing and saved interrupt state, not Arm instruction execution
-or electrical timing. The entry change still needs a hardware rerun.
+Hardware, SAM D11 Xplained Pro, 2026-11-25: `CorePowerTest` passed 30 checks
+with no failure, three Standby wakes from the RTC and three from SW0 (PA14,
+the NMI path), with the CPU and peripheral clocks, the UART rate and the RAM
+samples checked after every wake. `CoreClockTest` passed with no failure,
+with and without the delay calibration.
+
+SAM D21 Xplained Pro, same day: `CoreClockTest` passed with no failure. With
+the calibration timer at 250 kHz its delay loop cost matches the D11, 13.0 and
+3.0 CPU cycles per pass. `CorePowerTest` passed 30 checks with no failure,
+three Standby wakes from the RTC and three from the button through its EIC
+edge interrupt, with the same checks after every wake as on the D11.
 The sleep instruction remains WFI as specified in the
 [SAMD11 datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/Atmel-42363-SAM-D11_Datasheet.pdf),
 section 15.6.2.8.2.
 
-Both PowerOffDemo boards enable `POWER_DEMO_STANDBY_RAM_TEST`. Before each
+Both CorePowerTest boards enable `POWER_DEMO_STANDBY_RAM_TEST`. Before each
 Standby entry, the demo fills 128 bytes of static storage and 128 bytes on
 the stack with complementary patterns that change each cycle. It checks
 them immediately after `SystemSleep()` returns, before enabling the UART.
 Each wake prints `SRAM sample PASS: 128 static + 128 stack bytes` or
 `SRAM sample FAIL`. A failure stops the demo after draining the UART.
-This checks only those 256 bytes; it is not a full-SRAM test. The sample
-has compiled and linked for D11 and D21 but has not yet run on hardware.
+This checks only those 256 bytes; it is not a full-SRAM test. The static
+and stack RAM checks passed on both Xplained Pro boards.
 
 With Arm GCC 15.2.1 at the projects' size optimization, the D11 linked
 image uses 15,022 bytes for text plus initialized data, with 1,296 bytes
@@ -88,11 +104,13 @@ tests/samd/run_power.py` (128/128 combinations per MCU) and
 `sh tests/samd/clang_compile.sh` (both targets' source compilation).
 `sh tests/samd/standby_compile.sh` also passed on both targets.
 Hardware result reported November 15, 2026: SAMD11 Xplained Pro SW0/PA14
-woke PowerOffDemo from Standby five consecutive times. The resume counter
+woke CorePowerTest from Standby five consecutive times. The resume counter
 advanced from 0x00000001 through 0x00000005, followed by another Standby
 entry. This validates repeated resume and counter continuity for that
-firmware. SAMD21 hardware wake, full SRAM testing and sleep-current
-measurements remain pending.
+firmware. On the SAMD21 Xplained Pro, CorePowerTest passed all 30 checks,
+including three RTC wakes and three SW0 wakes from Standby. The CPU and
+peripheral clocks, UART rate, and static and stack RAM checks passed after
+each wake. Full SRAM testing and sleep-current measurements remain pending.
 
 Not implemented: UART receive by DMA and DMA of the SPI and I2C slaves (a
 configuration asking for it fails init), USB host mode, PWM (the TCC are
@@ -110,7 +128,9 @@ libraries define `__PROGRAM_START`, as the other ports: the CMSIS 6 startup
 function of `cmsis_gcc_m.h` does not compile in C++ without the device
 header first. Both libraries include `ARM/src/timer_systick.cpp` with
 `SYSTICK_TIMER_NO_DEFAULT_INIT`: `timer_samd.cpp` owns `TimerInit` and selects
-SysTick through `SysTickTimerInit` for the last device number. The SAM
+SysTick through `SysTickTimerInit` for the last device number. With
+`SYSTICK_TIMER_SHARED_VECTOR`, that initializer installs the timer interrupt
+handler. The startup vector alone does not pull in the SysTick timer driver. The SAM
 D21 library links the UART transport of the HCI host,
 `bt_hci_ctlr_uart.cpp`, not the IPC one of a dual core part, which defines
 `BtHciCtlrH4Open` too. The examples were run on a peripheral model
@@ -151,7 +171,8 @@ yet.
 Generic clock generators: 0 is the main clock (CPU, buses, SERCOM, TC and EIC
 core clocks), 1 is 32.768 kHz from XOSC32K or the calibrated OSC32K (RTC,
 DFLL48M reference), 2 is OSC8M / 8 (FDPLL96M reference without crystal).
-`SystemPeriphClockGet(n)` returns the frequency of generator n. One flash
+`SystemPeriphClockGet(n)` returns the frequency of generator 0 or 1 as the
+clock setup left it, 0 for the other generators. One flash
 wait state is used, the datasheet value at 48 MHz for VDD 2.7 to 3.63 V.
 
 Order: main clock on OSC8M at 8 MHz, the 32.768 kHz clock on generator 1,
@@ -207,11 +228,13 @@ settings. IrDA, half duplex, 9-bit and mark or space parity are rejected.
 
 DMA: `bDMAMode` of the UART and `bDmaEn` of an SPI or I2C master take DMAC
 channels at init, which fails when the channels are not free (12 on SAM
-D21, 6 on SAM D11). The polling and interrupt modes stay as without DMA:
-without `bIntMode` or `bIntEn` the CPU waits for a DMA transfer or serves it
-from the next call, with it the DMAC interrupt ends the transfer. The DMAC
-interrupt has the most urgent priority of the drivers using it. PowerOff
-gives the channels back: transfers return 0 until the next init.
+D21, 6 on SAM D11). The polling and interrupt modes stay as without DMA.
+UART: without `bIntMode` the CPU serves a DMA transfer from the next call,
+with it the DMAC interrupt ends the transfer. SPI and I2C master: the CPU
+waits for the end of a DMA transfer in both modes, with `bIntEn` for the
+DMAC interrupt. The DMAC interrupt has the most urgent priority of the
+drivers using it. PowerOff gives the channels back: transfers return 0
+until the next init.
 
 - UART, one channel on the TX trigger (DRE): the CPU writes what DATA
   takes, the channel sends the rest of the TX CFIFO in blocks of up to half
@@ -313,8 +336,8 @@ drive: PA14, PA15, PA22 and PA23 on SAM D11; PA08, PA09, PA12, PA13, PA16,
 PA17, PA22, PA23, PB12, PB13, PB16, PB17, PB30 and PB31 on SAM D21J. The SCL
 rate is set from the main clock for an assumed 215 ns rise time, from about
 90 kHz to 1 MHz, with the low and high times of the I2C mode minimums.
-Interrupt master transfers return -1 and complete with
-`DEVINTRF_EVT_COMPLETED`; the command phase of `Read` is sent by polling.
+A master transfer is synchronous in every mode, see the SPI and I2C master
+note below.
 A new START waits for the bus to be idle, after the STOP of the previous
 transfer, up to about 15 ms. Past that, or after a polling transfer timeout,
 the SERCOM is disabled and enabled again with its settings and the bus
@@ -323,7 +346,8 @@ arbitration loss the bus stays busy until the other master's STOP.
 The slave answers one address.
 
 SPI: 4-wire, 8-bit, SCK from 93.75 kHz to 24 MHz, master chip selects on GPIO
-pins. The slave frames a transfer with its hardware SS pad;
+pins. A master transfer is synchronous in every mode, see below. The slave
+frames a transfer with its hardware SS pad;
 `DEVINTRF_EVT_STATECHG` before each frame lets the handler set the buffers,
 and the first byte is loaded while SS is high. The slave resets its SERCOM
 when SS goes high to drop the bytes loaded ahead, which takes a few
@@ -331,6 +355,15 @@ microseconds before the next frame. A byte written to DATA clears the end of
 frame flag (TXC): after such a write the slave reads the SS pin, and a high
 SS once SS went low in the frame (SSL flag) or a byte was received is also
 the end of the frame.
+
+SPI and I2C master: `TxData` and `RxData` return the count of bytes moved
+when the transfer is done, with or without `bIntEn` and DMA. With `bIntEn`
+each wait of the transfer, for a SERCOM flag or for the end of a DMA block,
+waits for the SERCOM or DMAC interrupt; the handler masks the interrupt and
+tells the wait, which reads the flags as in polling mode. The master reports
+no `DEVINTRF_EVT_COMPLETED`. The application sets the interrupt priority: a
+transfer is not called from an interrupt handler of the same or a higher
+priority than the SERCOM and the DMAC.
 
 ADC: `AdcSamd` of `adc_samd.h`, the notes of that header give the inputs,
 references, gains and timing. A channel is converted alone with its own
@@ -568,6 +601,23 @@ channel enable, moves one beat per SERCOM request (DRE or RXC of the USART
 and SPI, MB or SB of the I2C master), writes the descriptor back at the end
 of the block and at a disable, and sets TCMPL with BLOCKACT INT; the SPI
 master model takes a DATA write while a byte shifts (double buffer).
+
+The I2CMasterSlave, SPIMasterSlave and DMA test rows above were run with the
+earlier master drivers, which completed an interrupt transfer from the
+handler. The synchronous master transfers (Nov. 26, 2026) were checked with
+`tests/samd/run_master_irq.py`: the I2C, SPI and DMAC drivers built for SAM
+D21 at -O1 and -Os, run in unicorn with a SERCOM and DMAC register model, in
+the four master modes. I2C: transmit, receive of 1, 2 and 33 bytes, register
+read with a repeated START, combined write, address refused, refused bytes,
+a bus error in a DMA block. SPI: transmit and receive up to 300 bytes,
+command and read, a receive overflow in a DMA block. In interrupt mode, a
+flag or a block end whose interrupt is held off does not end the wait, and
+the handler leaves the interrupt masked. Each of 12 changes to the waits and
+handlers makes the check fail. `tests/samd/run_spi.py` checks the SPI mode
+selection and lifecycle on the host. Hardware (maintainer, SAM D11 with
+OLED1, Nov. 26, 2026): LCDConsoleDisplayDemo works with SPI interrupt and
+DMA off, and with both on; ClockDisplayDemo also ran. Not run on hardware:
+SPI interrupt only, SPI DMA only, the I2C master, SAM D21.
 
 Separate timer tests on the SAM D21 model, the RTC compared with a TC: the
 count read after single triggers and after disabling a trigger, single

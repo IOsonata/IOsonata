@@ -47,6 +47,7 @@ SOFTWARE.
 #define __IDELAY_H__
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "coredev/system_core_clock.h"
 typedef struct {
@@ -67,6 +68,24 @@ extern uint64_t SystemCoreClockPeriodus;	// Cycles per microsecond
 
 // Low 32 bits of the running CPU cycle counter; wraps modulo 2^32.
 uint32_t IOsonataRiscvCycle32(void);
+
+/**
+ * @brief Sleep for a number of seconds on a timer.
+ *
+ * src/sdelay.cpp takes a free timer for the time of the call: a low power
+ * timer when one is free, a high frequency timer otherwise. The CPU waits in
+ * light sleep. The whole call, timer setup, clock start, sleep and release,
+ * lasts the requested time. TimerInit refuses a timer held by another Timer
+ * object, so the application timers are never taken.
+ *
+ * Interrupt context, masked interrupts, a call during another sDelay or no
+ * free timer return false. Zero seconds succeeds immediately.
+ *
+ * @param	Seconds : Seconds to wait
+ *
+ * @return	true - The delay is done
+ */
+bool sDelay(uint32_t Seconds);
 
 #ifdef __cplusplus
 }
@@ -178,6 +197,15 @@ static inline bool DelayCalibrationFromTimer(uint32_t CpuHz,
 		pPoint->NsLoopsPerSecond = 0U;
 		pPoint->Measured = false;
 	}
+	return false;
+}
+
+// The delays count CPU cycles, there is no delay factor to set
+static inline bool DelayCalibrationApply(const DelayCalibrationPoint_t *pPoint,
+	DelayCalibrationPoint_t *pOld)
+{
+	(void)pPoint;
+	(void)pOld;
 	return false;
 }
 

@@ -6,14 +6,16 @@
 		DevNo is the SERCOM number. SDA is pad 0, SCL pad 1, on pins with the
 		I2C pad drive (see SamdSercomI2cPin). 7-bit addresses, standard I2C.
 
-		Master: polling or interrupt. The SCL rate is set from the main clock
-		with an assumed 215 ns rise time, from 1 MHz down to about 90 kHz at
-		48 MHz; a request out of that range gets the closest rate. In
-		interrupt mode, TxData and RxData return -1 and report the transfer
-		with DEVINTRF_EVT_COMPLETED. The command phase of a read (bNoStop)
-		is sent by polling. Data to transmit is copied to a buffer shared by
-		the instances; data longer than the buffer, or sent while another
-		instance uses it, is sent by polling and reported the same way.
+		Master: polling or interrupt, the same transfer in both modes: TxData
+		and RxData return the count of bytes moved when the transfer is done.
+		In interrupt mode a wait for MB or SB, or for the end of a DMA block,
+		waits for the SERCOM or DMAC interrupt: the handler masks it and tells
+		the wait, which then reads the flags as in polling mode. The
+		application sets the interrupt priority: a transfer is not called
+		from an interrupt of the same or a higher priority. The SCL rate is
+		set from the main clock with an assumed 215 ns rise time, from 1 MHz
+		down to about 90 kHz at 48 MHz; a request out of that range gets the
+		closest rate.
 		A START waits for the bus to be idle, up to about 15 ms: past it, or
 		after a polling transfer timeout, the SERCOM is restarted and the bus
 		state set to idle. A slave holding SDA low is not clocked free.
@@ -28,10 +30,9 @@
 		each read acknowledging the byte and starting the next (smart mode),
 		the CPU refuses the last byte and sends the STOP. ADDR.LENEN is not
 		used: the transfer has any length, the STOP or the repeated START is
-		set by the CPU as without DMA. Same modes as without DMA: with bIntEn
-		the DMAC interrupt ends the block and the SERCOM interrupt the
-		transfer, the cases sent by polling above are sent by DMA with the
-		CPU waiting, as all transfers without bIntEn. A transmit byte refused
+		set by the CPU as without DMA. The CPU waits for the end of a block:
+		for the DMAC interrupt, or the SERCOM error interrupt, with bIntEn,
+		reading the channel state without. A transmit byte refused
 		by the slave does not stop the channel: the count is the length, less
 		one when the slave refused the last byte. A receive of one byte is
 		done by the CPU.
@@ -94,13 +95,6 @@ SOFTWARE.
 #define SAMD_I2C_RATE_MAX			1000000U	// Fast mode plus
 #define SAMD_I2C_TRISE_NS			215U		// SCL rise time of the rate setting
 
-// Interrupt transmit buffer, shared by the instances
-#if SAMD_SERCOM_CNT > 3
-#define SAMD_I2C_TXBUF_SIZE			256
-#else
-#define SAMD_I2C_TXBUF_SIZE			64
-#endif
-
 // Master CTRLB.CMD
 #define SAMD_I2CM_CMD_STOP			3U		// Acknowledge action then STOP
 
@@ -124,46 +118,31 @@ SOFTWARE.
 #define SAMD_I2CS_INTS				(SERCOM_I2CS_INTENSET_PREC_Msk | SERCOM_I2CS_INTENSET_AMATCH_Msk | \
 									 SERCOM_I2CS_INTENSET_DRDY_Msk | SERCOM_I2CS_INTENSET_ERROR_Msk)
 
-typedef enum {
-	SAMD_I2C_OP_NONE,
-	SAMD_I2C_OP_TX,
-	SAMD_I2C_OP_RX,
-} SAMD_I2C_OP;
-
 #pragma pack(push, 4)
 
-typedef struct {
+typedef struct SamdI2cDev SamdI2cDev_t;
+
+struct SamdI2cDev {
+	void (*DmaGive)(SamdI2cDev_t *);
 	int DevNo;						//!< SERCOM number
 	sercom_registers_t *pReg;
 	I2CDev_t *pI2cDev;				//!< Generic I2C device data
 	uint32_t CtrlA;					//!< CTRLA without ENABLE
-	uint32_t Baud;					//!< Master BAUD
+	int SlaveCount;
+	int8_t DmaChan;					//!< DMAC channel of the master, both directions
 	uint8_t DevAddr;				//!< Master target address
 	bool bNeedStart;				//!< Master: the next byte goes after the address
 	bool bBusHeld;					//!< Master owns the bus, no STOP sent
-	volatile SAMD_I2C_OP Op;		//!< Master interrupt transfer
-	bool bAddrPhase;				//!< Master interrupt transmit: address sent, not acknowledged
-	const uint8_t *pTxData;
-	uint8_t *pRxData;
-	int Remain;
-	int Count;
 	bool bSlaveTx;					//!< Slave transmit, master read
 	bool bSlaveRx;					//!< Slave receive, master write
 	bool bSlaveFirst;				//!< First data interrupt of a slave transmit
 	bool bDma;						//!< DmaChan taken
-	int SlaveCount;
-	volatile bool bDmaRun;			//!< Master DMA block ended by the DMAC interrupt
-	bool bSleepPaused;			//!< Master suspended by SystemSleep
-	int8_t DmaChan;					//!< DMAC channel of the master, both directions
-	uint16_t DmaLen;				//!< Bytes of the running block
-} SamdI2cDev_t;
+	volatile bool bIrq;				//!< Master interrupt mode: an interrupt came since the wait started
+};
 
 #pragma pack(pop)
 
 static SamdI2cDev_t s_SamdI2cDev[SAMD_SERCOM_CNT];
-
-static uint8_t s_SamdI2cTxBuf[SAMD_I2C_TXBUF_SIZE];
-static SamdI2cDev_t *s_pSamdI2cTxOwner;
 
 static bool SamdI2cSync(sercom_registers_t *pReg, uint32_t Mask)
 {
@@ -176,6 +155,12 @@ static bool SamdI2cSync(sercom_registers_t *pReg, uint32_t Mask)
 	}
 
 	return false;
+}
+
+static bool SamdI2cmSetIdle(SamdI2cDev_t *pDev)
+{
+	pDev->pReg->I2CM.SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
+	return SamdI2cSync(pDev->pReg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
 }
 
 static inline uint32_t SamdI2cmBusState(sercom_i2cm_registers_t *pReg)
@@ -250,8 +235,7 @@ static void SamdI2cmRecover(SamdI2cDev_t *pDev, bool bRestart)
 	}
 
 	// The bus state is unknown after enable
-	reg->SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
-	(void)SamdI2cSync(pDev->pReg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
+	(void)SamdI2cmSetIdle(pDev);
 }
 
 // Before a START that is not a repeated START, from the caller of the
@@ -273,10 +257,12 @@ static void SamdI2cmWaitFree(SamdI2cDev_t *pDev)
 	}
 }
 
-// MB or SB, 0 on timeout
+// MB or SB, 0 on timeout. In interrupt mode the wait is for the MB or SB
+// interrupt, the flags are read again after it.
 static uint8_t SamdI2cmWait(SamdI2cDev_t *pDev)
 {
 	sercom_i2cm_registers_t *reg = &pDev->pReg->I2CM;
+	bool irq = pDev->pI2cDev->DevIntrf.bIntEn;
 
 	for (uint32_t i = 0; i < SAMD_I2C_WAIT_LIMIT; i++)
 	{
@@ -285,6 +271,14 @@ static uint8_t SamdI2cmWait(SamdI2cDev_t *pDev)
 		if (flags != 0U)
 		{
 			return flags;
+		}
+		if (irq)
+		{
+			pDev->bIrq = false;
+			reg->SERCOM_INTENSET = SERCOM_I2CM_INTENSET_MB_Msk | SERCOM_I2CM_INTENSET_SB_Msk;
+			while (!pDev->bIrq && ++i < SAMD_I2C_WAIT_LIMIT)
+			{
+			}
 		}
 	}
 
@@ -298,18 +292,10 @@ static inline void SamdI2cmSendAddress(SamdI2cDev_t *pDev, bool bRead)
 	pDev->bNeedStart = false;
 }
 
-// START, or repeated START on a held bus, and the address. A read has its
-// first byte received when this returns true.
-static bool SamdI2cmAddress(SamdI2cDev_t *pDev, bool bRead)
+static bool SamdI2cmAck(SamdI2cDev_t *pDev, bool bRead)
 {
-	sercom_i2cm_registers_t *reg = &pDev->pReg->I2CM;
-
-	SamdI2cmWaitFree(pDev);
-	SamdI2cmCtrlb(pDev, 0, false);
-	SamdI2cmSendAddress(pDev, bRead);
-
 	uint8_t flags = SamdI2cmWait(pDev);
-	uint16_t status = reg->SERCOM_STATUS;
+	uint16_t status = pDev->pReg->I2CM.SERCOM_STATUS;
 
 	if (flags == 0U || (status & SAMD_I2CM_BUS_ERRORS) != 0U)
 	{
@@ -320,7 +306,7 @@ static bool SamdI2cmAddress(SamdI2cDev_t *pDev, bool bRead)
 
 	pDev->bBusHeld = true;
 
-	// Address refused: MB with RXNACK instead of the first read byte
+	// A read address must also have received its first byte.
 	if ((status & SERCOM_I2CM_STATUS_RXNACK_Msk) != 0U || (bRead && (flags & SERCOM_I2CM_INTFLAG_SB_Msk) == 0U))
 	{
 		SamdI2cmStop(pDev);
@@ -329,6 +315,17 @@ static bool SamdI2cmAddress(SamdI2cDev_t *pDev, bool bRead)
 	}
 
 	return true;
+}
+
+// START, or repeated START on a held bus, and the address. A read has its
+// first byte received when this returns true.
+static bool SamdI2cmAddress(SamdI2cDev_t *pDev, bool bRead)
+{
+	SamdI2cmWaitFree(pDev);
+	SamdI2cmCtrlb(pDev, 0, false);
+	SamdI2cmSendAddress(pDev, bRead);
+
+	return SamdI2cmAck(pDev, bRead);
 }
 
 // Bytes acknowledged by the slave
@@ -347,17 +344,8 @@ static int SamdI2cmTxPolling(SamdI2cDev_t *pDev, const uint8_t *pData, int DataL
 		reg->SERCOM_DATA = pData[count];
 		(void)SamdI2cSync(pDev->pReg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
 
-		uint8_t flags = SamdI2cmWait(pDev);
-		uint16_t status = reg->SERCOM_STATUS;
-
-		if (flags == 0U || (status & SAMD_I2CM_BUS_ERRORS) != 0U)
+		if (!SamdI2cmAck(pDev, false))
 		{
-			SamdI2cmRecover(pDev, flags == 0U);
-			break;
-		}
-		if ((status & SERCOM_I2CM_STATUS_RXNACK_Msk) != 0U)
-		{
-			SamdI2cmStop(pDev);
 			break;
 		}
 		count++;
@@ -410,7 +398,6 @@ static void SamdI2cmDmaStart(SamdI2cDev_t *pDev, const uint8_t *pTx, uint8_t *pR
 {
 	volatile uint8_t *data = &pDev->pReg->I2CM.SERCOM_DATA;
 
-	pDev->DmaLen = (uint16_t)Len;
 	if (pTx != NULL)
 	{
 		SamdDmacTrigger(pDev->DmaChan, SAMD_DMAC_TRIG_SERCOM_TX(pDev->DevNo));
@@ -423,22 +410,38 @@ static void SamdI2cmDmaStart(SamdI2cDev_t *pDev, const uint8_t *pTx, uint8_t *pR
 	}
 }
 
-// Wait of a DMA block, the CPU polling, ended by a bus error. Bounded at
-// SAMD_I2C_WAIT_LIMIT passes, as one byte by polling, plus the core clocks
-// of the block at 9 SCL periods a byte: a pass takes several clocks, a slave
-// holding SCL low ends the wait after about 15 ms plus a few times the
-// transfer time. Returns the bytes the channel did not move.
+// Wait of a DMA block, ended by a bus error. Bounded at SAMD_I2C_WAIT_LIMIT
+// passes, as one byte by polling, plus the core clocks of the block at 9 SCL
+// periods a byte: a pass takes several clocks, a slave holding SCL low ends
+// the wait after about 15 ms plus a few times the transfer time. In interrupt
+// mode the wait is for the DMAC interrupt of the channel or the SERCOM error
+// interrupt, the channel and the status are read again after it. Returns the
+// bytes the channel did not move.
 static int SamdI2cmDmaWait(SamdI2cDev_t *pDev, int Len)
 {
 	sercom_i2cm_registers_t *reg = &pDev->pReg->I2CM;
 	uint32_t rate = pDev->pI2cDev->Cfg.Rate;
 	uint64_t limit = SAMD_I2C_WAIT_LIMIT + (uint64_t)Len * 9U * SystemCoreClockGet() / (rate ? rate : 1U);
+	bool irq = pDev->pI2cDev->DevIntrf.bIntEn;
+
+	if (irq)
+	{
+		pDev->bIrq = false;
+		reg->SERCOM_INTENSET = SERCOM_I2CM_INTENSET_ERROR_Msk;
+	}
 
 	for (uint64_t i = 0; i < limit && SamdDmacBusy(pDev->DmaChan); i++)
 	{
 		if ((reg->SERCOM_STATUS & SAMD_I2CM_BUS_ERRORS) != 0U)
 		{
 			break;
+		}
+		if (irq)
+		{
+			while (!pDev->bIrq && ++i < limit)
+			{
+			}
+			pDev->bIrq = false;
 		}
 	}
 
@@ -558,360 +561,13 @@ static int SamdI2cmRxSync(SamdI2cDev_t *pDev, uint8_t *pBuff, int BuffLen)
 	return pDev->bDma ? SamdI2cmRxDma(pDev, pBuff, BuffLen) : SamdI2cmRxPolling(pDev, pBuff, BuffLen);
 }
 
-// Running DMA block of an interrupt transfer stopped, the bytes it moved
-// counted. bError: the transmit byte on the bus at an error is not counted.
-static void SamdI2cmDmaEnd(SamdI2cDev_t *pDev, bool bError)
-{
-	uint32_t state = DisableInterrupt();
-
-	if (pDev->bDmaRun)
-	{
-		pDev->bDmaRun = false;
-
-		int moved = pDev->DmaLen - (int)SamdDmacStop(pDev->DmaChan);
-
-		if (pDev->Op == SAMD_I2C_OP_TX)
-		{
-			if (bError && moved > 0)
-			{
-				moved--;
-			}
-		}
-		else
-		{
-			pDev->pRxData += moved;
-			pDev->Remain -= moved;
-		}
-		pDev->Count += moved;
-	}
-
-	EnableInterrupt(state);
-}
-
-// Interrupt transfer by DMA of the bytes left, the SERCOM interrupt on
-// errors only until the DMAC interrupt ends the block: transmit of all the
-// bytes, receive of all but the last. The state is set before the channel
-// starts: its interrupt can come at once.
-static void SamdI2cmDmaRun(SamdI2cDev_t *pDev)
-{
-	sercom_i2cm_registers_t *reg = &pDev->pReg->I2CM;
-
-	reg->SERCOM_INTENCLR = SERCOM_I2CM_INTENCLR_MB_Msk | SERCOM_I2CM_INTENCLR_SB_Msk;
-	reg->SERCOM_INTENSET = SERCOM_I2CM_INTENSET_ERROR_Msk;
-	pDev->bDmaRun = true;
-	if (pDev->Op == SAMD_I2C_OP_TX)
-	{
-		const uint8_t *p = pDev->pTxData;
-		int len = pDev->Remain;
-
-		pDev->pTxData += len;
-		pDev->Remain = 0;
-		SamdI2cmDmaStart(pDev, p, NULL, len);
-	}
-	else
-	{
-		SamdI2cmDmaStart(pDev, NULL, pDev->pRxData, pDev->Remain - 1);
-	}
-}
-
-// End of a master interrupt transfer taken by the first of the DMAC
-// interrupt, the SERCOM interrupt and the caller: SERCOM interrupts off, a
-// running DMA block stopped and counted. Returns the operation, none when
-// another path took it. The STOP of a transmit is sent by StopTx from
-// DeviceIntrfTxComplete.
-static SAMD_I2C_OP SamdI2cmTake(SamdI2cDev_t *pDev, bool bError)
-{
-	uint32_t state = DisableInterrupt();
-	SAMD_I2C_OP op = pDev->Op;
-
-	if (op != SAMD_I2C_OP_NONE)
-	{
-		pDev->pReg->I2CM.SERCOM_INTENCLR = SAMD_I2CM_INTS;
-		SamdI2cmDmaEnd(pDev, bError);
-		pDev->Op = SAMD_I2C_OP_NONE;
-		if (s_pSamdI2cTxOwner == pDev)
-		{
-			s_pSamdI2cTxOwner = NULL;
-		}
-	}
-	EnableInterrupt(state);
-
-	return op;
-}
-
-// Transfer reported, after SamdI2cmTake
-static void SamdI2cmFinish(SamdI2cDev_t *pDev, SAMD_I2C_OP Op)
-{
-	DevIntrf_t *intrf = &pDev->pI2cDev->DevIntrf;
-
-	if (Op == SAMD_I2C_OP_TX)
-	{
-		DeviceIntrfTxComplete(intrf);
-	}
-	else
-	{
-		DeviceIntrfStopRx(intrf);
-	}
-
-	if (intrf->EvtCB)
-	{
-		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, NULL, pDev->Count);
-	}
-}
-
-static void SamdI2cmComplete(SamdI2cDev_t *pDev)
-{
-	SAMD_I2C_OP op = SamdI2cmTake(pDev, false);
-
-	if (op != SAMD_I2C_OP_NONE)
-	{
-		SamdI2cmFinish(pDev, op);
-	}
-}
-
-// After a bus error: the transfer taken first, so that a DMAC interrupt
-// in the recovery does not end it again
-static void SamdI2cmAbort(SamdI2cDev_t *pDev)
-{
-	SAMD_I2C_OP op = SamdI2cmTake(pDev, true);
-
-	if (op != SAMD_I2C_OP_NONE)
-	{
-		SamdI2cmRecover(pDev, false);
-		SamdI2cmFinish(pDev, op);
-	}
-}
-
-static int SamdI2cmTxInt(SamdI2cDev_t *pDev, const uint8_t *pData, int DataLen)
-{
-	sercom_i2cm_registers_t *reg = &pDev->pReg->I2CM;
-	DevIntrf_t *intrf = &pDev->pI2cDev->DevIntrf;
-	uint32_t state = DisableInterrupt();
-	bool buff = s_pSamdI2cTxOwner == NULL && DataLen <= SAMD_I2C_TXBUF_SIZE;
-
-	if (buff)
-	{
-		s_pSamdI2cTxOwner = pDev;
-	}
-	EnableInterrupt(state);
-
-	intrf->bTxReady = false;
-
-	if (!buff)
-	{
-		pDev->Count = SamdI2cmTxSync(pDev, pData, DataLen);
-		pDev->Op = SAMD_I2C_OP_TX;
-		SamdI2cmComplete(pDev);
-
-		return -1;
-	}
-
-	// The caller data does not outlive the call
-	memcpy(s_SamdI2cTxBuf, pData, (size_t)DataLen);
-	pDev->pTxData = s_SamdI2cTxBuf;
-	pDev->Remain = DataLen;
-	pDev->Count = 0;
-	pDev->Op = SAMD_I2C_OP_TX;
-
-	if (pDev->bNeedStart)
-	{
-		pDev->bAddrPhase = true;
-		SamdI2cmWaitFree(pDev);
-		SamdI2cmCtrlb(pDev, 0, false);
-		SamdI2cmSendAddress(pDev, false);
-	}
-	else if (pDev->bDma)
-	{
-		// Bus held, MB set by the last byte: the channel starts at once
-		uint32_t state = DisableInterrupt();
-
-		pDev->bAddrPhase = false;
-		SamdI2cmDmaRun(pDev);
-		EnableInterrupt(state);
-
-		return -1;
-	}
-	else
-	{
-		pDev->bAddrPhase = false;
-		pDev->Remain--;
-		reg->SERCOM_DATA = *pDev->pTxData++;
-		(void)SamdI2cSync(pDev->pReg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
-	}
-
-	reg->SERCOM_INTENSET = SAMD_I2CM_INTS;
-
-	return -1;
-}
-
-static int SamdI2cmRxInt(SamdI2cDev_t *pDev, uint8_t *pBuff, int BuffLen)
-{
-	if (pDev->bDma && BuffLen - 1 > SAMD_DMAC_COUNT_MAX)
-	{
-		// Longer than a block
-		pDev->Count = SamdI2cmRxSync(pDev, pBuff, BuffLen);
-		pDev->Op = SAMD_I2C_OP_RX;
-		SamdI2cmComplete(pDev);
-
-		return -1;
-	}
-
-	pDev->pRxData = pBuff;
-	pDev->Remain = BuffLen;
-	pDev->Count = 0;
-	pDev->Op = SAMD_I2C_OP_RX;
-
-	SamdI2cmWaitFree(pDev);
-	SamdI2cmCtrlb(pDev, 0, false);
-	SamdI2cmSendAddress(pDev, true);
-
-	pDev->pReg->I2CM.SERCOM_INTENSET = SAMD_I2CM_INTS;
-
-	return -1;
-}
-
-// DMAC interrupt of the master channel: the end of the last byte by the
-// SERCOM interrupt, MB of a transmit, SB of the last receive byte
+// DMAC interrupt of the master channel: the wait reads the channel again
 static void SamdI2cmDmaHandler(int Chan, uint32_t Flags, void *pCtx)
 {
-	SamdI2cDev_t *dev = (SamdI2cDev_t *)pCtx;
-	bool err = (Flags & DMAC_CHINTFLAG_TERR_Msk) != 0U;
-
 	(void)Chan;
+	(void)Flags;
 
-	if (!dev->bDmaRun)
-	{
-		return;
-	}
-
-	if (err)
-	{
-		SamdI2cmAbort(dev);
-
-		return;
-	}
-
-	uint32_t state = DisableInterrupt();
-
-	if (dev->bDmaRun && dev->Op != SAMD_I2C_OP_NONE)
-	{
-		SamdI2cmDmaEnd(dev, false);
-		dev->pReg->I2CM.SERCOM_INTENSET = SAMD_I2CM_INTS;
-	}
-	EnableInterrupt(state);
-}
-
-static void SamdI2cmIrq(SamdI2cDev_t *pDev)
-{
-	sercom_i2cm_registers_t *reg = &pDev->pReg->I2CM;
-	// MB and SB are left to a running DMA block, their interrupts off
-	uint8_t flags = reg->SERCOM_INTFLAG & reg->SERCOM_INTENSET;
-	uint16_t status = reg->SERCOM_STATUS;
-
-	if (pDev->Op == SAMD_I2C_OP_NONE)
-	{
-		reg->SERCOM_INTENCLR = SAMD_I2CM_INTS;
-
-		return;
-	}
-
-	if ((flags & SERCOM_I2CM_INTFLAG_ERROR_Msk) != 0U || (status & SAMD_I2CM_BUS_ERRORS) != 0U)
-	{
-		SamdI2cmAbort(pDev);
-
-		return;
-	}
-
-	if (pDev->Op == SAMD_I2C_OP_TX)
-	{
-		if ((flags & SERCOM_I2CM_INTFLAG_MB_Msk) == 0U)
-		{
-			return;
-		}
-
-		pDev->bBusHeld = true;
-
-		// Address or data refused. With DMA the refused byte is the last
-		// one the channel sent.
-		if ((status & SERCOM_I2CM_STATUS_RXNACK_Msk) != 0U)
-		{
-			if (pDev->bDma && !pDev->bAddrPhase && pDev->Count > 0)
-			{
-				pDev->Count--;
-			}
-			SamdI2cmStop(pDev);
-			SamdI2cmComplete(pDev);
-
-			return;
-		}
-
-		if (pDev->bAddrPhase)
-		{
-			pDev->bAddrPhase = false;
-			if (pDev->bDma)
-			{
-				SamdI2cmDmaRun(pDev);
-
-				return;
-			}
-		}
-		else if (!pDev->bDma)
-		{
-			pDev->Count++;
-		}
-
-		if (pDev->Remain > 0)
-		{
-			pDev->Remain--;
-			reg->SERCOM_DATA = *pDev->pTxData++;
-			(void)SamdI2cSync(pDev->pReg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
-
-			return;
-		}
-
-		SamdI2cmComplete(pDev);
-
-		return;
-	}
-
-	// Receive: MB is the address refused
-	if ((flags & SERCOM_I2CM_INTFLAG_MB_Msk) != 0U)
-	{
-		pDev->bBusHeld = true;
-		SamdI2cmStop(pDev);
-		SamdI2cmComplete(pDev);
-
-		return;
-	}
-
-	if ((flags & SERCOM_I2CM_INTFLAG_SB_Msk) != 0U)
-	{
-		pDev->bBusHeld = true;
-
-		// First byte in: the channel reads all but the last one
-		if (pDev->bDma && pDev->Count == 0 && pDev->Remain >= 2)
-		{
-			SamdI2cmDmaRun(pDev);
-
-			return;
-		}
-
-		if (pDev->Remain <= 1)
-		{
-			SamdI2cmCtrlb(pDev, SAMD_I2CM_CMD_STOP, true);
-			pDev->bBusHeld = false;
-		}
-
-		(void)SamdI2cSync(pDev->pReg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
-		*pDev->pRxData++ = reg->SERCOM_DATA;
-		pDev->Count++;
-		pDev->Remain--;
-
-		if (pDev->Remain <= 0)
-		{
-			SamdI2cmComplete(pDev);
-		}
-	}
+	((SamdI2cDev_t *)pCtx)->bIrq = true;
 }
 
 // Slave CTRLB in the address and data interrupts. SAM D erratum: a CTRLB
@@ -1060,12 +716,23 @@ static void SamdI2cDmaGive(SamdI2cDev_t *pDev)
 	if (pDev->bDma)
 	{
 		pDev->bDma = false;
-		pDev->bDmaRun = false;
 		SamdDmacClose(pDev->DmaChan);
 		pDev->DmaChan = -1;
 	}
 }
 
+// PowerOff and Init give the channel back. A transfer ends with its channel
+// stopped.
+static void SamdI2cReleaseDma(SamdI2cDev_t *pDev)
+{
+	if (pDev->DmaGive != NULL)
+	{
+		pDev->DmaGive(pDev);
+	}
+}
+
+// Master: the interrupt is masked and the wait told, the flags are left to
+// the wait
 static void SamdI2cIrqHandler(int DevNo, DevIntrf_t * const pDev)
 {
 	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
@@ -1078,13 +745,16 @@ static void SamdI2cIrqHandler(int DevNo, DevIntrf_t * const pDev)
 	}
 	else
 	{
-		SamdI2cmIrq(dev);
+		dev->pReg->I2CM.SERCOM_INTENCLR = SAMD_I2CM_INTS;
+		dev->bIrq = true;
 	}
 }
 
-static uint64_t SamdI2cCeilDiv(uint64_t Num, uint64_t Den)
+// All SAMD11/D21 phase times are multiples of 20 or 100 ns. Reducing
+// the fraction first keeps the product within 32 bits at up to 48 MHz.
+static uint32_t SamdI2cCycles(uint32_t Clock, uint32_t Units, uint32_t UnitsPerSecond)
 {
-	return (Num + Den - 1U) / Den;
+	return 1U + (Clock * Units - 1U) / UnitsPerSecond;
 }
 
 // Speed and SDA hold of CTRLA and the master BAUD of a rate. Returns the SCL
@@ -1094,6 +764,7 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 	uint32_t fclk = SystemPeriphClockGet(SAMD_GCLK_MAIN);
 	uint32_t tlow;
 	uint32_t thigh;
+	uint32_t unitsPerSecond;
 
 	if (Rate == 0U || fclk == 0U)
 	{
@@ -1106,8 +777,9 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 
 	if (Rate > I2C_SCL_FAST_MODE_MAX_SPEED * 1000U)
 	{
-		tlow = I2C_SCL_TLOW_FAST_MODE_PLUS_MIN;
-		thigh = I2C_SCL_THIGH_FAST_MODE_PLUS_MIN;
+		unitsPerSecond = 50000000U;
+		tlow = I2C_SCL_TLOW_FAST_MODE_PLUS_MIN / 20U;
+		thigh = I2C_SCL_THIGH_FAST_MODE_PLUS_MIN / 20U;
 		// Fast mode plus, 50 to 100 ns SDA hold
 		*pCtrla = SERCOM_I2CM_CTRLA_SPEED(1U) | SERCOM_I2CM_CTRLA_SDAHOLD(1U);
 	}
@@ -1115,13 +787,15 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 	{
 		if (Rate > I2C_SCL_STD_MODE_MAX_SPEED * 1000U)
 		{
-			tlow = I2C_SCL_TLOW_FAST_MODE_MIN;
-			thigh = I2C_SCL_THIGH_FAST_MODE_MIN;
+			unitsPerSecond = 10000000U;
+			tlow = I2C_SCL_TLOW_FAST_MODE_MIN / 100U;
+			thigh = I2C_SCL_THIGH_FAST_MODE_MIN / 100U;
 		}
 		else
 		{
-			tlow = I2C_SCL_TLOW_STD_MODE_MIN;
-			thigh = I2C_SCL_THIGH_STD_MODE_MIN;
+			unitsPerSecond = 10000000U;
+			tlow = I2C_SCL_TLOW_STD_MODE_MIN / 100U;
+			thigh = I2C_SCL_THIGH_STD_MODE_MIN / 100U;
 		}
 		// 300 to 600 ns SDA hold
 		*pCtrla = SERCOM_I2CM_CTRLA_SPEED(0U) | SERCOM_I2CM_CTRLA_SDAHOLD(2U);
@@ -1130,10 +804,10 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 	// fSCL = fclk / (10 + BAUD + BAUDLOW + fclk * Trise)
 	// Tlow = (BAUDLOW + 5) / fclk, Thigh = (BAUD + 5) / fclk, the rise time
 	// apart: the high time counts from SCL seen high
-	int32_t rise = (int32_t)SamdI2cCeilDiv((uint64_t)fclk * SAMD_I2C_TRISE_NS, 1000000000ULL);
+	int32_t rise = (int32_t)SamdI2cCycles(fclk, SAMD_I2C_TRISE_NS / 5U, 200000000U);
 	int32_t period = (int32_t)((fclk + Rate / 2U) / Rate);
-	int32_t low = (int32_t)SamdI2cCeilDiv((uint64_t)fclk * tlow, 1000000000ULL) - 5;
-	int32_t high = (int32_t)SamdI2cCeilDiv((uint64_t)fclk * thigh, 1000000000ULL) - 5;
+	int32_t low = (int32_t)SamdI2cCycles(fclk, tlow, unitsPerSecond) - 5;
+	int32_t high = (int32_t)SamdI2cCycles(fclk, thigh, unitsPerSecond) - 5;
 	int32_t avail = period - 10 - rise;
 
 	if (low < 1)
@@ -1166,7 +840,7 @@ static uint32_t SamdI2cTiming(uint32_t Rate, uint32_t *pCtrla, uint32_t *pBaud)
 }
 
 // Configuration, from the SERCOM reset. Interrupts disabled.
-static bool SamdI2cHwInit(SamdI2cDev_t *pDev)
+static bool SamdI2cHwInit(SamdI2cDev_t *pDev, bool PollingMaster)
 {
 	sercom_registers_t *reg = pDev->pReg;
 	I2CDev_t *i2c = pDev->pI2cDev;
@@ -1189,14 +863,13 @@ static bool SamdI2cHwInit(SamdI2cDev_t *pDev)
 		return false;
 	}
 
-	if (i2c->Cfg.Mode == I2CMODE_MASTER)
+	if (PollingMaster || i2c->Cfg.Mode == I2CMODE_MASTER)
 	{
 		pDev->CtrlA = SERCOM_I2CM_CTRLA_MODE_I2C_MASTER | timing;
-		pDev->Baud = baud;
 		i2c->Cfg.Rate = rate;
 
 		reg->I2CM.SERCOM_CTRLA = pDev->CtrlA;
-		reg->I2CM.SERCOM_BAUD = pDev->Baud;
+		reg->I2CM.SERCOM_BAUD = baud;
 		reg->I2CM.SERCOM_CTRLB = SERCOM_I2CM_CTRLB_SMEN_Msk;
 		reg->I2CM.SERCOM_CTRLA = pDev->CtrlA | SERCOM_I2CM_CTRLA_ENABLE_Msk;
 		if (!SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_ENABLE_Msk | SERCOM_I2CM_SYNCBUSY_SYSOP_Msk))
@@ -1205,8 +878,7 @@ static bool SamdI2cHwInit(SamdI2cDev_t *pDev)
 		}
 
 		// The bus state is unknown after enable
-		reg->I2CM.SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
-		if (!SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk))
+		if (!SamdI2cmSetIdle(pDev))
 		{
 			return false;
 		}
@@ -1229,7 +901,7 @@ static bool SamdI2cHwInit(SamdI2cDev_t *pDev)
 		}
 	}
 
-	if (i2c->DevIntrf.bIntEn)
+	if (!PollingMaster && i2c->DevIntrf.bIntEn)
 	{
 		NVIC_ClearPendingIRQ(irq);
 		NVIC_SetPriority(irq, SamdIrqPrio(i2c->Cfg.IntPrio));
@@ -1256,9 +928,9 @@ static uint32_t SamdI2cSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	uint32_t baud;
 	uint32_t rate = SamdI2cTiming(Rate, &timing, &baud);
 
-	if (rate == 0U || dev->Op != SAMD_I2C_OP_NONE)
+	if (rate == 0U)
 	{
-		return 0;
+		return i2c->Cfg.Rate;
 	}
 
 	uint32_t state = DisableInterrupt();
@@ -1273,7 +945,6 @@ static uint32_t SamdI2cSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 	if (i2c->Cfg.Mode == I2CMODE_MASTER)
 	{
-		dev->Baud = baud;
 		reg->I2CM.SERCOM_BAUD = baud;
 		i2c->Cfg.Rate = rate;
 	}
@@ -1288,8 +959,7 @@ static uint32_t SamdI2cSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		(void)SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_ENABLE_Msk);
 		if (i2c->Cfg.Mode == I2CMODE_MASTER)
 		{
-			reg->I2CM.SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
-			(void)SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
+			(void)SamdI2cmSetIdle(dev);
 		}
 		dev->bBusHeld = false;
 	}
@@ -1303,7 +973,7 @@ static bool SamdI2cStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
 
-	if (dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER || DevAddr > 0x7FU || dev->Op != SAMD_I2C_OP_NONE)
+	if (dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER || DevAddr > 0x7FU)
 	{
 		return false;
 	}
@@ -1320,6 +990,21 @@ static bool SamdI2cStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return SamdI2cStartTx(pDev, DevAddr);
 }
 
+// A polling master has no SERCOM interrupt or DMAC channel.
+static int SamdI2cTxPoll(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
+{
+	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
+
+	return pData != NULL && DataLen > 0 ? SamdI2cmTxPolling(dev, pData, DataLen) : 0;
+}
+
+static int SamdI2cRxPoll(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
+{
+	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
+
+	return pBuff != NULL && BuffLen > 0 ? SamdI2cmRxPolling(dev, pBuff, BuffLen) : 0;
+}
+
 static int SamdI2cTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
@@ -1329,11 +1014,6 @@ static int SamdI2cTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Data
 		dev->pI2cDev->Cfg.bDmaEn != dev->bDma)
 	{
 		return 0;
-	}
-
-	if (pDev->bIntEn && !pDev->bNoStop)
-	{
-		return SamdI2cmTxInt(dev, pData, DataLen);
 	}
 
 	return SamdI2cmTxSync(dev, pData, DataLen);
@@ -1349,7 +1029,7 @@ static int SamdI2cRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		return 0;
 	}
 
-	return pDev->bIntEn ? SamdI2cmRxInt(dev, pBuff, BuffLen) : SamdI2cmRxSync(dev, pBuff, BuffLen);
+	return SamdI2cmRxSync(dev, pBuff, BuffLen);
 }
 
 static void SamdI2cStopTx(DevIntrf_t * const pDev)
@@ -1374,9 +1054,6 @@ static void SamdI2cDisable(DevIntrf_t * const pDev)
 
 	if (dev->pI2cDev->Cfg.Mode == I2CMODE_MASTER)
 	{
-		// A channel running is stopped, its transfer is not reported: Reset
-		// ends it
-		SamdI2cmDmaEnd(dev, true);
 		SamdI2cmStop(dev);
 		reg->I2CM.SERCOM_INTENCLR = SAMD_I2CM_INTS;
 	}
@@ -1407,8 +1084,7 @@ static void SamdI2cEnable(DevIntrf_t * const pDev)
 
 	if (i2c->Cfg.Mode == I2CMODE_MASTER)
 	{
-		reg->I2CM.SERCOM_STATUS = SERCOM_I2CM_STATUS_BUSSTATE(SAMD_I2CM_BUSSTATE_IDLE);
-		(void)SamdI2cSync(reg, SERCOM_I2CM_SYNCBUSY_SYSOP_Msk);
+		(void)SamdI2cmSetIdle(dev);
 		dev->bBusHeld = false;
 	}
 	else
@@ -1417,67 +1093,8 @@ static void SamdI2cEnable(DevIntrf_t * const pDev)
 	}
 }
 
-// Only idle master instances can temporarily release SERCOM clocks.
-// Enabled slave instances lack a supported asynchronous Standby wake route.
-// Preserve the existing DeviceIntrf ownership and enable count.
-extern "C" bool SamdI2cPrepareSleep(void)
-{
-	SamdI2cDev_t *dev;
-	I2CDev_t *pDev;
-
-	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
-	{
-		dev = &s_SamdI2cDev[i];
-		pDev = dev->pI2cDev;
-		if (pDev == NULL || g_SharedIntrf[i].pIntrf != &pDev->DevIntrf ||
-			atomic_load(&pDev->DevIntrf.EnCnt) == 0 ||
-			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) == 0U)
-		{
-			continue;
-		}
-		if (pDev->Cfg.Mode != I2CMODE_MASTER ||
-			atomic_flag_test(&pDev->DevIntrf.bBusy) || dev->bSleepPaused ||
-			dev->Op != SAMD_I2C_OP_NONE || dev->bDmaRun || dev->bBusHeld || dev->bSlaveTx || dev->bSlaveRx)
-		{
-			return false;
-		}
-	}
-	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
-	{
-		dev = &s_SamdI2cDev[i];
-		pDev = dev->pI2cDev;
-		if (pDev != NULL && pDev->Cfg.Mode == I2CMODE_MASTER &&
-			g_SharedIntrf[i].pIntrf == &pDev->DevIntrf &&
-			atomic_load(&pDev->DevIntrf.EnCnt) != 0 &&
-			(PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) != 0U)
-		{
-			SamdI2cDisable(&pDev->DevIntrf);
-			dev->bSleepPaused = true;
-		}
-	}
-	return true;
-}
-
-extern "C" void SamdI2cResumeSleep(void)
-{
-	SamdI2cDev_t *dev;
-
-	for (int i = 0; i < SAMD_SERCOM_CNT; i++)
-	{
-		dev = &s_SamdI2cDev[i];
-		if (dev->bSleepPaused)
-		{
-			SamdI2cEnable(&dev->pI2cDev->DevIntrf);
-			if ((PM_REGS->PM_APBCMASK & (PM_APBCMASK_SERCOM0_Msk << i)) != 0U)
-			{
-				dev->bSleepPaused = false;
-			}
-		}
-	}
-}
-
 // Bus clocked free, then the SERCOM configured again
-static void SamdI2cReset(DevIntrf_t * const pDev)
+static void SamdI2cResetBus(DevIntrf_t * const pDev, bool PollingMaster)
 {
 	SamdI2cDev_t *dev = (SamdI2cDev_t *)pDev->pDevData;
 
@@ -1485,18 +1102,25 @@ static void SamdI2cReset(DevIntrf_t * const pDev)
 
 	uint32_t state = DisableInterrupt();
 
-	SamdI2cmDmaEnd(dev, true);
-	dev->Op = SAMD_I2C_OP_NONE;
-	dev->bBusHeld = false;
-	dev->bSlaveTx = false;
-	dev->bSlaveRx = false;
-	if (s_pSamdI2cTxOwner == dev)
+	if (!PollingMaster)
 	{
-		s_pSamdI2cTxOwner = NULL;
+		dev->bSlaveTx = false;
+		dev->bSlaveRx = false;
 	}
-	(void)SamdI2cHwInit(dev);
+	dev->bBusHeld = false;
+	(void)SamdI2cHwInit(dev, PollingMaster);
 
 	EnableInterrupt(state);
+}
+
+static void SamdI2cPollReset(DevIntrf_t * const pDev)
+{
+	SamdI2cResetBus(pDev, true);
+}
+
+static void SamdI2cReset(DevIntrf_t * const pDev)
+{
+	SamdI2cResetBus(pDev, false);
 }
 
 static void SamdI2cPowerOff(DevIntrf_t * const pDev)
@@ -1507,7 +1131,7 @@ static void SamdI2cPowerOff(DevIntrf_t * const pDev)
 
 	uint32_t state = DisableInterrupt();
 
-	SamdI2cDmaGive(dev);
+	SamdI2cReleaseDma(dev);
 	EnableInterrupt(state);
 
 	IOPinDis(dev->pI2cDev->Cfg.pIOPinMap, 2);
@@ -1536,6 +1160,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 	// The slave runs on interrupts
 	bool intEn = pCfgData->Mode == I2CMODE_SLAVE || pCfgData->bIntEn;
+	bool polling = !intEn && !pCfgData->bDmaEn;
 
 	if (intEn && pCfgData->IntPrio < 0)
 	{
@@ -1561,18 +1186,14 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		return false;
 	}
 
-	if (s_pSamdI2cTxOwner == dev)
-	{
-		s_pSamdI2cTxOwner = NULL;
-	}
-
 	// Channel of an earlier I2CInit given back
-	SamdI2cDmaGive(dev);
+	SamdI2cReleaseDma(dev);
 	memset(dev, 0, sizeof(SamdI2cDev_t));
 	dev->DevNo = pCfgData->DevNo;
 	dev->pReg = SamdSercomGetReg(pCfgData->DevNo);
 	dev->pI2cDev = pDev;
 	dev->DmaChan = -1;
+	dev->DmaGive = pCfgData->bDmaEn ? SamdI2cDmaGive : NULL;
 
 	memcpy(&pDev->Cfg, pCfgData, sizeof(I2CCfg_t));
 	pDev->Cfg.bIntEn = intEn;
@@ -1602,13 +1223,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.GetRate = SamdI2cGetRate;
 	pDev->DevIntrf.SetRate = SamdI2cSetRate;
 	pDev->DevIntrf.StartRx = SamdI2cStartRx;
-	pDev->DevIntrf.RxData = SamdI2cRxData;
+	pDev->DevIntrf.RxData = polling ? SamdI2cRxPoll : SamdI2cRxData;
 	pDev->DevIntrf.StopRx = SamdI2cStopRx;
 	pDev->DevIntrf.StartTx = SamdI2cStartTx;
-	pDev->DevIntrf.TxData = SamdI2cTxData;
+	pDev->DevIntrf.TxData = polling ? SamdI2cTxPoll : SamdI2cTxData;
 	pDev->DevIntrf.TxSrData = NULL;
 	pDev->DevIntrf.StopTx = SamdI2cStopTx;
-	pDev->DevIntrf.Reset = SamdI2cReset;
+	pDev->DevIntrf.Reset = polling ? SamdI2cPollReset : SamdI2cReset;
 	pDev->DevIntrf.PowerOff = SamdI2cPowerOff;
 	pDev->DevIntrf.GetHandle = SamdI2cGetHandle;
 	pDev->DevIntrf.IntPrio = (int)SamdIrqPrio(pCfgData->IntPrio);
@@ -1617,15 +1238,15 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, SamdI2cIrqHandler);
+	SharedIntrfSetIrqHandler(pCfgData->DevNo, &pDev->DevIntrf, intEn ? SamdI2cIrqHandler : NULL);
 
 	IOPinCfg(pCfgData->pIOPinMap, 2);
 
-	bool res = SamdI2cHwInit(dev);
+	bool res = SamdI2cHwInit(dev, polling);
 
 	if (!res)
 	{
-		SamdI2cDmaGive(dev);
+		SamdI2cReleaseDma(dev);
 		SharedIntrfSetIrqHandler(pCfgData->DevNo, NULL, NULL);
 		IOPinDis(pCfgData->pIOPinMap, 2);
 		SamdSercomClockDisable(pCfgData->DevNo);

@@ -29,13 +29,13 @@ executed. Keep this work separate from unmerged PR #144.
 | `ARM/Nordic/src/timer_hf_nrfx.cpp` | No timer-side PLL start; retains HFXO request if release is refused |
 | `ARM/Nordic/nRF52/src/usb_ctrlr_nrf52.cpp` | Retains HFXO request state when the clock manager refuses release |
 | `exemples/misc/core_clock_test.cpp` | No UART FIFO reads or RX-for-TX servicing |
-| `exemples/misc/power_off_demo.cpp` | No UART FIFO reads, RX-for-TX servicing or SAM4L register diagnostics |
+| `exemples/misc/core_power_test.cpp` | No UART FIFO reads, RX-for-TX servicing or SAM4L register diagnostics |
 | `exemples/i2c/i2c_slave_demo.cpp` | Application no longer disables UART around SystemSleep or reads its private TX status |
 | `exemples/i2c/sleepwalking.md` | Documents system-managed UART preparation |
 | `AGENTS.md` | Corrects function-entry declaration and statement-format guidance |
 
 The nRF52 delay correction was derived from measured board timing.
-The nRF52832 ClockDemo result with `13/6` measured 250123 us for
+The nRF52832 CoreClockTest result with `13/6` measured 250123 us for
 msDelay(250) and 125065 us for nsDelay(250 ms). A subsequent `13/3`
 run measured 250123 us and 260123 us, respectively. The nanosecond delay
 remains outside the 2-percent check, and that result predates the polling
@@ -52,15 +52,15 @@ UART PowerOff fix. Do not interpret it as a passing calibration.
 | `ARM/ST/STM32WBAxx/src/system_power_stm32wba.cpp` | SystemPowerOff can return when a power register check fails | Introduced after 0.13 |
 | `ARM/Nordic/src/system_clock_nrfx.cpp` | BLE ownership handover and final release in interrupt context require separate target validation | Introduced after 0.13 |
 
-`ClockDemoFlush()` and `PowerDemoDrain()` allow transmission time
+`CoreClockTestFlush()` and `PowerDemoDrain()` allow transmission time
 without reading private UART state. Their fixed delay is not an exact
 hardware-TX-complete operation and must not be represented as one.
 The nRF52 legacy polling UART drains its private software queue and
 waits for the last TX completion inside `nRFUARTPowerOff()`. The driver
-owns the operation; `ClockDemo` does not poll RX to advance TX.
-The generic ClockDemo no longer powers the UART off between clock
+owns the operation; `CoreClockTest` does not poll RX to advance TX.
+The generic CoreClockTest no longer powers the UART off between clock
 operations. Shared oscillator ownership has separate HFXO/SDC tests,
-while ClockDemo tests core and peripheral clock APIs and timer behavior.
+while CoreClockTest tests core and peripheral clock APIs and timer behavior.
 UART completion handling still requires target-specific validation.
 The existing generic UART interface does not supply a portable on-wire
 drain operation. Do not change the generic interface without a separate
@@ -82,7 +82,7 @@ The scripts are source checks; successful results do not replace a build
 or board measurement. Their presence is not evidence they were executed.
 
 Required target validation:
-1. Clean-build the nRF52832 library and ClockDemo Release with matching
+1. Clean-build the nRF52832 library and CoreClockTest Release with matching
    managed Eclipse configurations. Recheck HFXO, LF RC and the two 250 ms
    delays: both must measure 245000 through 255000 us.
 2. Run TimerDemo on RTC0 and RTC1; verify interrupts, timer continuity,
@@ -92,7 +92,7 @@ Required target validation:
 4. Rebuild nRF52840 and the other affected Nordic MCU configurations,
    including SoftDevice and MPSL variants. Validate their ownership
    handover rather than inferring it from the nRF52832 bare-metal test.
-5. Rebuild the generic PowerOffDemo and SAM4L I2C sleep-test profile
+5. Rebuild the generic CorePowerTest and SAM4L I2C sleep-test profile
    because their output and sleep preparation paths changed.
 
 No merge is authorized by these checks alone.

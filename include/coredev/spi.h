@@ -234,9 +234,9 @@ extern "C" {
 bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData);
 
 // Only an initialized noninterrupt SPIM master in 8-bit manual-CS
-// mode may arm a hardware START task. TX copies into the existing
-// driver's private staging array; RX stays caller-owned and RAM-resident
-// until the transfer finishes and the PPI START route is removed.
+// mode may arm a hardware START task. TX and RX stay caller-owned and
+// RAM-resident until the transfer finishes and the PPI START route is
+// removed.
 bool SPIPreparePeiTransfer(SPIDev_t *pDev, const uint8_t *pTx,
 	uint32_t TxLen, uint8_t *pRx, uint32_t RxLen);
 bool SPIReleasePeiTransfer(SPIDev_t *pDev);

@@ -12,7 +12,8 @@ SystemInit sets these generic clock generators:
 	SAMD_GCLK_DPLLREF (2): OSC8M / 8, FDPLL96M reference when no crystal is
 	                       used
 
-SystemPeriphClockGet(n) returns the frequency of generator n.
+SystemPeriphClockGet(n) returns the frequency of generator 0 or 1 as the
+clock setup left it, 0 for the other generators.
 
 Channel IDs are device specific, use the GCLK_CLKCTRL_ID_xxx_Val values of the
 Microchip device header.
@@ -83,15 +84,6 @@ bool SamdGclkChannelEnable(uint8_t Channel, uint8_t Generator);
  * @return	true - channel stopped
  */
 bool SamdGclkChannelDisable(uint8_t Channel);
-
-/**
- * @brief Keep the selected 32 kHz clock source running in Standby.
- *
- * RTC and EIC request this before enabling a low-frequency wake source.
- * This does not change the selected oscillator, generator or clock divider.
- * A source which is not enabled and ready is refused.
- */
-bool SamdLowFreqClockStandbyEnable(void);
 
 #ifdef __cplusplus
 }

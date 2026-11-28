@@ -21,12 +21,11 @@ again after changing the CPU clock; do not change clocks or rates during a trans
 These limits follow Nordic's [nRF5340 product specification](https://docs.nordicsemi.com/r/bundle/ps_nrf5340/)
 and [pin assignments](https://docs.nordicsemi.com/r/bundle/ps_nrf5340/page/chapters/pin.html).
 
-Polling returns the transferred byte count. Interrupt-driven transfers return
-`-1` and complete through `DevIntrf_t::EvtCB`. The driver releases the generic
-transaction lock before reporting completion. A command phase with `bNoStop`
-retains chip select for the following read. Small asynchronous transmits use an
-owned RAM copy; larger transmits wait for completion or bounded cancellation.
-Polling TX also stages data in RAM so constants in flash are usable.
+A transfer returns the transferred byte count, with or without `bIntEn`. With
+`bIntEn` the driver waits for each DMA block on the SPIM4 interrupt instead of
+reading the END event in a loop; the transfer is otherwise the same. A command
+phase with `bNoStop` retains chip select for the following read. TX is staged
+in RAM block by block, so constants in flash are usable.
 
 Transfers larger than the DMA counter are split into blocks with explicit
 buffer addresses. Polling waits include wire time at the selected rate. On a
@@ -41,8 +40,8 @@ Run the production-driver register model with:
 python3 tests/nrf5340_spi/run.py
 ```
 
-It covers polling and interrupt completion, a 70000-byte receive, copied TX,
-long TX completion/cancellation, command/read sequencing, chip-select and busy
+It covers polling and interrupt completion, a 70000-byte receive, transmit
+from the caller's buffer over several blocks, command/read sequencing, chip-select and busy
 release, timeout recovery, rate limits, invalid configurations and QSPI dispatch
 isolation. It builds at `-O0` and `-O2` with ASan/UBSan. QSPI itself is stubbed;
 this is not a QSPI hardware test. SPIM4 pin timing and physical loopback still

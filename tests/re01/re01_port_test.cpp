@@ -870,7 +870,7 @@ static void uarts()
 		}
 	}
 	assert(s_UartRxIrq >= 0);
-	u.EvtCB = uartRaise;
+	u.DevIntrf.EvtCB = uartRaise;
 	*(volatile uint8_t*)&SCI9->RDR = 0x77;
 	SCI9->SSR = SCI2_SSR_RDRF_Msk;
 	routes[s_UartRxIrq] |= ICU_IELSR0_IR_Msk;
@@ -880,7 +880,7 @@ static void uarts()
 	SCI9->SSR = SCI2_SSR_RDRF_Msk;
 	handlers[s_UartRxIrq]();
 	assert(s_UartRxCalls == 2 && (routes[s_UartRxIrq] & ICU_IELSR0_IR_Msk) == 0);
-	u.EvtCB = nullptr;
+	u.DevIntrf.EvtCB = nullptr;
 	assert(u.DevIntrf.RxData(&u.DevIntrf, received, sizeof(received)) == 2);
 	assert(received[0] == 0x77 && received[1] == 0x78);
 	cfg.bIntMode = false;

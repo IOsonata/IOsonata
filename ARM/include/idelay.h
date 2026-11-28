@@ -50,6 +50,24 @@ extern uint32_t SystemCoreClock;
 extern uint32_t SystemMicroSecLoopCnt;
 extern uint32_t SystemnsDelayFactor;
 
+/**
+ * @brief Sleep for a number of seconds on a timer.
+ *
+ * src/sdelay.cpp takes a free timer for the time of the call: a low power
+ * timer when one is free, a high frequency timer otherwise. The CPU waits in
+ * light sleep. The whole call, timer setup, clock start, sleep and release,
+ * lasts the requested time. TimerInit refuses a timer held by another Timer
+ * object, so the application timers are never taken.
+ *
+ * Interrupt context, masked interrupts, a call during another sDelay or no
+ * free timer return false. Zero seconds succeeds immediately.
+ *
+ * @param	Seconds : Seconds to wait
+ *
+ * @return	true - The delay is done
+ */
+bool sDelay(uint32_t Seconds);
+
 #ifdef __cplusplus
 }
 #endif
@@ -75,8 +93,19 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 	uint32_t chunk;
 	uint32_t remaining;
 
-	loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 999999ULL) /
-		1000000ULL;
+#ifdef __GNUC__
+	// A constant interval that divides one second needs only a 32-bit
+	// ceiling division. Subtract before dividing to avoid overflow.
+	if (__builtin_constant_p(cnt) && cnt != 0U && 1000000U % cnt == 0U)
+	{
+		uint32_t rate = SystemMicroSecLoopCnt;
+		loops = rate ? 1U + (rate - 1U) / (1000000U / cnt) : 0U;
+	}
+	else
+#endif
+	{
+		loops = ((uint64_t)cnt * SystemMicroSecLoopCnt + 999999ULL) / 1000000ULL;
+	}
 
 	// Keep the original ten-NOP signed countdown inside usDelay.
 	// Each chunk is bounded because BGT compares a signed counter.
@@ -130,8 +159,19 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 	uint32_t chunk;
 	uint32_t remaining;
 
-	loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) /
-		1000000000ULL;
+#ifdef __GNUC__
+	// A constant interval that divides one second needs only a 32-bit
+	// ceiling division. Subtract before dividing to avoid overflow.
+	if (__builtin_constant_p(cnt) && cnt != 0U && 1000000000U % cnt == 0U)
+	{
+		uint32_t rate = SystemnsDelayFactor;
+		loops = rate ? 1U + (rate - 1U) / (1000000000U / cnt) : 0U;
+	}
+	else
+#endif
+	{
+		loops = ((uint64_t)cnt * SystemnsDelayFactor + 999999999ULL) / 1000000000ULL;
+	}
 
 	while (loops != 0U)
 	{

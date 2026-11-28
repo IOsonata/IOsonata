@@ -51,6 +51,7 @@ extern "C" void BtHciCtlrCheckStatus(void) { ++ctlrChecks; }
 extern "C" void BtSmpCheckStatus(void) __attribute__((weak));
 extern "C" void BtSmpBondNvmCheckStatus(void) __attribute__((weak));
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
+extern "C" void BtMeshCheckStatus(void) __attribute__((weak));
 struct BtHciDevice_t {};
 static BtHciDevice_t s_BtHciDev;
 extern void BtHciTxCheckStatus(BtHciDevice_t *) __attribute__((weak));
@@ -93,6 +94,7 @@ int main() {
 	assert(BtSmpCheckStatus == nullptr && BtSmpBondNvmCheckStatus == nullptr);
 	assert(BtDfuSmpCheckStatus == nullptr);
 #endif
+	assert(BtMeshCheckStatus == nullptr);
 	puts("PASS: host paces its link checks from the status check and keeps security optional");
 }
 """

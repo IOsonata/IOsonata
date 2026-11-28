@@ -146,13 +146,6 @@ typedef struct __Samd_Usb_State {
 
 static SamdUsbState_t s_SamdUsb;
 
-// A host-owned USB session needs its running 48 MHz USB reference.
-// Do not replace bus suspend/resume with a CPU Standby transition.
-extern "C" bool SamdUsbAllowStandby(void)
-{
-	return !s_SamdUsb.Started && !s_SamdUsb.Closing;
-}
-
 alignas(4) static usb_device_desc_bank_registers_t s_SamdUsbDesc[SAMD_USB_EP_COUNT][2];
 alignas(4) static uint8_t s_SamdUsbEp0Out[SAMD_USB_EP0_MPS];
 alignas(4) static uint8_t s_SamdUsbEp0In[SAMD_USB_EP0_MPS];

@@ -112,7 +112,7 @@ DMA polling mode still need hardware validation.
 
 ## I2C and SPI
 
-The shared `i2c_stm32.cpp` and `spi_stm32.cpp` now include H753 instance
+The shared `i2c_stm32v2.cpp` and `spi_stm32.cpp` now include H753 instance
 mapping, clocks, reset and interrupt vectors. I2C DevNo 0-3 selects I2C1-4;
 SPI DevNo 0-5 selects SPI1-6. Both support polling/interrupt master and interrupt slave operation, with or
 without DMA. I2C1-3 and SPI1-5 allocate DMA1/2 streams through DMAMUX1;
@@ -127,9 +127,13 @@ completion callback. Custom linker scripts must place `.bus_dma` in SRAM4.
 Long transfers reload the DMA channel; SPI slave rates must allow its FIFO to
 cover interrupt/refill latency. Overrun and DMA errors fail the frame.
 
-H753 interrupt SPI writes use IRQ-driven staging for long command/data
-buffers, retaining the temporary source until the last chunk is copied,
-then reporting completion once. No length-based polling fallback is used.
+A master transfer is synchronous in every mode: it returns the count of
+bytes moved when it is done, and the master reports no completion event.
+With `bIntEn` each wait of the transfer waits for the bus or DMA interrupt;
+the handler masks the interrupt and tells the wait, which reads the flags as
+in polling mode. The application sets the interrupt priority: a transfer is
+not called from an interrupt handler of the same or a higher priority than
+the bus and its DMA streams.
 
 I2C1-3 use PCLK1; I2C4 uses PCLK4. Rates use TIMINGR with analog filtering,
 including Fast-mode Plus drive configuration above 400 kHz. The shared engine
@@ -455,8 +459,8 @@ The library also builds the shared STM32 power functions of
 power off in Standby, wake up on WKUP1 to WKUP6 (PA0, PA2, PI8, PC13, PI11,
 PC1) on either level with the pin pull resistor kept, the 32 backup registers
 as retention registers, the 4 KB backup SRAM kept with the backup regulator.
-See [STM32 power functions](../POWER.md). The example PowerOffDemo
-(`exemples/misc/power_off_demo.cpp`, NUCLEO-H753ZI) logs the reset reason and
+See [STM32 power functions](../POWER.md). The example CorePowerTest
+(`exemples/misc/core_power_test.cpp`, NUCLEO-H753ZI) logs the reset reason and
 a start count in retention register 0 on the ST-LINK virtual COM port
 (USART3, 1000000 baud 8N1), then powers off; the user button B1 (PC13) wakes
 it. Not run on hardware yet.

@@ -68,17 +68,5 @@ class TimerPowerOffChecks(unittest.TestCase):
 					lf = "timer_lf_nrf54" if family in ("nRF54", "nRF71") else "timer_lf_nrfx"
 					self.assertIn("/" + lf + ".cpp</locationURI>", src)
 
-	def test_generic_example_uses_timer_power_off(self):
-		src = self.read("exemples/misc/core_clock_test.cpp")
-		begin = src.index("static void CoreClockTestTimerPowerOff(void)")
-		end = src.index("int main(void)", begin)
-		test = src[begin:end]
-		self.assertIn("stopped = TimerPowerOff(&s_RetainedTimer);", test)
-		self.assertIn("TimerInit(&s_RetainedTimer, &cfg);", test)
-		self.assertIn("TimerPowerOff(&s_RetainedTimer);", test)
-		self.assertIn("!TimerPowerOff(&s_RetainedTimer)", test)
-		self.assertIn("CoreClockTestTimerPowerOff();", src)
-		self.assertNotIn("NRF91_SERIES", test)
-
 if __name__ == "__main__":
 	unittest.main()

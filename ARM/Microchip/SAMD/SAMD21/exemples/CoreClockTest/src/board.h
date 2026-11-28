@@ -54,15 +54,18 @@ SOFTWARE.
 #define UART_RTS_PORT		-1
 #define UART_RTS_PIN		-1
 #define UART_RTS_PINOP		IOPINOP_GPIO
-#define UART_BAUDRATE		115200
+
 // Interrupt mode, no DMA path on SAM D
 #define UART_INT_MODE		true
 #define UART_DMA_MODE		false
 #define UART_INT_PRIO		2
 
-// ClockDemo has no wake-pin profile; PowerOffDemo tests SW0/standby.
+// CoreClockTest has no wake-pin profile; CorePowerTest tests SW0/standby.
 
 // LF selection omitted because a running DFLL/DPLL may own its reference.
+// Keep the 100 ms calibration sample within one 16-bit TC period.
+#define CORE_CLOCK_TEST_HF_TIMER_FREQ 250000U
 #define CLOCK_DEMO_IRQ_PRIORITY 1
+#define CORE_CLOCK_TEST_DELAY_CALIBRATION 0
 
 #endif // __BOARD_H__

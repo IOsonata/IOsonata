@@ -23,8 +23,8 @@ One flash wait state, the datasheet value at 48 MHz for VDD 2.7 to 3.63 V.
 The 32.768 kHz clock is set right after the main clock is on OSC8M, it
 does not depend on the steps after it. A main clock step that fails, an
 oscillator that does not start for example, leaves the main clock on OSC8M
-at 8 MHz. s_SamdStartupError tells the first stage that failed and
-s_SamdStartupLine the source line, SystemCoreClock the main clock.
+at 8 MHz. SystemCoreClock reports the main clock. With SAMD_CLOCK_DIAGNOSTICS
+enabled, s_SamdStartupError and s_SamdStartupLine identify the first failure.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 28, 2026
@@ -130,13 +130,31 @@ __attribute__((weak)) McuOsc_t g_McuOsc = {
 	0U	// No DC/DC regulator stage on SAM D11/D21
 };
 
-// Delay-loop iterations per microsecond, with 16 fractional bits.
+// Delay-loop iterations per second.
 extern uint32_t SystemMicroSecLoopCnt;
 
 // CPU clock after reset is OSC8M divided by 8
+
+// Frequencies of generators 0 and 1, set by the clock setup. Kept in .data:
+// the C startup clears .bss after SystemInit.
+static uint32_t s_GenFreq[2] = { SAMD_OSC8M_FREQ / 8UL, 0U };
+static uint32_t s_HfUsers;
+static SYSTEM_POWER_MODE s_PowerMode;
+static uint32_t s_LfUsers;
 uint32_t SystemCoreClock = SAMD_OSC8M_FREQ / 8UL;
 uint32_t SystemnsDelayFactor = 1000000UL;
 
+
+// Enable in the library build to inspect oscillator failures in the debugger.
+#ifndef SAMD_CLOCK_DIAGNOSTICS
+#if defined(DEBUG) || defined(_DEBUG)
+#define SAMD_CLOCK_DIAGNOSTICS 1
+#else
+#define SAMD_CLOCK_DIAGNOSTICS 0
+#endif
+#endif
+
+#if SAMD_CLOCK_DIAGNOSTICS
 // The frequencies of the DFLL48M and the FDPLL96M come from their registers:
 // the C startup clears .bss after SystemInit, a variable set there is lost.
 // The startup stage and line are kept in .data for the same reason.
@@ -160,9 +178,6 @@ __attribute__((section(".data"))) static volatile uint32_t s_SamdStartupLog[SAMD
 #define SAMD_STARTUP_REG_LEN	12U
 __attribute__((section(".data"))) static volatile uint32_t s_SamdStartupReg[SAMD_STARTUP_REG_LEN];
 
-static uint32_t SamdGclkGenFreq(uint32_t Gen);
-static uint32_t SamdSourceFreq(uint32_t Src);
-
 // Failure of a startup step, the caller returns false
 static bool SamdStartupFailed(uint32_t Error, uint32_t Line)
 {
@@ -183,6 +198,15 @@ static bool SamdStartupFailed(uint32_t Error, uint32_t Line)
 
 	return false;
 }
+
+#else
+static inline bool SamdStartupFailed(uint32_t Error, uint32_t Line)
+{
+	(void)Error;
+	(void)Line;
+	return false;
+}
+#endif
 
 static bool SamdGclkSync(void)
 {
@@ -289,57 +313,6 @@ static bool SamdGclkChannelStop(uint16_t Ctrl)
 	return res;
 }
 
-// The low-frequency clock generator supplies RTC and EIC. A peripheral
-// that needs to work in Standby requests the source oscillator's RUNSTDBY
-// bit here, rather than changing oscillator registers in its own driver.
-// With GCLK1.OE clear, GCLK1 itself runs when the channel requests it.
-bool SamdLowFreqClockStandbyEnable(void)
-{
-	uint32_t state;
-	uint32_t gen;
-	uint32_t value;
-	bool ready = false;
-
-	state = DisableInterrupt();
-	gen = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, SAMD_GCLK_LF);
-	if (gen != UINT32_MAX && (gen & GCLK_GENCTRL_GENEN_Msk) != 0U)
-	{
-		switch (gen & GCLK_GENCTRL_SRC_Msk)
-		{
-			case GCLK_GENCTRL_SRC_OSC32K:
-				value = SYSCTRL_REGS->SYSCTRL_OSC32K;
-				if ((value & (SYSCTRL_OSC32K_ENABLE_Msk |
-					SYSCTRL_OSC32K_EN32K_Msk)) ==
-					(SYSCTRL_OSC32K_ENABLE_Msk | SYSCTRL_OSC32K_EN32K_Msk) &&
-					(SYSCTRL_REGS->SYSCTRL_PCLKSR &
-					SYSCTRL_PCLKSR_OSC32KRDY_Msk) != 0U)
-				{
-					SYSCTRL_REGS->SYSCTRL_OSC32K =
-						value | SYSCTRL_OSC32K_RUNSTDBY_Msk;
-					ready = (SYSCTRL_REGS->SYSCTRL_OSC32K &
-						SYSCTRL_OSC32K_RUNSTDBY_Msk) != 0U;
-				}
-				break;
-			case GCLK_GENCTRL_SRC_XOSC32K:
-				value = SYSCTRL_REGS->SYSCTRL_XOSC32K;
-				if ((value & (SYSCTRL_XOSC32K_ENABLE_Msk |
-					SYSCTRL_XOSC32K_EN32K_Msk)) ==
-					(SYSCTRL_XOSC32K_ENABLE_Msk | SYSCTRL_XOSC32K_EN32K_Msk) &&
-					(SYSCTRL_REGS->SYSCTRL_PCLKSR &
-					SYSCTRL_PCLKSR_XOSC32KRDY_Msk) != 0U)
-				{
-					SYSCTRL_REGS->SYSCTRL_XOSC32K =
-						(uint16_t)(value | SYSCTRL_XOSC32K_RUNSTDBY_Msk);
-					ready = (SYSCTRL_REGS->SYSCTRL_XOSC32K &
-						SYSCTRL_XOSC32K_RUNSTDBY_Msk) != 0U;
-				}
-				break;
-		}
-	}
-	EnableInterrupt(state);
-	return ready;
-}
-
 bool SamdGclkChannelEnable(uint8_t Channel, uint8_t Generator)
 {
 	uint32_t want = GCLK_CLKCTRL_ID(Channel) | GCLK_CLKCTRL_GEN(Generator) | GCLK_CLKCTRL_CLKEN_Msk;
@@ -419,206 +392,21 @@ bool SamdGclkChannelDisable(uint8_t Channel)
 	return res;
 }
 
-// Generator of a GCLK channel, with the register selection protected.
-static uint32_t SamdGclkChannelGen(uint8_t Channel)
-{
-	uint32_t state = DisableInterrupt();
-	uint16_t ctrl = SamdGclkChannelRead(Channel);
-
-	EnableInterrupt(state);
-
-	return ((uint32_t)ctrl & GCLK_CLKCTRL_GEN_Msk) >> GCLK_CLKCTRL_GEN_Pos;
-}
-
-// DFLL48M: MUL x the reference in closed loop, 48 MHz nominal in open loop
-static uint32_t SamdDfllFreq(void)
-{
-	uint32_t ctrl = SYSCTRL_REGS->SYSCTRL_DFLLCTRL;
-	uint32_t mul = (SYSCTRL_REGS->SYSCTRL_DFLLMUL & SYSCTRL_DFLLMUL_MUL_Msk) >> SYSCTRL_DFLLMUL_MUL_Pos;
-
-	if ((ctrl & SYSCTRL_DFLLCTRL_ENABLE_Msk) == 0U ||
-		(SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_DFLLRDY_Msk) == 0U)
-	{
-		return 0U;
-	}
-	if ((ctrl & SYSCTRL_DFLLCTRL_MODE_Msk) == 0U)
-	{
-		return SAMD_MAIN_FREQ_MAX;
-	}
-	if ((ctrl & SYSCTRL_DFLLCTRL_USBCRM_Msk) != 0U)
-	{
-		return mul * (SAMD_DFLL_USB_FREQ / SAMD_DFLL_USB_MUL);
-	}
-
-	uint32_t locked = SYSCTRL_PCLKSR_DFLLLCKC_Msk | SYSCTRL_PCLKSR_DFLLLCKF_Msk;
-
-	if ((SYSCTRL_REGS->SYSCTRL_PCLKSR & locked) != locked)
-	{
-		return 0U;
-	}
-
-	return mul * SamdGclkGenFreq(SamdGclkChannelGen(GCLK_CLKCTRL_ID_DFLL48_Val));
-}
-
-// FDPLL96M: reference x (LDR + 1 + LDRFRAC / 16), 0 until it is locked
-static uint32_t SamdDpllFreq(void)
-{
-	uint32_t ready = SYSCTRL_DPLLSTATUS_LOCK_Msk | SYSCTRL_DPLLSTATUS_CLKRDY_Msk;
-	uint32_t ctrlb = SYSCTRL_REGS->SYSCTRL_DPLLCTRLB;
-	uint32_t ratio = SYSCTRL_REGS->SYSCTRL_DPLLRATIO;
-	uint32_t ref;
-
-	if ((SYSCTRL_REGS->SYSCTRL_DPLLCTRLA & SYSCTRL_DPLLCTRLA_ENABLE_Msk) == 0U ||
-		(SYSCTRL_REGS->SYSCTRL_DPLLSTATUS & ready) != ready)
-	{
-		return 0U;
-	}
-
-	switch ((ctrlb & SYSCTRL_DPLLCTRLB_REFCLK_Msk) >> SYSCTRL_DPLLCTRLB_REFCLK_Pos)
-	{
-		case SYSCTRL_DPLLCTRLB_REFCLK_REF0_Val:
-			ref = SamdSourceFreq(GCLK_GENCTRL_SRC_XOSC32K_Val);
-			break;
-		case SYSCTRL_DPLLCTRLB_REFCLK_REF1_Val:
-			ref = SamdSourceFreq(GCLK_GENCTRL_SRC_XOSC_Val) /
-				  (2U * (((ctrlb & SYSCTRL_DPLLCTRLB_DIV_Msk) >> SYSCTRL_DPLLCTRLB_DIV_Pos) + 1U));
-			break;
-		case SYSCTRL_DPLLCTRLB_REFCLK_GCLK_Val:
-			ref = SamdGclkGenFreq(SamdGclkChannelGen(GCLK_CLKCTRL_ID_FDPLL_Val));
-			break;
-		default:
-			return 0U;
-	}
-
-	uint32_t mul16 = ((((ratio & SYSCTRL_DPLLRATIO_LDR_Msk) >> SYSCTRL_DPLLRATIO_LDR_Pos) + 1U) << 4) +
-					 ((ratio & SYSCTRL_DPLLRATIO_LDRFRAC_Msk) >> SYSCTRL_DPLLRATIO_LDRFRAC_Pos);
-
-	// Split before multiplying so the fractional product cannot overflow.
-	return (ref >> 4) * mul16 + ((ref & 15U) * mul16 >> 4);
-}
-
-// Frequency of a GCLK generator source
-static uint32_t SamdSourceFreq(uint32_t Src)
-{
-	switch (Src)
-	{
-		case GCLK_GENCTRL_SRC_XOSC_Val:
-			return (SYSCTRL_REGS->SYSCTRL_XOSC & SYSCTRL_XOSC_ENABLE_Msk) != 0U &&
-				   (SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_XOSCRDY_Msk) != 0U ? g_McuOsc.CoreOsc.Freq : 0U;
-		case GCLK_GENCTRL_SRC_GCLKGEN1_Val:
-			return SamdGclkGenFreq(1U);
-		case GCLK_GENCTRL_SRC_OSCULP32K_Val:
-			return SAMD_OSC32K_FREQ;
-		case GCLK_GENCTRL_SRC_OSC32K_Val:
-			return (SYSCTRL_REGS->SYSCTRL_OSC32K & SYSCTRL_OSC32K_ENABLE_Msk) != 0U &&
-				   (SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_OSC32KRDY_Msk) != 0U ? SAMD_OSC32K_FREQ : 0U;
-		case GCLK_GENCTRL_SRC_XOSC32K_Val:
-			return (SYSCTRL_REGS->SYSCTRL_XOSC32K & SYSCTRL_XOSC32K_ENABLE_Msk) != 0U &&
-				   (SYSCTRL_REGS->SYSCTRL_PCLKSR & SYSCTRL_PCLKSR_XOSC32KRDY_Msk) != 0U ? g_McuOsc.LowPwrOsc.Freq : 0U;
-		case GCLK_GENCTRL_SRC_OSC8M_Val:
-			if ((SYSCTRL_REGS->SYSCTRL_OSC8M & SYSCTRL_OSC8M_ENABLE_Msk) == 0U)
-			{
-				return 0U;
-			}
-			return SAMD_OSC8M_FREQ >> ((SYSCTRL_REGS->SYSCTRL_OSC8M & SYSCTRL_OSC8M_PRESC_Msk) >> SYSCTRL_OSC8M_PRESC_Pos);
-		case GCLK_GENCTRL_SRC_DFLL48M_Val:
-			return SamdDfllFreq();
-		case GCLK_GENCTRL_SRC_DPLL96M_Val:
-			return SamdDpllFreq();
-	}
-
-	// GCLKIN pin, frequency unknown
-	return 0U;
-}
-
+// Frequency of the main and the 32 kHz generators as the clock setup left
+// them, 0 for the other generators and for a clock that did not start
 static uint32_t SamdGclkGenFreq(uint32_t Gen)
 {
-	uint32_t state;
-	uint32_t ctrl;
-	uint32_t div;
-	uint32_t src;
-	uint32_t freq;
-
-	if (Gen >= GCLK_GEN_NUM)
-	{
-		return 0U;
-	}
-
-	state = DisableInterrupt();
-	ctrl = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, Gen);
-	div = SamdGclkGenRead(&GCLK_REGS->GCLK_GENDIV, Gen);
-	EnableInterrupt(state);
-
-	if (ctrl == UINT32_MAX || div == UINT32_MAX)
-	{
-		return 0U;
-	}
-	div = (div & GCLK_GENDIV_DIV_Msk) >> GCLK_GENDIV_DIV_Pos;
-
-	src = (ctrl & GCLK_GENCTRL_SRC_Msk) >> GCLK_GENCTRL_SRC_Pos;
-
-	// Generator 1 cannot take generator 1 as its source
-	if ((ctrl & GCLK_GENCTRL_GENEN_Msk) == 0U || (Gen == 1U && src == GCLK_GENCTRL_SRC_GCLKGEN1_Val))
-	{
-		return 0U;
-	}
-
-	freq = SamdSourceFreq(src);
-
-	if ((ctrl & GCLK_GENCTRL_DIVSEL_Msk) != 0U)
-	{
-		freq = div < 31U ? freq >> (div + 1U) : 0U;
-	}
-	else if (div > 1U)
-	{
-		freq /= div;
-	}
-
-	return freq;
+	return Gen < 2U ? s_GenFreq[Gen] : 0U;
 }
 
-static bool SamdLowFreqValid(OSC_TYPE Type, uint32_t Freq)
+// FDPLL96M output for a reference: RefFreq x (LDR + 1 + LDRFRAC / 16) with
+// the ratio SamdDpllStart writes
+static uint32_t SamdDpllFreq(uint32_t RefFreq)
 {
-	if (Type == OSC_TYPE_RC)
-	{
-		// OSC32K, nominal 32.768 kHz
-		return Freq == 32000UL || Freq == SAMD_OSC32K_FREQ;
-	}
+	uint32_t ratio = (SAMD_DPLL_FREQ_MAX * 16U) / RefFreq;
 
-	if (Type == OSC_TYPE_XTAL)
-	{
-		return Freq == SAMD_OSC32K_FREQ;
-	}
-
-	// Clock on XIN32, used as DFLL48M reference
-	return Type == OSC_TYPE_TCXO && Freq >= SAMD_DFLL_REF_MIN && Freq <= SAMD_DFLL_REF_MAX;
-}
-
-static bool SamdConfigValid(const McuOsc_t *pOsc)
-{
-	if (pOsc->CoreOsc.Type == OSC_TYPE_RC)
-	{
-		// OSC8M
-		if (pOsc->CoreOsc.Freq != SAMD_OSC8M_FREQ)
-		{
-			return false;
-		}
-	}
-	else if (pOsc->CoreOsc.Type == OSC_TYPE_XTAL)
-	{
-		// XOSC crystal range
-		if (pOsc->CoreOsc.Freq < 400000UL || pOsc->CoreOsc.Freq > 32000000UL)
-		{
-			return false;
-		}
-	}
-	else if (pOsc->CoreOsc.Type != OSC_TYPE_TCXO || pOsc->CoreOsc.Freq < 2UL * SAMD_DPLL_REF_MIN ||
-			 pOsc->CoreOsc.Freq > 32000000UL)
-	{
-		return false;
-	}
-
-	return SamdLowFreqValid(pOsc->LowPwrOsc.Type, pOsc->LowPwrOsc.Freq);
+	// Split before multiplying so the fractional product cannot overflow.
+	return (RefFreq >> 4) * ratio + ((RefFreq & 15U) * ratio >> 4);
 }
 
 // OSC8M undivided, 8 MHz, always on.
@@ -645,15 +433,19 @@ static bool SamdOsc8mStart(void)
 
 // Low frequency oscillator and generator 1. The oscillator not selected is
 // stopped once generator 1 has switched.
+// The selected oscillator runs in Standby: the RTC and the EIC, the wake
+// sources of Standby, are clocked from generator 1.
 static bool SamdLowFreqInit(void)
 {
 	uint32_t src;
+
+	s_GenFreq[SAMD_GCLK_LF] = 0U;
 
 	if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC)
 	{
 		uint32_t calib = (SAMD_OTP4_WORD_1 & SAMD_OSC32K_CAL_Msk) >> SAMD_OSC32K_CAL_Pos;
 		uint32_t ctrl = SYSCTRL_OSC32K_CALIB(calib) | SYSCTRL_OSC32K_STARTUP(SAMD_OSC32K_STARTUP) |
-						SYSCTRL_OSC32K_EN32K_Msk;
+						SYSCTRL_OSC32K_EN32K_Msk | SYSCTRL_OSC32K_RUNSTDBY_Msk;
 
 		// Configured first, enabled by a separate write
 		if ((SYSCTRL_REGS->SYSCTRL_OSC32K & ~SYSCTRL_OSC32K_ONDEMAND_Msk) != (ctrl | SYSCTRL_OSC32K_ENABLE_Msk))
@@ -670,7 +462,8 @@ static bool SamdLowFreqInit(void)
 	}
 	else
 	{
-		uint16_t ctrl = SYSCTRL_XOSC32K_STARTUP(SAMD_XOSC32K_STARTUP) | SYSCTRL_XOSC32K_EN32K_Msk;
+		uint16_t ctrl = SYSCTRL_XOSC32K_STARTUP(SAMD_XOSC32K_STARTUP) | SYSCTRL_XOSC32K_EN32K_Msk |
+						SYSCTRL_XOSC32K_RUNSTDBY_Msk;
 
 		if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL)
 		{
@@ -705,6 +498,7 @@ static bool SamdLowFreqInit(void)
 	{
 		SYSCTRL_REGS->SYSCTRL_OSC32K &= ~SYSCTRL_OSC32K_ENABLE_Msk;
 	}
+	s_GenFreq[SAMD_GCLK_LF] = src == GCLK_GENCTRL_SRC_OSC32K_Val ? SAMD_OSC32K_FREQ : g_McuOsc.LowPwrOsc.Freq;
 
 	return true;
 }
@@ -833,6 +627,7 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 	uint32_t coarse = (SAMD_OTP4_WORD_1 & FUSES_OTP4_WORD_1_DFLL48M_COARSE_CAL_Msk) >>
 					  FUSES_OTP4_WORD_1_DFLL48M_COARSE_CAL_Pos;
 	uint32_t ctrl;
+	uint32_t ready = SYSCTRL_PCLKSR_DFLLRDY_Msk;
 
 	if (!SamdDfllStop())
 	{
@@ -853,26 +648,22 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 
 	if (bUsb)
 	{
-		if (!SamdDfllWrite(&SYSCTRL_REGS->SYSCTRL_DFLLMUL, SYSCTRL_DFLLMUL_CSTEP(7U) |
-						   SYSCTRL_DFLLMUL_FSTEP(10U) | SYSCTRL_DFLLMUL_MUL(Mul)))
-		{
-			return false;
-		}
+		Mul |= SYSCTRL_DFLLMUL_CSTEP(7U) | SYSCTRL_DFLLMUL_FSTEP(10U);
 		ctrl = SYSCTRL_DFLLCTRL_MODE_Msk | SYSCTRL_DFLLCTRL_USBCRM_Msk | SYSCTRL_DFLLCTRL_CCDIS_Msk |
 			   SYSCTRL_DFLLCTRL_BPLCKC_Msk;
 	}
 	else
 	{
-		// Half of the largest steps
-		if (!SamdDfllWrite(&SYSCTRL_REGS->SYSCTRL_DFLLMUL, SYSCTRL_DFLLMUL_CSTEP(31U) |
-						   SYSCTRL_DFLLMUL_FSTEP(511U) | SYSCTRL_DFLLMUL_MUL(Mul)))
-		{
-			return false;
-		}
+		// Closed loop on the reference: wait for the coarse and fine locks
+		Mul |= SYSCTRL_DFLLMUL_CSTEP(31U) | SYSCTRL_DFLLMUL_FSTEP(511U);
 		ctrl = SYSCTRL_DFLLCTRL_MODE_Msk | SYSCTRL_DFLLCTRL_WAITLOCK_Msk | SYSCTRL_DFLLCTRL_QLDIS_Msk;
+		ready |= SYSCTRL_PCLKSR_DFLLLCKC_Msk | SYSCTRL_PCLKSR_DFLLLCKF_Msk;
+	}
+	if (!SamdDfllWrite(&SYSCTRL_REGS->SYSCTRL_DFLLMUL, Mul))
+	{
+		return false;
 	}
 
-	// Mode first, then enabled
 	if (!SamdPclkWait(SYSCTRL_PCLKSR_DFLLRDY_Msk, SAMD_SYNC_POLL_LIMIT))
 	{
 		return SamdStartupFailed(SAMD_STARTUP_DFLL, __LINE__);
@@ -884,18 +675,8 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 	}
 	SYSCTRL_REGS->SYSCTRL_DFLLCTRL = (uint16_t)(ctrl | SYSCTRL_DFLLCTRL_ENABLE_Msk);
 
-	if (bUsb)
+	if (!SamdPclkWait(ready, SAMD_DFLL_LOCK_POLL_LIMIT))
 	{
-		// Open loop until the USB start of frame comes
-		if (!SamdPclkWait(SYSCTRL_PCLKSR_DFLLRDY_Msk, SAMD_SYNC_POLL_LIMIT))
-		{
-			return SamdStartupFailed(SAMD_STARTUP_DFLL, __LINE__);
-		}
-	}
-	else if (!SamdPclkWait(SYSCTRL_PCLKSR_DFLLLCKC_Msk | SYSCTRL_PCLKSR_DFLLLCKF_Msk |
-						   SYSCTRL_PCLKSR_DFLLRDY_Msk, SAMD_DFLL_LOCK_POLL_LIMIT))
-	{
-		// No lock, the reference does not run: the DFLL48M is stopped
 		(void)SamdStartupFailed(SAMD_STARTUP_DFLL, __LINE__);
 		(void)SamdDfllStop();
 
@@ -905,18 +686,34 @@ static bool SamdDfllStart(uint32_t Mul, bool bUsb)
 	return true;
 }
 
-// Reduce 65536 / 1000000 to 1024 / 15625 before scaling. Splitting
-// the quotient and remainder keeps both products within 32 bits.
+// Refresh both calibrated loop rates when the CPU clock changes.
 void SystemCoreClockUpdate(void)
 {
 	uint32_t freq = SamdGclkGenFreq(SAMD_GCLK_MAIN);
 
 	SystemCoreClock = freq >> ((PM_REGS->PM_CPUSEL & PM_CPUSEL_CPUDIV_Msk) >> PM_CPUSEL_CPUDIV_Pos);
 
+#if defined(__SAMD11D14AM__)
+	// HF timer measurements on the SAMD11 Xplained Pro at 24 and 48 MHz, in
+	// loops per second. Below 24 MHz the 24 MHz cycles per loop are kept.
+	SystemMicroSecLoopCnt = CalcDelayFactor(SystemCoreClock,
+		24000000UL, 1844990UL, 48000000UL, 3691125UL);
+	SystemnsDelayFactor = CalcDelayFactor(SystemCoreClock,
+		24000000UL, 7994643UL, 48000000UL, 15994721UL);
+#elif defined(__SAMD21J18A__)
+	// TC3 measurements at the two calibrated CPU speeds, in loops per second.
+	// Below 24 MHz the 24 MHz cycles per loop are kept.
+	SystemMicroSecLoopCnt = CalcDelayFactor(SystemCoreClock,
+		24000000UL, 1844769UL, 48000000UL, 3690941UL);
+	SystemnsDelayFactor = CalcDelayFactor(SystemCoreClock,
+		24000000UL, 7995282UL, 48000000UL, 15994881UL);
+#else
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		13ULL * 1000000ULL, (uint64_t)SAMD_NSDELAY_LOOP_CLK * 1000000ULL);
+#endif
 }
 
+#if SAMD_CLOCK_DIAGNOSTICS
 // Clock registers at the end of the startup, see s_SamdStartupReg
 static void SamdStartupRegs(void)
 {
@@ -935,6 +732,8 @@ static void SamdStartupRegs(void)
 	s_SamdStartupReg[11] = ((uint32_t)SYSCTRL_REGS->SYSCTRL_DPLLSTATUS << 8) | SYSCTRL_REGS->SYSCTRL_DPLLCTRLA;
 }
 
+#endif
+
 // FDPLL96M from OSC8M / 8 on generator 2, 1 MHz reference x 96
 static bool SamdDpllFromOsc8m(void)
 {
@@ -952,26 +751,33 @@ static bool SamdDpllFromOsc8m(void)
 }
 
 // DFLL48M closed loop on the 32.768 kHz clock of generator 1, rounded down to
-// at most 48 MHz: 1464 x 32768 Hz = 47.972 MHz
-static bool SamdDfllFromLf(void)
+// at most 48 MHz: 1464 x 32768 Hz = 47.972 MHz. Returns the DFLL48M
+// frequency, 0 when it did not start.
+static uint32_t SamdDfllFromLf(void)
 {
 	uint32_t ref = SamdGclkGenFreq(SAMD_GCLK_LF);
+	uint32_t mul;
 
 	if (ref < SAMD_DFLL_REF_MIN || ref > SAMD_DFLL_REF_MAX)
 	{
-		return SamdStartupFailed(SAMD_STARTUP_DFLL, __LINE__);
+		(void)SamdStartupFailed(SAMD_STARTUP_DFLL, __LINE__);
+
+		return 0U;
 	}
 
 	if (!SamdGclkChannelEnable(GCLK_CLKCTRL_ID_DFLL48_Val, SAMD_GCLK_LF))
 	{
-		return SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
+		(void)SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
+
+		return 0U;
 	}
 
-	return SamdDfllStart(SAMD_MAIN_FREQ_MAX / ref, false);
+	mul = SAMD_MAIN_FREQ_MAX / ref;
+
+	return SamdDfllStart(mul, false) ? mul * ref : 0U;
 }
 
-// Main clock on OSC8M undivided, generator 0, the main branch setting that
-// runs on both boards. Interrupts disabled.
+// Switch generator 0 to OSC8M at 8 MHz. Interrupts are disabled.
 static bool SamdMainOsc8m(void)
 {
 	uint32_t ctrl;
@@ -996,8 +802,13 @@ static bool SamdMainOsc8m(void)
 		return SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
 	}
 
-	return SamdGclkGenSet(SAMD_GCLK_MAIN, GCLK_GENCTRL_SRC_OSC8M_Val, 0U) ||
-		SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
+	if (!SamdGclkGenSet(SAMD_GCLK_MAIN, GCLK_GENCTRL_SRC_OSC8M_Val, 0U))
+	{
+		return SamdStartupFailed(SAMD_STARTUP_GCLK, __LINE__);
+	}
+	s_GenFreq[SAMD_GCLK_MAIN] = SAMD_OSC8M_FREQ;
+
+	return true;
 }
 
 // 48 MHz main clock from g_McuOsc, the main clock on OSC8M first. Stops at
@@ -1006,11 +817,7 @@ static bool SamdClockInit(void)
 {
 	uint32_t src;
 	uint32_t div;
-
-	if (!SamdConfigValid(&g_McuOsc))
-	{
-		return SamdStartupFailed(SAMD_STARTUP_CONFIG, __LINE__);
-	}
+	uint32_t freq;
 
 	// Wait state for the final clock, manual page write. The CPU and the
 	// buses are not divided.
@@ -1047,14 +854,16 @@ static bool SamdClockInit(void)
 	{
 		// Reference XOSC / (2 x (DIV + 1)), at most 2 MHz
 		uint32_t xdiv = (g_McuOsc.CoreOsc.Freq + 2UL * SAMD_DPLL_REF_MAX - 1UL) / (2UL * SAMD_DPLL_REF_MAX);
+		uint32_t ref = g_McuOsc.CoreOsc.Freq / (2UL * xdiv);
 
 		if (!SamdXoscStart() ||
-			!SamdDpllStart(SYSCTRL_DPLLCTRLB_REFCLK_REF1_Val, g_McuOsc.CoreOsc.Freq / (2UL * xdiv), xdiv - 1UL))
+			!SamdDpllStart(SYSCTRL_DPLLCTRLB_REFCLK_REF1_Val, ref, xdiv - 1UL))
 		{
 			return false;
 		}
 		src = GCLK_GENCTRL_SRC_DPLL96M_Val;
 		div = SAMD_DPLL_MAIN_DIV;
+		freq = SamdDpllFreq(ref) / SAMD_DPLL_MAIN_DIV;
 	}
 	else
 	{
@@ -1063,7 +872,8 @@ static bool SamdClockInit(void)
 		if (g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC)
 		{
 			// DFLL48M locked on the 32 kHz crystal or clock of generator 1
-			if (!lf || !SamdDfllFromLf())
+			freq = lf ? SamdDfllFromLf() : 0U;
+			if (freq == 0U)
 			{
 				return false;
 			}
@@ -1078,13 +888,15 @@ static bool SamdClockInit(void)
 			}
 			src = GCLK_GENCTRL_SRC_DFLL48M_Val;
 			div = 0U;
+			freq = SAMD_DFLL_USB_FREQ;
 		}
 		else if (SamdDpllFromOsc8m())
 		{
 			src = GCLK_GENCTRL_SRC_DPLL96M_Val;
 			div = SAMD_DPLL_MAIN_DIV;
+			freq = SamdDpllFreq(SAMD_OSC8M_FREQ / SAMD_DPLL_OSC8M_DIV) / SAMD_DPLL_MAIN_DIV;
 		}
-		else if (lf && SamdDfllFromLf())
+		else if (lf && (freq = SamdDfllFromLf()) != 0U)
 		{
 			// The FDPLL96M did not start: the DFLL48M locked on the OSC32K
 			// clock of generator 1 is the main clock, the failed FDPLL96M
@@ -1102,6 +914,7 @@ static bool SamdClockInit(void)
 	{
 		return SamdStartupFailed(SAMD_STARTUP_CLOCK_SWITCH, __LINE__);
 	}
+	s_GenFreq[SAMD_GCLK_MAIN] = freq;
 
 	SystemCoreClockUpdate();
 
@@ -1113,10 +926,7 @@ static bool SamdClockInit(void)
 	return true;
 }
 
-// A failed step leaves the main clock on OSC8M at 8 MHz, as the main branch
-// does: s_SamdStartupError and s_SamdStartupLine tell the first step that
-// failed, also when the DFLL48M took over from the FDPLL96M, s_SamdStartupLog
-// all the failed steps and s_SamdStartupReg the clock registers after them.
+// If clock setup fails, try OSC8M at 8 MHz.
 static bool SamdSystemClockInit(void)
 {
 	uint32_t primask = __get_PRIMASK();
@@ -1124,22 +934,25 @@ static bool SamdSystemClockInit(void)
 
 	__disable_irq();
 
+#if SAMD_CLOCK_DIAGNOSTICS
 	s_SamdStartupError = SAMD_STARTUP_OK;
 	s_SamdStartupLine = 0U;
 	for (uint32_t i = 0; i < SAMD_STARTUP_LOG_LEN; i++)
 	{
 		s_SamdStartupLog[i] = 0U;
 	}
+#endif
 
 	result = SamdClockInit();
 	if (!result)
 	{
 		(void)SamdMainOsc8m();
+		SystemCoreClockUpdate();
 	}
 
+#if SAMD_CLOCK_DIAGNOSTICS
 	SamdStartupRegs();
-
-	SystemCoreClockUpdate();
+#endif
 
 	__set_PRIMASK(primask);
 
@@ -1163,7 +976,8 @@ uint32_t SystemCoreClockGet(void)
  *
  * @param	Idx : Generator number, see clock_samd.h
  *
- * @return	Frequency in Hz, 0 for a generator not running or unknown source
+ * @return	Frequency in Hz of generator 0 or 1 as the clock setup left it,
+ *			0 for another generator or a clock that did not start
  */
 uint32_t SystemPeriphClockGet(int Idx)
 {
@@ -1175,401 +989,149 @@ uint32_t SystemPeriphClockGet(int Idx)
 	return SamdGclkGenFreq((uint32_t)Idx);
 }
 
-// DMAC register clock accessible, interrupts disabled. An initialized but
-// idle controller does not own a clock rate. Preserve the channel selector.
-static bool SamdDmaClockBusy(void)
-{
-	uint8_t selected = DMAC_REGS->DMAC_CHID;
-	bool busy = false;
-
-	if ((DMAC_REGS->DMAC_CTRL & (DMAC_CTRL_CRCENABLE_Msk | DMAC_CTRL_SWRST_Msk)) != 0U)
-	{
-		return true;
-	}
-
-	for (uint32_t i = 0; i < DMAC_CH_NUM; i++)
-	{
-		DMAC_REGS->DMAC_CHID = (uint8_t)i;
-		if ((DMAC_REGS->DMAC_CHCTRLA & (DMAC_CHCTRLA_ENABLE_Msk | DMAC_CHCTRLA_SWRST_Msk)) != 0U)
-		{
-			busy = true;
-			break;
-		}
-	}
-	DMAC_REGS->DMAC_CHID = selected;
-
-	// Include a final beat, queued request and a completion awaiting its ISR.
-	return busy || DMAC_REGS->DMAC_BUSYCH != 0U || DMAC_REGS->DMAC_PENDCH != 0U ||
-		   DMAC_REGS->DMAC_INTSTATUS != 0U ||
-		   (DMAC_REGS->DMAC_ACTIVE & (DMAC_ACTIVE_ABUSY_Msk | DMAC_ACTIVE_LVLEX_Msk)) != 0U;
-}
-
-// Temporarily open the register interface to inspect a shared-clock peer.
-// This does not enable its counter or change its generic clock connection.
-static bool SamdTcClockBusy(tc_registers_t *pReg, uint32_t Mask)
-{
-	uint32_t saved = PM_REGS->PM_APBCMASK;
-	bool busy;
-
-	PM_REGS->PM_APBCMASK = saved | Mask;
-	busy = (pReg->COUNT16.TC_CTRLA & (TC_CTRLA_ENABLE_Msk | TC_CTRLA_SWRST_Msk)) != 0U ||
-		   (pReg->COUNT16.TC_STATUS & TC_STATUS_SYNCBUSY_Msk) != 0U;
-	PM_REGS->PM_APBCMASK = saved;
-
-	return busy;
-}
-
-static bool SamdTccClockBusy(tcc_registers_t *pReg, uint32_t Mask)
-{
-	uint32_t saved = PM_REGS->PM_APBCMASK;
-	bool busy;
-
-	PM_REGS->PM_APBCMASK = saved | Mask;
-	busy = (pReg->TCC_CTRLA & (TCC_CTRLA_ENABLE_Msk | TCC_CTRLA_SWRST_Msk)) != 0U ||
-		   pReg->TCC_SYNCBUSY != 0U;
-	PM_REGS->PM_APBCMASK = saved;
-
-	return busy;
-}
-
-// Every counter sharing the channel must be stopped and synchronized.
-// Other peripheral channels retain the conservative allocated-clock check.
-static bool SamdTimerClockBusy(uint32_t Channel)
-{
-	switch (Channel)
-	{
-		case GCLK_CLKCTRL_ID_RTC_Val:
-			return (RTC_REGS->MODE0.RTC_CTRL & (RTC_MODE0_CTRL_ENABLE_Msk | RTC_MODE0_CTRL_SWRST_Msk)) != 0U ||
-				   (RTC_REGS->MODE0.RTC_STATUS & RTC_STATUS_SYNCBUSY_Msk) != 0U;
-#if defined(__SAMD11D14AM__)
-		case GCLK_CLKCTRL_ID_TC1_TC2_Val:
-			return SamdTcClockBusy(TC1_REGS, PM_APBCMASK_TC1_Msk) ||
-				   SamdTcClockBusy(TC2_REGS, PM_APBCMASK_TC2_Msk);
-		case GCLK_CLKCTRL_ID_TCC0_Val:
-			return SamdTccClockBusy(TCC0_REGS, PM_APBCMASK_TCC0_Msk);
-#else
-		case GCLK_CLKCTRL_ID_TCC0_TCC1_Val:
-			return SamdTccClockBusy(TCC0_REGS, PM_APBCMASK_TCC0_Msk) ||
-				   SamdTccClockBusy(TCC1_REGS, PM_APBCMASK_TCC1_Msk);
-		case GCLK_CLKCTRL_ID_TCC2_TC3_Val:
-			return SamdTccClockBusy(TCC2_REGS, PM_APBCMASK_TCC2_Msk) ||
-				   SamdTcClockBusy(TC3_REGS, PM_APBCMASK_TC3_Msk);
-		case GCLK_CLKCTRL_ID_TC4_TC5_Val:
-			return SamdTcClockBusy(TC4_REGS, PM_APBCMASK_TC4_Msk) ||
-				   SamdTcClockBusy(TC5_REGS, PM_APBCMASK_TC5_Msk);
-		case GCLK_CLKCTRL_ID_TC6_TC7_Val:
-			return SamdTcClockBusy(TC6_REGS, PM_APBCMASK_TC6_Msk) ||
-				   SamdTcClockBusy(TC7_REGS, PM_APBCMASK_TC7_Msk);
-#endif
-		default:
-			return true;
-	}
-}
-
-// Runtime changes require stopped timers and released peripheral clocks.
-// Bus masks alone do not show activity: several are enabled at reset.
-// Interrupts are disabled.
-static bool SamdClockBusy(bool LowFreq)
-{
-	uint32_t apba = PM_APBAMASK_SYSCTRL_Msk | PM_APBAMASK_GCLK_Msk |
-					PM_APBAMASK_WDT_Msk | PM_APBAMASK_RTC_Msk | PM_APBAMASK_EIC_Msk;
-	uint32_t apbb = PM_APBBMASK_DMAC_Msk | PM_APBBMASK_USB_Msk;
-
-	// A gated register interface cannot prove that its peripheral is stopped.
-	if ((PM_REGS->PM_APBAMASK & apba) != apba || (PM_REGS->PM_APBBMASK & apbb) != apbb)
-	{
-		return true;
-	}
-
-	if ((WDT_REGS->WDT_CTRL & (WDT_CTRL_ENABLE_Msk | WDT_CTRL_ALWAYSON_Msk)) != 0U ||
-		(RTC_REGS->MODE0.RTC_CTRL & RTC_MODE0_CTRL_ENABLE_Msk) != 0U ||
-		(EIC_REGS->EIC_CTRL & EIC_CTRL_ENABLE_Msk) != 0U ||
-		SamdDmaClockBusy())
-	{
-		return true;
-	}
-
-#if defined(__SAMD11D14AM__)
-	uint8_t usb = USB_REGS->USB_CTRLA;
-#else
-	uint8_t usb = USB_REGS->DEVICE.USB_CTRLA;
-#endif
-	if ((usb & USB_CTRLA_ENABLE_Msk) != 0U || !SamdGclkSync())
-	{
-		return true;
-	}
-
-	// A running DFLL may depend on either low-frequency source. Do not stop
-	// its reference while the CPU or another generator uses its output.
-	if (LowFreq && (SYSCTRL_REGS->SYSCTRL_DFLLCTRL & SYSCTRL_DFLLCTRL_ENABLE_Msk) != 0U)
-	{
-		return true;
-	}
-	if (LowFreq && (SYSCTRL_REGS->SYSCTRL_DPLLCTRLA & SYSCTRL_DPLLCTRLA_ENABLE_Msk) != 0U)
-	{
-		uint32_t ref = SYSCTRL_REGS->SYSCTRL_DPLLCTRLB & SYSCTRL_DPLLCTRLB_REFCLK_Msk;
-		*(volatile uint8_t *)&GCLK_REGS->GCLK_CLKCTRL = GCLK_CLKCTRL_ID_FDPLL_Val;
-		if (!SamdGclkSync())
-		{
-			return true;
-		}
-
-		uint16_t channel = GCLK_REGS->GCLK_CLKCTRL;
-
-		if ((ref != SYSCTRL_DPLLCTRLB_REFCLK_REF1 && ref != SYSCTRL_DPLLCTRLB_REFCLK_GCLK) ||
-			(ref == SYSCTRL_DPLLCTRLB_REFCLK_GCLK &&
-			 (channel & GCLK_CLKCTRL_GEN_Msk) == GCLK_CLKCTRL_GEN(SAMD_GCLK_LF)))
-		{
-			return true;
-		}
-	}
-
-	for (uint32_t i = 0; i < GCLK_NUM; i++)
-	{
-		*(volatile uint8_t *)&GCLK_REGS->GCLK_CLKCTRL = (uint8_t)i;
-		if (!SamdGclkSync())
-		{
-			return true;
-		}
-
-		uint16_t channel = GCLK_REGS->GCLK_CLKCTRL;
-
-		if (i == GCLK_CLKCTRL_ID_DFLL48_Val || i == GCLK_CLKCTRL_ID_FDPLL_Val ||
-			i == GCLK_CLKCTRL_ID_FDPLL32K_Val)
-		{
-			if (!LowFreq || (channel & GCLK_CLKCTRL_GEN_Msk) != GCLK_CLKCTRL_GEN(SAMD_GCLK_LF))
-			{
-				continue;
-			}
-		}
-		if ((channel & GCLK_CLKCTRL_CLKEN_Msk) != 0U && SamdTimerClockBusy(i))
-		{
-			return true;
-		}
-	}
-
-	for (uint32_t i = 0; i < GCLK_GEN_NUM; i++)
-	{
-		*(volatile uint8_t *)&GCLK_REGS->GCLK_GENCTRL = (uint8_t)i;
-		if (!SamdGclkSync())
-		{
-			return true;
-		}
-
-		uint32_t gen = GCLK_REGS->GCLK_GENCTRL;
-		uint32_t src = gen & GCLK_GENCTRL_SRC_Msk;
-		if ((gen & GCLK_GENCTRL_GENEN_Msk) == 0U)
-		{
-			continue;
-		}
-		if ((gen & GCLK_GENCTRL_OE_Msk) != 0U ||
-			(!LowFreq && i > SAMD_GCLK_DPLLREF) ||
-			(LowFreq && i != SAMD_GCLK_LF &&
-			 (src == GCLK_GENCTRL_SRC_OSC32K || src == GCLK_GENCTRL_SRC_XOSC32K ||
-			  src == GCLK_GENCTRL_SRC_GCLKGEN1)))
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
+// Generator dividers are fixed at startup. Return the configured frequency.
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-	if (Idx < 0 || Idx >= GCLK_GEN_NUM || Freq == 0U || __get_IPSR() != 0U)
-	{
-		return 0U;
-	}
-	uint32_t state = DisableInterrupt();
-	uint32_t ctrl = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, (uint32_t)Idx);
-	uint32_t saved = SamdGclkGenRead(&GCLK_REGS->GCLK_GENDIV, (uint32_t)Idx);
-	uint32_t actual = 0U;
+	(void)Freq;
 
-	if (ctrl == UINT32_MAX || saved == UINT32_MAX ||
-		(ctrl & GCLK_GENCTRL_GENEN_Msk) == 0U)
-	{
-		EnableInterrupt(state);
-		return 0U;
-	}
-	uint32_t input = SamdSourceFreq((ctrl & GCLK_GENCTRL_SRC_Msk) >> GCLK_GENCTRL_SRC_Pos);
-	if (input == 0U)
-	{
-		EnableInterrupt(state);
-		return 0U;
-	}
-	uint32_t maximum = Idx == 1 ? 65535U : Idx == 2 ? 31U : 255U;
-	uint32_t best = 1U;
-	uint32_t error = UINT32_MAX;
-	bool binary = false;
-	uint32_t first = input / Freq;
-	uint32_t minimum = Idx == SAMD_GCLK_MAIN ?
-		(input + SAMD_MAIN_FREQ_MAX - 1U) / SAMD_MAIN_FREQ_MAX : 1U;
-	if (first < minimum)
-	{
-		first = minimum;
-	}
-	if (first > maximum)
-	{
-		first = maximum;
-	}
-	uint32_t limit = first < maximum ? first + 1U : first;
-	for (uint32_t div = first; div <= limit; div++)
-	{
-		uint32_t rate = input / div;
-		uint32_t difference = rate > Freq ? rate - Freq : Freq - rate;
-		if (difference < error)
-		{
-			error = difference;
-			best = div;
-			actual = rate;
-		}
-	}
-	for (uint32_t div = 0U; div < 31U; div++)
-	{
-		uint32_t rate = input >> (div + 1U);
-		if (rate == 0U || (Idx == SAMD_GCLK_MAIN && rate > SAMD_MAIN_FREQ_MAX))
-		{
-			continue;
-		}
-		uint32_t difference = rate > Freq ? rate - Freq : Freq - rate;
-		if (difference < error)
-		{
-			error = difference;
-			best = div;
-			actual = rate;
-			binary = true;
-		}
-	}
-	bool modeChange = binary != ((ctrl & GCLK_GENCTRL_DIVSEL_Msk) != 0U);
-	uint32_t previous = (saved & GCLK_GENDIV_DIV_Msk) >> GCLK_GENDIV_DIV_Pos;
-	if (actual != 0U && (modeChange ||
-		(best != previous && !(best == 1U && previous == 0U && !binary))))
-	{
-		bool busy = Idx == SAMD_GCLK_MAIN && SamdClockBusy(false);
-		busy = busy || (ctrl & GCLK_GENCTRL_OE_Msk) != 0U;
-		// Generator 1 can feed another generator directly.
-		for (uint32_t gen = 0; !busy && Idx == SAMD_GCLK_LF && gen < GCLK_GEN_NUM; gen++)
-		{
-			uint32_t value = SamdGclkGenRead(&GCLK_REGS->GCLK_GENCTRL, gen);
-			busy = value == UINT32_MAX ||
-				((value & GCLK_GENCTRL_GENEN_Msk) != 0U &&
-				 (value & GCLK_GENCTRL_SRC_Msk) == GCLK_GENCTRL_SRC_GCLKGEN1);
-		}
-		// A reference channel must not be retimed beneath a running PLL.
-		for (uint32_t channel = 0; !busy && channel < GCLK_NUM; channel++)
-		{
-			uint32_t value = SamdGclkRead(&GCLK_REGS->GCLK_CLKCTRL, channel, true);
-			bool reference =
-				(channel == GCLK_CLKCTRL_ID_DFLL48_Val &&
-				 (SYSCTRL_REGS->SYSCTRL_DFLLCTRL & SYSCTRL_DFLLCTRL_ENABLE_Msk) != 0U) ||
-				(channel == GCLK_CLKCTRL_ID_FDPLL_Val &&
-				 (SYSCTRL_REGS->SYSCTRL_DPLLCTRLA & SYSCTRL_DPLLCTRLA_ENABLE_Msk) != 0U &&
-				 (SYSCTRL_REGS->SYSCTRL_DPLLCTRLB & SYSCTRL_DPLLCTRLB_REFCLK_Msk) ==
-				 SYSCTRL_DPLLCTRLB_REFCLK_GCLK);
-			busy = value == UINT32_MAX ||
-				((reference || (value & GCLK_CLKCTRL_CLKEN_Msk) != 0U) &&
-				 (value & GCLK_CLKCTRL_GEN_Msk) == GCLK_CLKCTRL_GEN(Idx) &&
-				 SamdTimerClockBusy(channel));
-		}
-		if (busy)
-		{
-			actual = 0U;
-		}
-		else
-		{
-			bool ready = true;
-			if (modeChange)
-			{
-				// Use a divider safe in either encoding while changing DIVSEL.
-				// The generator remains enabled, including the CPU's generator.
-				GCLK_REGS->GCLK_GENDIV = GCLK_GENDIV_ID(Idx) | GCLK_GENDIV_DIV(minimum);
-				ready = SamdGclkSync();
-				if (ready)
-				{
-					GCLK_REGS->GCLK_GENCTRL = ctrl ^ GCLK_GENCTRL_DIVSEL_Msk;
-					ready = SamdGclkSync();
-				}
-			}
-			if (ready)
-			{
-				GCLK_REGS->GCLK_GENDIV = GCLK_GENDIV_ID(Idx) | GCLK_GENDIV_DIV(best);
-				ready = SamdGclkSync();
-			}
-			if (!ready || SamdGclkGenFreq((uint32_t)Idx) != actual)
-			{
-				actual = 0U;
-			}
-			SystemCoreClockUpdate();
-		}
-	}
-	EnableInterrupt(state);
-	return actual;
-}
-
-// Full clock tree setup again. The caller stops the clock consumers first
-// (USB, DMA, timers, serial interfaces) and sets them up again after.
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	McuOsc_t requested = g_McuOsc;
-	uint32_t primask;
-	bool result;
-
-	requested.CoreOsc.Type = ClkSrc;
-	requested.CoreOsc.Freq = OscFreq;
-
-	if (__get_IPSR() != 0U || !SamdConfigValid(&requested))
-	{
-		return false;
-	}
-
-	primask = __get_PRIMASK();
-	__disable_irq();
-	if (SamdClockBusy(false))
-	{
-		__set_PRIMASK(primask);
-
-		return false;
-	}
-
-	g_McuOsc.CoreOsc = requested.CoreOsc;
-	result = SamdSystemClockInit();
-	__set_PRIMASK(primask);
-
-	return result;
-}
-
-// The low frequency oscillator and generator 1 only. The consumers of
-// generator 1 (RTC, DFLL48M reference) are stopped by the caller first.
-bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	uint32_t primask;
-	bool result;
-
-	if (__get_IPSR() != 0U || !SamdLowFreqValid(ClkSrc, OscFreq))
-	{
-		return false;
-	}
-
-	primask = __get_PRIMASK();
-	__disable_irq();
-	if (SamdClockBusy(true))
-	{
-		__set_PRIMASK(primask);
-
-		return false;
-	}
-
-	g_McuOsc.LowPwrOsc.Type = ClkSrc;
-	g_McuOsc.LowPwrOsc.Freq = OscFreq;
-	result = SamdLowFreqInit();
-	__set_PRIMASK(primask);
-
-	return result;
+	return SystemPeriphClockGet(Idx);
 }
 
 void SystemOscInit(void)
 {
 	// No programmable crystal load capacitance. SystemInit starts the
 	// oscillators.
+}
+
+bool SystemHighFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	ready = s_HfUsers != UINT32_MAX && s_GenFreq[SAMD_GCLK_MAIN] != 0U;
+	if (ready)
+	{
+		s_HfUsers++;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (s_HfUsers != 0U)
+	{
+		s_HfUsers--;
+	}
+	__set_PRIMASK(state);
+}
+
+bool SystemHighFreqClockCalibrate(void)
+{
+	return false;
+}
+
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}
+
+bool SystemLowFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	ready = s_LfUsers != UINT32_MAX && (SystemPeriphClockGet(SAMD_GCLK_LF) != 0U);
+	if (ready)
+	{
+		s_LfUsers++;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+void SystemLowFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (s_LfUsers != 0U)
+	{
+		s_LfUsers--;
+	}
+	__set_PRIMASK(state);
+}
+
+bool SystemLowFreqClockCalibrate(void)
+{
+	return false;
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}
+
+static bool SamdSetRunningMode(SYSTEM_POWER_MODE Mode)
+{
+	uint8_t previous = s_PowerMode == SYSTEM_POWER_MODE_LOW_POWER ? 1U : 0U;
+	uint8_t divider = Mode == SYSTEM_POWER_MODE_LOW_POWER ? 1U : 0U;
+
+	// The caller handles the device timing that depends on these clocks,
+	// a SysTick on the CPU clock included.
+	if (PM_REGS->PM_CPUSEL != previous || PM_REGS->PM_APBASEL != previous ||
+		PM_REGS->PM_APBBSEL != previous || PM_REGS->PM_APBCSEL != previous)
+	{
+		return false;
+	}
+	// Keep APB clocks at or below the CPU clock throughout the change.
+	if (Mode == SYSTEM_POWER_MODE_PERFORMANCE)
+	{
+		PM_REGS->PM_CPUSEL = divider;
+	}
+	PM_REGS->PM_APBASEL = divider;
+	PM_REGS->PM_APBBSEL = divider;
+	PM_REGS->PM_APBCSEL = divider;
+	if (Mode == SYSTEM_POWER_MODE_LOW_POWER)
+	{
+		PM_REGS->PM_CPUSEL = divider;
+	}
+	__DSB();
+	__ISB();
+	SystemCoreClockUpdate();
+	s_PowerMode = Mode;
+	return true;
+}
+
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t state;
+	bool result;
+
+	if (__get_IPSR() != 0U ||
+		(Mode != SYSTEM_POWER_MODE_LOW_POWER && Mode != SYSTEM_POWER_MODE_PERFORMANCE))
+	{
+		return false;
+	}
+	state = __get_PRIMASK();
+	__disable_irq();
+	result = Mode == s_PowerMode || SamdSetRunningMode(Mode);
+	__set_PRIMASK(state);
+	return result;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return s_PowerMode;
 }

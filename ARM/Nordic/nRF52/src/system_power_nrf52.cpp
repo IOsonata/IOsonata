@@ -3,7 +3,7 @@
 
 @brief	Power functions of system_core_clock.h on the nRF52
 
-Power off is System OFF. SystemWakePin sets the SENSE level of a pin, GPIO
+Power off is System OFF. The pin driver sets the SENSE level of a pin, GPIO
 DETECT wakes the MCU on that level. RESETREAS keeps adding reasons until it
 is cleared, an empty value is a power on or brown out reset. The retention
 registers are GPREGRET and GPREGRET2, 8 bits each. The DC/DC regulator is
@@ -60,7 +60,6 @@ SOFTWARE.
 #endif
 
 #include "coredev/system_core_clock.h"
-#include "iopinctrl.h"
 
 #define SYS_PWR_NRF52_NB_RETREG		2
 #define SYS_PWR_NRF52_RETREG_MSK	0xFFUL
@@ -76,38 +75,6 @@ SOFTWARE.
 
 static bool s_bSysPwrResetRead = false;
 static uint32_t s_SysPwrResetReason = 0;
-
-// System OFF wake pins are independent of temporary GPIOTE IRQ ownership.
-// Interrupt cleanup may clear PIN_CNF.SENSE; rearm these selections on entry.
-static uint32_t s_SysPwrWakeMask[GPIO_COUNT];
-static uint32_t s_SysPwrWakeHigh[GPIO_COUNT];
-
-static void SysPwrWakePinsRearm(void)
-{
-	uint32_t state;
-	int port;
-	int pin;
-
-	state = __get_PRIMASK();
-	__disable_irq();
-	for (port = 0; port < GPIO_COUNT; port++)
-	{
-		uint32_t mask = s_SysPwrWakeMask[port];
-		uint32_t high = s_SysPwrWakeHigh[port];
-
-		for (pin = 0; pin < 32; pin++)
-		{
-			uint32_t bit = 1UL << pin;
-
-			if ((mask & bit) != 0U)
-			{
-				IOPinSetSense(port, pin, (high & bit) != 0U ?
-					IOPINSENSE_HIGH_TRANSITION : IOPINSENSE_LOW_TRANSITION);
-			}
-		}
-	}
-	__set_PRIMASK(state);
-}
 
 // sd_softdevice_is_enabled is an SVC that only a programmed SoftDevice
 // implements, so the image is looked for first: its magic number follows the
@@ -245,8 +212,6 @@ uint32_t SystemPowerCapabilitiesGet(void)
 
 void SystemPowerOff(void)
 {
-	SysPwrWakePinsRearm();
-
 	if (SysPwrSdEnabled())
 	{
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
@@ -264,50 +229,6 @@ void SystemPowerOff(void)
 	{
 		__WFE();
 	}
-}
-
-bool SystemWakePin(int PortNo, int PinNo, int Sense)
-{
-	uint32_t state;
-	uint32_t bit;
-
-	if (PinNo < 0 || PinNo >= 32 || nRFGpioGetReg(PortNo) == NULL)
-	{
-		return false;
-	}
-	if (Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_LOW_TRANSITION &&
-		Sense != IOPINSENSE_HIGH_TRANSITION)
-	{
-		return false;
-	}
-
-	// Keep the explicit wake setting separate from temporary GPIOTE IRQ
-	// allocation. A later IRQ cleanup must not lose the System OFF source.
-	state = __get_PRIMASK();
-	bit = 1UL << PinNo;
-
-	__disable_irq();
-	if (Sense == IOPINSENSE_DISABLE)
-	{
-		s_SysPwrWakeMask[PortNo] &= ~bit;
-		s_SysPwrWakeHigh[PortNo] &= ~bit;
-	}
-	else
-	{
-		s_SysPwrWakeMask[PortNo] |= bit;
-		if (Sense == IOPINSENSE_HIGH_TRANSITION)
-		{
-			s_SysPwrWakeHigh[PortNo] |= bit;
-		}
-		else
-		{
-			s_SysPwrWakeHigh[PortNo] &= ~bit;
-		}
-	}
-	IOPinSetSense(PortNo, PinNo, (IOPINSENSE)Sense);
-	__set_PRIMASK(state);
-
-	return true;
 }
 
 int SystemRetRegCount(void)
