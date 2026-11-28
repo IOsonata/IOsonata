@@ -83,6 +83,9 @@ extern unsigned char __data_ahb_size__ __attribute__((weak));
 // Clock into the CPU divider, the PLL0 output or the input with PLL0 off, as
 // the clock setup left it. 0 when PLL0 did not acknowledge a change.
 static uint32_t s_Lpc17CclkIn = IRC_FREQ;
+static uint32_t s_HfUsers;
+static uint32_t s_PerformanceDiv;		// CPU divider set by SystemInit
+static SYSTEM_POWER_MODE s_PowerMode;
 
 // No system-control register access may interrupt the two feed writes.
 static void Lpc17PllFeed(volatile uint32_t *pFeed)
@@ -194,6 +197,24 @@ static void Lpc17ClockUnknown(void)
 {
 	s_Lpc17CclkIn = 0;
 	SystemCoreClockUpdate();
+}
+
+// Flash access time for a CPU clock: FLASHTIM is the number of access clocks
+// minus one, one clock per 20 MHz, 6 clocks at most (UM10360 table 49)
+static void Lpc17FlashTime(uint32_t Freq)
+{
+	uint32_t tim;
+
+	tim = 0;
+	if (Freq > 0U)
+	{
+		tim = (Freq - 1U) / 20000000U;
+	}
+	if (tim > 5U)
+	{
+		tim = 5U;
+	}
+	LPC_SC->FLASHCFG = (LPC_SC->FLASHCFG & ~0xF000U) | (tim << 12);
 }
 
 // For one PLL ratio, only the two dividers bracketing the request can win.
@@ -441,17 +462,7 @@ static uint32_t Lpc17SetCoreClock(uint32_t ClkFreq, uint32_t clksrcsel, const Lp
 	SystemCoreClockUpdate();
 
 	// Reduce access time only after the resulting CPU clock is known.
-	// FLASHTIM is the number of access clocks minus one (UM10360 table 49).
-	temp = 0;
-	if (SystemCoreClock > 0U)
-	{
-		temp = (SystemCoreClock - 1U) / 20000000U;
-	}
-	if (temp > 5U)
-	{
-		temp = 5U;
-	}
-	LPC_SC->FLASHCFG = (LPC_SC->FLASHCFG & ~0xF000U) | (temp << 12);
+	Lpc17FlashTime(SystemCoreClock);
 
 	return SystemCoreClock;
 }
@@ -576,4 +587,106 @@ void SystemInit (void)
 			g_McuOsc.CoreOsc.LoadCap = 0;
 		}
 	}
+	s_PerformanceDiv = (LPC_SC->CCLKCFG & 0xFFU) + 1U;
+	s_PowerMode = SYSTEM_POWER_MODE_PERFORMANCE;
+}
+
+bool SystemHighFreqClockEnable(void)
+{
+	uint32_t state;
+	bool ready;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	ready = s_HfUsers != UINT32_MAX && s_Lpc17CclkIn != 0U;
+	if (ready)
+	{
+		s_HfUsers++;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	uint32_t state;
+
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (s_HfUsers != 0U)
+	{
+		s_HfUsers--;
+	}
+	__set_PRIMASK(state);
+}
+
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	// The oscillator is started in SystemInit, Enable never waits for it
+	return 0U;
+}
+
+// The only low frequency oscillator is the RTC crystal, which the RTC
+// drives itself. No driver of this port takes a clock from this request.
+bool SystemLowFreqClockEnable(void)
+{
+	return false;
+}
+
+void SystemLowFreqClockDisable(void)
+{
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	return 0U;
+}
+
+/**
+ * @brief	CPU running mode.
+ *
+ * LOW_POWER doubles the CPU divider: the CPU and every peripheral clock, PCLK
+ * being CCLK divided by PCLKSEL, run at half the frequency. A UART sets its
+ * baud rate again and the timers and SysTick count at half the rate. The USB
+ * clock comes from PLL0 through its own divider and does not change. The
+ * flash access time follows the CPU clock.
+ */
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t state;
+	uint32_t div;
+	uint32_t freq;
+
+	if (__get_IPSR() != 0U ||
+		(Mode != SYSTEM_POWER_MODE_PERFORMANCE && Mode != SYSTEM_POWER_MODE_LOW_POWER) ||
+		s_PerformanceDiv == 0U || s_PerformanceDiv > 128U || s_Lpc17CclkIn == 0U)
+	{
+		return false;
+	}
+	div = Mode == SYSTEM_POWER_MODE_LOW_POWER ? s_PerformanceDiv << 1 : s_PerformanceDiv;
+	freq = s_Lpc17CclkIn / div;
+	state = __get_PRIMASK();
+	__disable_irq();
+	if (Mode != s_PowerMode)
+	{
+		// The longer flash access before the faster clock, after the slower one
+		if (Mode == SYSTEM_POWER_MODE_PERFORMANCE)
+		{
+			Lpc17FlashTime(freq);
+		}
+		LPC_SC->CCLKCFG = div - 1U;
+		if (Mode == SYSTEM_POWER_MODE_LOW_POWER)
+		{
+			Lpc17FlashTime(freq);
+		}
+		SystemCoreClockUpdate();
+		s_PowerMode = Mode;
+	}
+	__set_PRIMASK(state);
+	return true;
+}
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return s_PowerMode;
 }

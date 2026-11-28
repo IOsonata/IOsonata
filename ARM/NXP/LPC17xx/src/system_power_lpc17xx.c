@@ -34,7 +34,6 @@ Modified by          Date              Description
 
 #include "LPC17xx.h"
 #include "coredev/system_core_clock.h"
-#include "coredev/iopincfg.h"
 #include "coredev/interrupt.h"
 
 #define LPC17_PCON_DPDFLAG	(1U << 11)
@@ -47,20 +46,14 @@ static volatile uint32_t * const s_RetRegs[] = {
 static bool s_ResetRead;
 static uint32_t s_ResetReason;
 
+// SystemSleep wakes on an interrupt set up through its driver, a pin
+// interrupt of iopincfg.h included. SystemPowerOff wakes by RESET or an RTC
+// interrupt. The running modes are in system_LPC17xx.c.
 uint32_t SystemPowerCapabilitiesGet(void)
 {
 	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_SYSTEM_OFF |
-		   SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE | SYSTEM_POWER_CAP_RET_REG;
-}
-
-bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
-{
-	return Mode == SYSTEM_POWER_MODE_PERFORMANCE;
-}
-
-SYSTEM_POWER_MODE SystemPowerModeGet(void)
-{
-	return SYSTEM_POWER_MODE_PERFORMANCE;
+		   SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_TIMER_WAKE | SYSTEM_POWER_CAP_RET_REG |
+		   SYSTEM_POWER_CAP_LOW_POWER;
 }
 
 uint32_t SystemResetReason(void)
@@ -112,15 +105,6 @@ uint32_t SystemResetReason(void)
 	}
 	EnableInterrupt(state);
 	return s_ResetReason;
-}
-
-bool SystemWakePin(int PortNo, int PinNo, int Sense)
-{
-	// Deep Power-down wakes only through RESET or an enabled RTC interrupt.
-	(void)PortNo;
-	(void)PinNo;
-	(void)Sense;
-	return false;
 }
 
 void SystemPowerOff(void)

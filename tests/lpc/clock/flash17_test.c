@@ -472,6 +472,59 @@ int main(void)
 	}
 
 
+	// Clock requests and running modes after SystemInit
+	memset(&s_Regs, 0, sizeof(s_Regs));
+	s_OscWait = 0;
+	s_OscReadyAfter = 4;
+	g_McuOsc.CoreOsc.Type = OSC_TYPE_XTAL;
+	g_McuOsc.CoreOsc.Freq = 12000000;
+	SystemInit();
+	{
+		uint32_t perf = SystemCoreClock;
+		uint32_t div = s_Regs.CCLKCFG + 1U;
+		uint32_t pll0cfg = s_Regs.PLL0CFG;
+		uint32_t usbcfg = s_Regs.USBCLKCFG;
+		uint32_t flash = s_Regs.FLASHCFG;
+		uint32_t mask = s_Primask;
+
+		assert(s_Regs.PLL0CON == 3 && perf == s_Lpc17CclkIn / div);
+		SystemHighFreqClockDisable();
+		assert(SystemHighFreqClockEnable());
+		assert(SystemHighFreqClockEnable());
+		SystemHighFreqClockDisable();
+		SystemHighFreqClockDisable();
+		assert(SystemHighFreqClockEnable());
+		SystemHighFreqClockDisable();
+		assert(SystemHighFreqClockStartTime() == 0);
+		// The RTC crystal is not a clock the drivers request
+		assert(!SystemLowFreqClockEnable());
+		SystemLowFreqClockDisable();
+		assert(SystemLowFreqClockStartTime() == 0);
+
+		assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+		assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+		assert(s_Regs.CCLKCFG == div - 1U && SystemCoreClock == perf);
+		s_Regs.PCLKSEL0 = 0;
+		assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+		assert(s_Primask == mask);
+		assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_LOW_POWER);
+		assert(s_Regs.CCLKCFG == 2U * div - 1U);
+		assert(SystemCoreClock == perf / 2U && SystemCoreClockGet() == perf / 2U);
+		assert(SystemPeriphClockGet(LPC17_PCLK_UART0) == perf / 8U);
+		assert(SystemMicroSecLoopCnt == ((uint64_t)SystemCoreClock * 1000000ULL) / 16000000U);
+		assert((s_Regs.FLASHCFG & 0xF000U) == ((SystemCoreClock - 1U) / 20000000U) << 12);
+		assert(s_Regs.PLL0CFG == pll0cfg && s_Regs.PLL0CON == 3 && s_Regs.USBCLKCFG == usbcfg);
+		assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+		assert(s_Regs.CCLKCFG == 2U * div - 1U);
+		assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+		assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE);
+		assert(s_Regs.CCLKCFG == div - 1U && SystemCoreClock == perf);
+		assert(s_Regs.FLASHCFG == flash);
+		assert(s_Regs.PLL0CFG == pll0cfg && s_Regs.PLL0CON == 3 && s_Regs.USBCLKCFG == usbcfg);
+		assert(!SystemPowerModeSet((SYSTEM_POWER_MODE)2));
+		assert(SystemPowerModeGet() == SYSTEM_POWER_MODE_PERFORMANCE && s_Regs.CCLKCFG == div - 1U);
+	}
+
 #ifdef TEST_CLOCK_LIMIT
 	assert(LPC17_MAX_CORE_FREQ == TEST_CLOCK_LIMIT);
 	for (unsigned i = 0; i < sizeof(s_LimitRequests) / sizeof(s_LimitRequests[0]); i++)
