@@ -162,17 +162,17 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn("__WFI();", source)
         self.assertIn("SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_TIMER_WAKE", source)
 
-    def test_l15_measured_128mhz_delay_factors(self):
+    def test_l15_measured_delay_factors(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
-        self.assertIn("#if defined(NRF54L15_XXAA)", source)
-        self.assertIn("if (SystemCoreClock == 128000000UL)", source)
-        self.assertIn("8000400UL, 3000150UL", source)
-        self.assertIn("16000000UL, 3000000UL", source)
+        start = source.index("#if defined(NRF54L15_XXAA)", source.index("void SystemCoreClockUpdate(void)"))
+        l15 = source[start:source.index("#elif", start)]
+        self.assertIn("64000000UL, 7998880UL, 128000000UL, 15999199UL", l15)
+        self.assertIn("64000000UL, 21331839UL, 128000000UL, 42664533UL", l15)
 
-    def test_lm20a_two_point_delay_interpolation(self):
+    def test_lm20_shared_two_point_delay_interpolation(self):
         source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
-        start = source.index("#elif defined(NRF54LM20A_XXAA)")
-        end = source.index("#elif defined(NRF54LM20B_XXAA)", start)
+        start = source.index("#elif defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)")
+        end = source.index("\n#else\n", start)
         lm20a = source[start:end]
         self.assertIn("64000000UL, 7998400UL, 128000000UL, 15999360UL", lm20a)
         self.assertIn("64000000UL, 21331413UL, 128000000UL, 42664533UL", lm20a)
@@ -197,17 +197,6 @@ class Nrf54lCorePort(unittest.TestCase):
         self.assertIn('''#else
                 NRF_OSCILLATORS->PLL.FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
             #endif''', init)
-
-    def test_lm20b_remains_unmeasured(self):
-        source = (ROOT / "ARM/Nordic/nRF54/src/system_nrf54l.c").read_text()
-        start = source.index("#elif defined(NRF54LM20B_XXAA)")
-        end = source.index("\n#else\n", start)
-        lm20b = source[start:end]
-        self.assertIn("8000640UL, 3000150UL", lm20b)
-        self.assertNotIn("4000320UL", lm20b)
-        l15 = source[source.index("#if defined(NRF54L15_XXAA)"):
-                     source.index("#elif defined(NRF54LM20A_XXAA)")]
-        self.assertIn("8000400UL, 3000150UL", l15)
 
     def test_lm20_managed_projects_use_their_target_variant(self):
         # nRF54LM20A and nRF54LM20B are separate targets. Every managed
