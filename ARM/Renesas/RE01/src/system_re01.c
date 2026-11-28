@@ -82,6 +82,7 @@ __WEAK McuOsc_t g_McuOsc = {
 
 static uint32_t s_PeriphSrcFreq = 0;
 static uint32_t s_PeriphBusFreq;
+static uint32_t s_PllFreq;
 
 static uint32_t s_HfUsers;
 static uint32_t s_LfUsers;
@@ -334,8 +335,13 @@ void SystemCoreClockUpdate(void)
 				SystemCoreClock = 0;
 				break;
 			}
-			SystemCoreClock = (uint64_t)g_McuOsc.CoreOsc.Freq * (SYSTEM->PLLCCR_b.PLLMUL + 1) /
-							  (SYSTEM->PLLCCR_b.PLIDIV + 1);
+			if (s_PllFreq == 0)
+			{
+				// A bootloader may have selected the PLL before SystemInit.
+				s_PllFreq = (uint64_t)g_McuOsc.CoreOsc.Freq * (SYSTEM->PLLCCR_b.PLLMUL + 1) /
+							(SYSTEM->PLLCCR_b.PLIDIV + 1);
+			}
+			SystemCoreClock = s_PllFreq;
 			break;
 		default:
 			SystemCoreClock = 0;
@@ -362,6 +368,7 @@ static bool Re01SetCoreClock(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	{
 		return false;
 	}
+	s_PllFreq = 0;
 	g_McuOsc.CoreOsc.Type = ClkSrc;
 	g_McuOsc.CoreOsc.Freq = OscFreq;
 	SYSTEM->SCKDIVCR = (SYSTEM->SCKDIVCR & ~(SYSTEM_SCKDIVCR_ICK_Msk | SYSTEM_SCKDIVCR_PCKB_Msk)) |
@@ -426,7 +433,8 @@ static bool Re01SetCoreClock(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		g_McuOsc.bUSBClk = false;
 		return false;
 	}
-	if (ConfigPLL(g_McuOsc.CoreOsc.Freq) != 0)
+	s_PllFreq = ConfigPLL(g_McuOsc.CoreOsc.Freq);
+	if (s_PllFreq != 0)
 	{
 		SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_PLL;
 		return SYSTEM->SCKSCR_b.CKSEL == SYSTEM_SCKSCR_CKSEL_PLL;

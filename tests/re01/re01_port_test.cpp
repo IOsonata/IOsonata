@@ -161,6 +161,24 @@ static void pinEdgeHook(int, void *)
 
 static void clocks()
 {
+	// A 12 MHz crystal and a x4 PLL supply both CPU modes.
+	g_McuOsc.CoreOsc.Freq = 12000000;
+	SYSTEM->SCKSCR = 5;
+	SYSTEM->PLLCCR_b.PLLMUL = 3;
+	SYSTEM->PLLCCR_b.PLIDIV = 0;
+	SYSTEM->SCKDIVCR_b.PCKB = 1;
+	*(volatile uint8_t *)&SYSTEM->OSCSF = SYSTEM_OSCSF_MOSCSF_Msk | SYSTEM_OSCSF_PLLSF_Msk;
+	SystemCoreClockUpdate();
+	assert(SystemCoreClock == 48000000);
+	// Editing the board descriptor cannot change the running oscillator.
+	g_McuOsc.CoreOsc.Freq = 16000000;
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+	assert(SystemCoreClock == 24000000 && SystemPeriphClockGet(1) == 24000000);
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+	assert(SystemCoreClock == 48000000);
+	*(volatile uint8_t *)&SYSTEM->OSCSF = SYSTEM_OSCSF_MOSCSF_Msk;
+	SystemCoreClockUpdate();
+	assert(SystemCoreClock == 0 && SystemPeriphClockGet(1) == 0);
 	SYSTEM->SCKSCR = 0;
 	SYSTEM->MSTPCRA = SYSTEM_MSTPCRA_MSTPA22_Msk;
 	MSTP->MSTPCRB = 0xffffffffU;
