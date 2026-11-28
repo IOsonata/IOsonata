@@ -87,6 +87,15 @@ are in microseconds.
 | SAM4LC8C | 39,614,848 | 99,996 | 100,000 | 100,000 |
 | SAM4LC8C | 19,807,424 | 99,984 | 99,990 | 99,997 |
 
+SAM4L Xplained Pro again after e8cfe4baa, where `CalcDelayFactor` keeps the
+measured cycles per loop outside its two points. The RC clock gave 39,586,432
+and 19,793,216 Hz on this boot. The low rate is under the 19,804,096 Hz
+point, so the factors there come from the scaled point: usDelay 99,985 us,
+msDelay 99,991 us and nsDelay 99,997 us. At 39,586,432 Hz they were 99,997,
+99,997 and 100,000 us. The divisors measured on this boot, 14,001,828 and
+14,003,369 for usDelay and 3,000,390 and 3,000,690 for nsDelay, are within
+0.02 percent of the ones in the code. 0 failures.
+
 ## TimerTest coverage
 
 `exemples/misc/timer_test.cpp`, the TimerTest project of each target, tests
