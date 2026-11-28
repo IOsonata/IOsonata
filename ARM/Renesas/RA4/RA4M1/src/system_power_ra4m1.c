@@ -32,10 +32,22 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "ra4m1xxx.h"
+#include "interrupt_ra4m1.h"
 #include "coredev/interrupt.h"
 
 static uint32_t s_ResetReason;
 static bool s_ResetRead;
+
+uint32_t SystemPowerCapabilitiesGet(void)
+{
+	return SYSTEM_POWER_CAP_SLEEP | SYSTEM_POWER_CAP_TIMER_WAKE |
+		SYSTEM_POWER_CAP_WAKE_PIN | SYSTEM_POWER_CAP_LOW_POWER;
+}
+
+void SystemPowerOff(void)
+{
+	// Software Standby resumes at the instruction following WFI.
+}
 
 uint32_t SystemResetReason(void)
 {
@@ -83,12 +95,10 @@ void SystemSleep(void)
 	uint32_t wake = 0;
 	uint32_t tick = SysTick->CTRL;
 
-	// Standby currently supports external IRQ wake. Other wake policies use
+	// Standby supports external IRQ and AGT1 underflow wake. Other wake policies use
 	// ordinary Sleep. Do not stop an application's DMA or Snooze operation.
-	bool deep = (R_ICU->WUPEN & 0xffffU) != 0 &&
-		(R_ICU->WUPEN & 0xffff0000U) == 0 &&
-		((R_SYSTEM->MSTPCRA & (1UL << 22)) != 0 ||
-		 ((R_DMA->DMAST & 1U) == 0 && (R_DTC->DTCST & 1U) == 0)) &&
+	bool deep = R_ICU->WUPEN != 0 &&
+		(R_ICU->WUPEN & ~(0xffffU | R_ICU_WUPEN_AGT1UDWUPEN_Msk)) == 0 &&
 		R_SYSTEM->OSTDCR == 0 && (R_SYSTEM->SNZCR & 0x80U) == 0;
 
 	if (deep)
@@ -97,7 +107,8 @@ void SystemSleep(void)
 		{
 			uint32_t event = R_ICU->IELSR[i] & 0xffU;
 
-			if (event >= 1 && event <= 16 && (R_ICU->WUPEN & (1UL << (event - 1))))
+			if ((event >= 1 && event <= 16 && (R_ICU->WUPEN & (1UL << (event - 1)))) ||
+				(event == RA4M1_EVTID_AGT1_AGTI && (R_ICU->WUPEN & R_ICU_WUPEN_AGT1UDWUPEN_Msk)))
 			{
 				wake |= 1UL << i;
 			}

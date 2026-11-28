@@ -193,17 +193,15 @@ with the actual resonator. No load-capacitance value is inferred from a board.
 
 ## Reconfiguration and failure handling
 
-`SystemInit` is a cold-start entry, not a runtime reinitialization API.
-`SystemCoreClockSelect` performs a checked switch through MOCO /16. Before
-calling it at runtime the application must quiesce **all** clock-dependent
-clients: peripheral transfers, DMA/DTC, timers/SysTick, trace/clock outputs,
-RTOS timing, and any other oscillator consumers. USBFS SCKE must be zero.
-The function masks CPU interrupts but cannot automatically quiesce DMA or an
-application. It refuses Subosc-mode/LOCO/SOSC system-clock entry and refuses an
-enabled or latched oscillator-stop detector. Low-frequency selection likewise
-requires quiesced consumers and masks interrupts during its startup wait.
-Independent bus-divider changes and low-power transition policy are deferred;
-`SystemPeriphClockSet` succeeds only for the already-established frequency.
+Startup takes the HF and LF clock sources from `g_McuOsc`. PCLK indices
+0 through 3 report PCLKA through PCLKD. A request on a shared bus returns
+the frequency in effect. Low-power running mode halves ICLK and limits the
+bus clocks to ICLK. At the 48 MHz startup setting SCI retains its 24 MHz
+PCLKB in both modes. Performance mode restores the startup dividers.
+
+The EK-RA4M1 clock, power and timer tests use SCI0 RX on P410 and TX on
+P411 at 1,000,000 baud. CorePowerTest uses AGT1 underflow and S1 on
+P105/IRQ0 to wake from Software Standby.
 
 Protected writes preserve unrelated PRCR bits and restore the prior protection
 and PRIMASK. Frequency and mode changes use readback/ready checks. Oscillator,

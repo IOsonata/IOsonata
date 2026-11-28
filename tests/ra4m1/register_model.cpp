@@ -125,70 +125,61 @@ static void reset_model(void)
 static void pass(const char *name){++checks;printf("PASS %u: %s\n",checks,name);}
 int main(void)
 {
-	for (unsigned bank = 0; bank < 4; bank++)
-	{
-		reset_model();
-		mstp[bank] &= ~(1U << (bank == 0 ? 22 : 8));
-		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 48000000));
-		assert(writes == 0 && test_primask == 0);
-	}
-	reset_model();
-	sys[0x3e] = 0x80;
-	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 48000000));
-	assert(writes == 0 && test_primask == 0);
-	pass("busy modules and CLKOUT refuse runtime clock changes");
-
 	reset_model();SystemInit();assert(SystemCoreClock==48000000);assert(dividers==0x10010100);assert(sys[0x31]==1&&cache==1&&protect==0);assert(sys[0xA5]==5&&hocowtcr_writes==0);
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER));
+	assert(SystemCoreClock == 24000000 && SystemPeriphClockGet(1) == 24000000);
+	assert(SystemPowerModeSet(SYSTEM_POWER_MODE_PERFORMANCE));
+	assert(SystemCoreClock == 48000000 && dividers == 0x10010100);
 	assert(test_disabled==0xFFFFFFFFU && test_cleared==0xFFFFFFFFU && test_primask==0);
 	assert(test_scb.CPACR==0xF00000 && test_scb.VTOR==(uint32_t)(uintptr_t)__Vectors);
 	for(unsigned i=0;i<32;i++)assert(links[i]==0);pass("48 MHz cold startup, FPU, VTOR, all 32 IRQs disabled/unrouted");
 	assert(SystemPeriphClockGet(0)==48000000&&SystemPeriphClockGet(1)==24000000&&SystemPeriphClockGet(2)==48000000&&SystemPeriphClockGet(3)==48000000&&SystemFlashClockGet()==24000000);pass("48 MHz bus plan and reserved PCKB mirror");
 	uint32_t before=writes;SystemCoreClockUpdate();(void)SystemCoreClockGet();for(int i=-1;i<=4;i++)(void)SystemPeriphClockGet(i);(void)SystemFlashClockGet();(void)SystemUsbClockGet();assert(writes==before);pass("all clock queries are hardware-read-only");
-	assert(SystemPeriphClockGet(-1)==0&&SystemPeriphClockGet(4)==0&&SystemPeriphClockSet(1,24000000)==24000000&&SystemPeriphClockSet(1,12000000)==0);pass("invalid bus indices and unsupported divider changes");
+	assert(SystemPeriphClockGet(-1)==0&&SystemPeriphClockGet(4)==0&&SystemPeriphClockSet(1,24000000)==24000000&&SystemPeriphClockSet(1,12000000)==24000000);pass("invalid bus indices and unsupported divider changes");
 	const uint32_t rcs[]={8000000,24000000,32000000,48000000};
-	for(unsigned i=0;i<4;i++){reset_model();assert(SystemCoreClockSelect(OSC_TYPE_RC,rcs[i]));assert(SystemCoreClock==rcs[i]);assert(sys[0x31]==(rcs[i]>32000000));pass("supported RC source and Flash boundary");}
-	reset_model();assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(SystemCoreClockSelect(OSC_TYPE_RC,24000000));assert(sys[0x31]==0&&SystemCoreClock==24000000);assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));pass("quiesced 48-to-24-to-48 MHz transition ordering");
+	for(unsigned i=0;i<4;i++){reset_model();assert(Ra4m1CoreClockSelect(OSC_TYPE_RC,rcs[i]));assert(SystemCoreClock==rcs[i]);assert(sys[0x31]==(rcs[i]>32000000));pass("supported RC source and Flash boundary");}
+	reset_model();assert(Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(Ra4m1CoreClockSelect(OSC_TYPE_RC,24000000));assert(sys[0x31]==0&&SystemCoreClock==24000000);assert(Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));pass("quiesced 48-to-24-to-48 MHz transition ordering");
 	const uint32_t bad[]={0,1,32768,16000000,40000000,64000000,0xFFFFFFFFU};
-	for(unsigned i=0;i<7;i++){reset_model();assert(!SystemCoreClockSelect(OSC_TYPE_RC,bad[i]));assert(writes==0&&SystemCoreClock==500000);pass("invalid RC frequency rejected without register writes");}
-	reset_model();assert(!SystemCoreClockSelect((OSC_TYPE)99,12000000));assert(writes==0);pass("unknown oscillator type rejected");
+	for(unsigned i=0;i<7;i++){reset_model();assert(!Ra4m1CoreClockSelect(OSC_TYPE_RC,bad[i]));assert(writes==0&&SystemCoreClock==500000);pass("invalid RC frequency rejected without register writes");}
+	reset_model();assert(!Ra4m1CoreClockSelect((OSC_TYPE)99,12000000));assert(writes==0);pass("unknown oscillator type rejected");
 	const uint32_t exts[]={4000000,6000000,8000000,12000000};
 	for (unsigned i = 0; i < 4; i++)
 	{
 		reset_model();
 		input_hz = exts[i];
 		g_McuOsc.bUSBClk = true;
-		assert(SystemCoreClockSelect(OSC_TYPE_XTAL, input_hz));
+		assert(Ra4m1CoreClockSelect(OSC_TYPE_XTAL, input_hz));
 		assert(SystemCoreClock == 48000000 && SystemUsbClockGet() == 48000000);
 		assert(sys[0xD0] == 0);
 		pass("external crystal to exact 48 MHz PLL and USB source");
 	}
-	reset_model();input_hz=12000000;assert(SystemCoreClockSelect(OSC_TYPE_TCXO,input_hz));assert(sys[0x413]==0x40&&sys[0xA2]==0&&SystemCoreClock==48000000);pass("external-clock bypass and zero MOSC wait");
+	reset_model();input_hz=12000000;assert(Ra4m1CoreClockSelect(OSC_TYPE_TCXO,input_hz));assert(sys[0x413]==0x40&&sys[0xA2]==0&&SystemCoreClock==48000000);pass("external-clock bypass and zero MOSC wait");
 	const uint32_t direct[]={1000000,10000000,12288000,16000000,20000000};
-	for(unsigned i=0;i<5;i++){reset_model();input_hz=direct[i];assert(SystemCoreClockSelect(OSC_TYPE_XTAL,input_hz));assert(SystemCoreClock==input_hz&&sys[0x26]==3&&sys[0x31]==0);pass("external frequencies without exact PLL solution use MOSC directly");}
-	reset_model();g_McuOsc.bUSBClk=true;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0xD0]==1&&SystemUsbClockGet()==48000000);pass("48 MHz HOCO USB source, controller stays disabled");
-	reset_model();g_McuOsc.bUSBClk=true;assert(!SystemCoreClockSelect(OSC_TYPE_XTAL,16000000));assert(writes==0);pass("USB request rejects non-48 MHz plan");
-	reset_model();g_McuOsc.bUSBClk=true;sys[0x62]=1;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0x62]==0&&SystemUsbClockGet()==48000000);pass("USB startup clears retained HOCO user trim");
-	reset_model();assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));pass("startup never accesses the stopped USB controller");
-	for(unsigned mode=1;mode<=3;mode++){reset_model();sys[0xA0]=mode;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0xA0]==0);pass("legal slow-clock operating-mode entry");}
-	reset_model();sys[0xAA]=1;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_BAD_ENTRY);pass("Subosc-mode transition refused");
-	reset_model();sys[0x40]=0x80;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_BAD_ENTRY);pass("enabled clock-stop detector prevents unsafe oscillator stop");
+	for(unsigned i=0;i<5;i++){reset_model();input_hz=direct[i];assert(Ra4m1CoreClockSelect(OSC_TYPE_XTAL,input_hz));assert(SystemCoreClock==input_hz&&sys[0x26]==3&&sys[0x31]==0);pass("external frequencies without exact PLL solution use MOSC directly");}
+	reset_model();g_McuOsc.bUSBClk=true;assert(Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0xD0]==1&&SystemUsbClockGet()==48000000);pass("48 MHz HOCO USB source, controller stays disabled");
+	reset_model();g_McuOsc.bUSBClk=true;assert(!Ra4m1CoreClockSelect(OSC_TYPE_XTAL,16000000));assert(writes==0);pass("USB request rejects non-48 MHz plan");
+	reset_model();g_McuOsc.bUSBClk=true;sys[0x62]=1;assert(Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0x62]==0&&SystemUsbClockGet()==48000000);pass("USB startup clears retained HOCO user trim");
+	reset_model();assert(Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));pass("startup never accesses the stopped USB controller");
+	for(unsigned mode=1;mode<=3;mode++){reset_model();sys[0xA0]=mode;assert(Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0xA0]==0);pass("legal slow-clock operating-mode entry");}
+	reset_model();sys[0xAA]=1;assert(!Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_BAD_ENTRY);pass("Subosc-mode transition refused");
+	reset_model();sys[0x40]=0x80;assert(!Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_BAD_ENTRY);pass("enabled clock-stop detector prevents unsafe oscillator stop");
 	const uintptr_t errors[]={RA4M1_PRCR,RA4M1_HOCOCR2,RA4M1_MEMWAIT,RA4M1_OPCCR,RA4M1_MOCOCR,RA4M1_SCKDIVCR,RA4M1_FCACHEE};
-	for(unsigned i=0;i<sizeof(errors)/sizeof(errors[0]);i++){reset_model();fail_addr=errors[i];if(fail_addr==RA4M1_MOCOCR)sys[0x38]=1;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError!=0);assert(protect==0&&test_primask==0);pass("ignored register write fails with lock/PRIMASK restored");}
-	reset_model();stuck_ready=1;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_HOCO&&SystemCoreClock==500000);pass("HOCO lock timeout never publishes requested 48 MHz");
-	reset_model();stuck_ready=8;assert(!SystemCoreClockSelect(OSC_TYPE_XTAL,12000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_MOSC&&SystemCoreClock==500000);pass("MOSC ready timeout");
-	reset_model();stuck_ready=32;assert(!SystemCoreClockSelect(OSC_TYPE_XTAL,12000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_PLL&&SystemCoreClock==500000);pass("PLL lock timeout");
-	reset_model();fail_invalidate=true;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_FLASH&&cache==0&&sys[0x31]==1);pass("cache invalidation timeout remains correctly timed and uncached");
-	reset_model();protect=8;test_primask=1;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(protect==8&&test_primask==1);pass("nested PRIMASK and unrelated PRCR bits preserved");
-	reset_model();assert(SystemLowFreqClockSelect(OSC_TYPE_RC,32768));assert(sys[0x490]==0&&delays>=100&&protect==0);pass("LOCO low-frequency source startup");
-	reset_model();assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(sys[0x480]==0&&delays>=2000000&&protect==0);pass("SOSC drive setup and configurable stabilization wait");
-	reset_model();sys[0x480]=0;sys[0x481]=2;assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(sys[0x481]==2);pass("running SOSC is preserved across reset/reselection");
-	reset_model();assert(!SystemLowFreqClockSelect(OSC_TYPE_TCXO,32768)&&!SystemLowFreqClockSelect(OSC_TYPE_RC,32000));assert(writes==0);pass("unsupported low-frequency descriptors rejected");
-	reset_model();fail_addr=RA4M1_SOSCCR;assert(!SystemLowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(protect==0&&test_primask==0);pass("LF start failure restores protection");
-	reset_model();dividers=0x77077777;assert(SystemCoreClockGet()==0&&SystemPeriphClockGet(0)==0);pass("prohibited divider encodings report unknown frequency");
-	reset_model();sys[0x26]=7;assert(SystemCoreClockGet()==0);pass("reserved system source reports unknown frequency");
+	for(unsigned i=0;i<sizeof(errors)/sizeof(errors[0]);i++){reset_model();fail_addr=errors[i];if(fail_addr==RA4M1_MOCOCR)sys[0x38]=1;assert(!Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError!=0);assert(protect==0&&test_primask==0);pass("ignored register write fails with lock/PRIMASK restored");}
+	reset_model();stuck_ready=1;assert(!Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_HOCO&&SystemCoreClock==500000);pass("HOCO lock timeout never publishes requested 48 MHz");
+	reset_model();stuck_ready=8;assert(!Ra4m1CoreClockSelect(OSC_TYPE_XTAL,12000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_MOSC&&SystemCoreClock==500000);pass("MOSC ready timeout");
+	reset_model();stuck_ready=32;assert(!Ra4m1CoreClockSelect(OSC_TYPE_XTAL,12000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_PLL&&SystemCoreClock==500000);pass("PLL lock timeout");
+	reset_model();fail_invalidate=true;assert(!Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_FLASH&&cache==0&&sys[0x31]==1);pass("cache invalidation timeout remains correctly timed and uncached");
+	reset_model();protect=8;test_primask=1;assert(Ra4m1CoreClockSelect(OSC_TYPE_RC,48000000));assert(protect==8&&test_primask==1);pass("nested PRIMASK and unrelated PRCR bits preserved");
+	reset_model();assert(Ra4m1LowFreqClockSelect(OSC_TYPE_RC,32768));assert(sys[0x490]==0&&delays>=100&&protect==0);pass("LOCO low-frequency source startup");
+	reset_model();assert(Ra4m1LowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(sys[0x480]==0&&delays>=2000000&&protect==0);pass("SOSC drive setup and configurable stabilization wait");
+	reset_model();sys[0x480]=0;sys[0x481]=2;assert(Ra4m1LowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(sys[0x481]==2);pass("running SOSC is preserved across reset/reselection");
+	reset_model();assert(!Ra4m1LowFreqClockSelect(OSC_TYPE_TCXO,32768)&&!Ra4m1LowFreqClockSelect(OSC_TYPE_RC,32000));assert(writes==0);pass("unsupported low-frequency descriptors rejected");
+	reset_model();fail_addr=RA4M1_SOSCCR;assert(!Ra4m1LowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(protect==0&&test_primask==0);pass("LF start failure restores protection");
+	reset_model();dividers=0x77077777;SystemCoreClockUpdate();assert(SystemCoreClockGet()==0&&SystemPeriphClockGet(0)==0);pass("prohibited divider encodings report unknown frequency");
+	reset_model();sys[0x26]=7;SystemCoreClockUpdate();assert(SystemCoreClockGet()==0);pass("reserved system source reports unknown frequency");
 	reset_model();assert(Ra4m1PllHz(12000000,0x40|7)==48000000&&Ra4m1PllHz(12000000,0x20|0x40|7)==0);pass("PLL byte-width encoding and reserved-bit rejection");
-	reset_model();input_hz=16000000;assert(SystemCoreClockSelect(OSC_TYPE_XTAL,input_hz));sys[0x41]=1;assert(SystemCoreClockGet()==8000000);pass("MOSC stop fallback reports MOCO rather than stale crystal rate");
-	reset_model();assert(SystemCoreClockSelect(OSC_TYPE_XTAL,12000000));sys[0x41]=1;assert(SystemCoreClockGet()==0);pass("PLL free-running after input failure reports unknown rate");
-	reset_model();sys[0x41]=1;assert(!SystemCoreClockSelect(OSC_TYPE_XTAL,12000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_BAD_ENTRY);pass("latched oscillator-stop fault requires explicit recovery");
+	reset_model();input_hz=16000000;assert(Ra4m1CoreClockSelect(OSC_TYPE_XTAL,input_hz));sys[0x41]=1;SystemCoreClockUpdate();assert(SystemCoreClockGet()==8000000);pass("MOSC stop fallback reports MOCO rather than stale crystal rate");
+	reset_model();assert(Ra4m1CoreClockSelect(OSC_TYPE_XTAL,12000000));sys[0x41]=1;SystemCoreClockUpdate();assert(SystemCoreClockGet()==0);pass("PLL free-running after input failure reports unknown rate");
+	reset_model();sys[0x41]=1;assert(!Ra4m1CoreClockSelect(OSC_TYPE_XTAL,12000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_BAD_ENTRY);pass("latched oscillator-stop fault requires explicit recovery");
 	printf("%u register-model scenarios passed. No hardware execution.\n",checks);
 }

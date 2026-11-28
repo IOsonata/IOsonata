@@ -30,6 +30,11 @@ static void write32(uintptr_t,uint32_t);
 SCB_Type test_scb;
 uint32_t test_primask,test_disabled,test_cleared,test_enabled,test_active,test_pending,test_priority[32];
 uint32_t SystemCoreClock=48000000;
+static uint32_t wake, lfUsers, hfUsers;
+bool SystemLowFreqClockEnable(void){++lfUsers;return true;}
+void SystemLowFreqClockDisable(void){assert(lfUsers);--lfUsers;}
+bool SystemHighFreqClockEnable(void){++hfUsers;return true;}
+void SystemHighFreqClockDisable(void){assert(hfUsers);--hfUsers;}
 static uint32_t clocks[4]={48000000,24000000,48000000,48000000};
 McuOsc_t g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false,0};
 uint32_t SystemCoreClockGet(void){return SystemCoreClock;}
@@ -88,6 +93,7 @@ static uint16_t read16(uintptr_t a)
 static uint32_t read32(uintptr_t a)
 {
 	assert(!(a&3U));
+	if(a==RA4M1_WUPEN)return wake;
 	if(a==RA4M1_TIMER_MSTPCRD)return mstp;
 	if(a>=RA4M1_IELSR(0)&&a<=RA4M1_IELSR(31))return iel[(a-RA4M1_IELSR(0))/4];
 	if(a>=RA4M1_DELSR(0)&&a<=RA4M1_DELSR(3))return del[(a-RA4M1_DELSR(0))/4];
@@ -115,6 +121,7 @@ static void write16(uintptr_t a,uint16_t v)
 static void write32(uintptr_t a,uint32_t v)
 {
 	assert(test_primask);assert(!(a&3U));++writes;if(fail(a))return;
+	if(a==RA4M1_WUPEN){wake=v;return;}
 	if(a==RA4M1_TIMER_MSTPCRD){assert(prcr&2U);mstp=v;return;}
 	if(a>=RA4M1_IELSR(0)&&a<=RA4M1_IELSR(31)){assert(!(v&~255U));iel[(a-RA4M1_IELSR(0))/4]=v;return;}
 	unsigned n=gpidx(a),o=a&255U;assert(o<=0xA0);
@@ -162,7 +169,7 @@ static void reset_model()
 	for(auto &g:ag)g.counter=g.reload=65535;
 	memset(test_priority,0,sizeof(test_priority));memset(trigger_calls,0,sizeof(trigger_calls));memset(event_calls,0,sizeof(event_calls));
 	test_primask=test_disabled=test_cleared=test_enabled=test_active=test_pending=0;
-	mstp=0xFFFFFFFF;prcr=8;src=0;loco=0;sosc=1;fail_address=0;fail_once=start_fail=stop_fail=false;
+	wake=lfUsers=hfUsers=s_GptModuleMask=0;mstp=0xFFFFFFFF;prcr=8;src=0;loco=0;sosc=1;fail_address=0;fail_once=start_fail=stop_fail=false;
 	step_on_count=step_on_flags=-1;injected_ticks=step_on_compare_write=0;writes=overflow_calls=last_event=0;last_context=nullptr;
 	SystemCoreClock=48000000;clocks[0]=clocks[2]=clocks[3]=48000000;clocks[1]=24000000;
 	g_McuOsc={{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false,0};
@@ -197,12 +204,22 @@ int main()
 		CHECK(t.Enable(&t));step(dev,9);CHECK(t.GetTickCount(&t)==saved+9);t.Reset(&t);CHECK(t.GetTickCount(&t)==0);
 		CHECK(!t.EnableExtTrigger(&t,0,TIMER_EXTTRIG_SENSE_TOGGLE));t.DisableExtTrigger(&t);
 	}
+	reset_model();
+	CHECK(init(t,1) && lfUsers==1 && !wake);
+	CHECK(t.EnableTrigger(&t,0,10000000,TIMER_TRIG_TYPE_SINGLE,cb,nullptr));
+	CHECK(wake==R_ICU_WUPEN_AGT1UDWUPEN_Msk);
+	t.Disable(&t);
+	CHECK(!wake && !lfUsers);
+	CHECK(t.Enable(&t) && wake && lfUsers==1);
+	CHECK(t.PowerOff(&t) && !wake && !lfUsers);
 	// A read racing a hardware wrap must count the new epoch exactly once.
 	for(int dev:{0,2,4}){reset_model();CHECK(init(t,dev));uint64_t cycle=s_Timer[dev].Cycle;step(dev,cycle-1);
 		step_on_count=dev;injected_ticks=2;CHECK(t.GetTickCount(&t)==cycle+1);serve(dev);CHECK(t.GetTickCount(&t)==cycle+1);
 	}
 	reset_model();CHECK(init(t,2));TimerDev_t other={};CHECK(!init(other,2)&&!init(t,3));
 	CHECK(init(other,3));t.Disable(&t);CHECK(other.Enable(&other)&&!(mstp&clkbit(3)));step(3,31);CHECK(other.GetTickCount(&other)==31);
+	CHECK(t.PowerOff(&t));CHECK(!(mstp&clkbit(3)));step(3,3);CHECK(other.GetTickCount(&other)==34);
+	CHECK(other.PowerOff(&other));CHECK(mstp&clkbit(3));CHECK(init(t,2));
 	// Raw routes and running hardware must not be taken over.
 	reset_model();iel[0]=0x57;CHECK(!init(t,2)&&writes==0);
 	reset_model();del[1]=0x1F;CHECK(!init(t,0)&&writes==0);

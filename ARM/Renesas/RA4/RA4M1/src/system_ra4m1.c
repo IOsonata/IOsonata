@@ -449,22 +449,33 @@ static uint32_t Ra4m1DividedClock(unsigned Shift)
 	return div <= 6U ? freq >> div : 0U;
 }
 
+static uint32_t s_PeriphClock[4];
+
 void SystemCoreClockUpdate(void)
 {
 	// Read/report only: never change flash timing in a clock query.
-	SystemCoreClock = Ra4m1DividedClock(24U);
+	uint32_t source = Ra4m1SourceHz(R_SYSTEM->SCKSCR & 7U);
+	uint32_t dividers = R_SYSTEM->SCKDIVCR;
+	uint32_t shift = (dividers >> 24) & 7U;
+
+	SystemCoreClock = shift <= 6U ? source >> shift : 0;
+	for (unsigned i = 0; i < 4; i++)
+	{
+		shift = (dividers >> (4U * (3U - i))) & 7U;
+		s_PeriphClock[i] = shift <= 6U ? source >> shift : 0;
+	}
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		16000000UL, ((uint64_t)RA4M1_NSDELAY_FACTOR * 48000UL));
 }
 
 uint32_t SystemCoreClockGet(void)
 {
-	return Ra4m1DividedClock(24U);
+	return SystemCoreClock;
 }
 
 uint32_t SystemPeriphClockGet(int Idx)
 {
-	return Idx >= 0 && Idx < 4 ? Ra4m1DividedClock((unsigned)(3 - Idx) * 4U) : 0U;
+	return Idx >= 0 && Idx < 4 ? s_PeriphClock[Idx] : 0U;
 }
 
 uint32_t SystemFlashClockGet(void)
@@ -487,17 +498,7 @@ uint32_t SystemUsbClockGet(void)
 	return hz == 48000000UL ? hz : 0U;
 }
 
-static bool Ra4m1ClockUsers(void)
-{
-	// Module-stop bits read as one for stopped modules and reserved fields.
-	// SRAM remains enabled. DMAC/DTC must be stopped before retiming ICLK.
-	return (R_SYSTEM->MSTPCRA & (1UL << 22)) == 0 ||
-		R_MSTP->MSTPCRB != UINT32_MAX ||
-		(R_MSTP->MSTPCRC & ~1UL) != (UINT32_MAX & ~1UL) ||
-		R_MSTP->MSTPCRD != UINT32_MAX || (R_SYSTEM->CKOCR & 0x80U) != 0;
-}
-
-static bool Ra4m1CoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq, bool CheckUsers)
+static bool Ra4m1CoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 {
 	Ra4m1ClockPlan_t plan;
 	if (!Ra4m1MakePlan(ClkSrc, Freq, g_McuOsc.bUSBClk, &plan))
@@ -506,12 +507,6 @@ static bool Ra4m1CoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq, bool CheckUsers
 		return false;
 	}
 	const uint32_t state = DisableInterrupt();
-	if (CheckUsers && Ra4m1ClockUsers())
-	{
-		g_Ra4m1StartupError = RA4M1_STARTUP_BAD_ENTRY;
-		EnableInterrupt(state);
-		return false;
-	}
 	const uint16_t protect = R_SYSTEM->PRCR & 0x0BU;
 	R_SYSTEM->PRCR =  RA4M1_PRCR_KEY | protect | 3U;
 	Ra4m1StartupError_t result = RA4M1_STARTUP_PROTECT;
@@ -531,12 +526,7 @@ static bool Ra4m1CoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq, bool CheckUsers
 	return result == RA4M1_STARTUP_OK;
 }
 
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
-{
-	return Ra4m1CoreClockSelect(ClkSrc, Freq, true);
-}
-
-bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
+static bool Ra4m1LowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 {
 	if (!Ra4m1ValidLf(ClkSrc, Freq))
 	{
@@ -586,12 +576,113 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 	return ok;
 }
 
+// Startup keeps the CPU and low frequency time bases running.
+static uint32_t s_HfUsers;
+static uint32_t s_LfUsers;
+
+static bool ClockEnable(uint32_t *pUsers, bool running)
+{
+	uintptr_t state = DisableInterrupt();
+	bool ready = running && *pUsers < UINT32_MAX;
+
+	if (ready)
+	{
+		(*pUsers)++;
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
+static void ClockDisable(uint32_t *pUsers)
+{
+	uintptr_t state = DisableInterrupt();
+
+	if (*pUsers > 0)
+	{
+		(*pUsers)--;
+	}
+	EnableInterrupt(state);
+}
+
+bool SystemHighFreqClockEnable(void)
+{
+	return ClockEnable(&s_HfUsers, SystemCoreClock != 0);
+}
+
+void SystemHighFreqClockDisable(void)
+{
+	ClockDisable(&s_HfUsers);
+}
+
+bool SystemLowFreqClockEnable(void)
+{
+	bool running = g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC ?
+		(R_SYSTEM->LOCOCR & 1U) == 0 : (R_SYSTEM->SOSCCR & 1U) == 0;
+
+	return ClockEnable(&s_LfUsers, running);
+}
+
+void SystemLowFreqClockDisable(void)
+{
+	ClockDisable(&s_LfUsers);
+}
+
+uint32_t SystemHighFreqClockStartTime(void)
+{
+	return 0;
+}
+
+uint32_t SystemLowFreqClockStartTime(void)
+{
+	return 0;
+}
+
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-	// No independent runtime bus-divider policy in this initial port. Return
-	// failure for a change, not a fictitious successful frequency setting.
-	const uint32_t actual = SystemPeriphClockGet(Idx);
-	return Freq == actual ? actual : 0U;
+	(void)Freq;
+	return SystemPeriphClockGet(Idx);
+}
+
+static uint32_t s_PerformanceDividers;
+
+SYSTEM_POWER_MODE SystemPowerModeGet(void)
+{
+	return R_SYSTEM->SCKDIVCR == s_PerformanceDividers ?
+		SYSTEM_POWER_MODE_PERFORMANCE : SYSTEM_POWER_MODE_LOW_POWER;
+}
+
+bool SystemPowerModeSet(SYSTEM_POWER_MODE Mode)
+{
+	uint32_t dividers = s_PerformanceDividers;
+	uint32_t state;
+	uint16_t protect;
+	bool ready;
+
+	if (Mode == SYSTEM_POWER_MODE_LOW_POWER)
+	{
+		// Divide ICLK by two. PCLK and FCLK must stay at or below ICLK.
+		// Keep domains already divided, including SCI's 24 MHz PCLKB.
+		for (unsigned shift = 0; shift <= 28; shift += 4)
+		{
+			if (shift != 20 && ((dividers >> shift) & 7U) == 0)
+			{
+				dividers |= 1UL << shift;
+			}
+		}
+	}
+	else if (Mode != SYSTEM_POWER_MODE_PERFORMANCE)
+	{
+		return false;
+	}
+
+	state = DisableInterrupt();
+	protect = R_SYSTEM->PRCR & 0x0bU;
+	R_SYSTEM->PRCR = RA4M1_PRCR_KEY | protect | RA4M1_PRCR_PRC0;
+	ready = Ra4m1SetDividers(dividers);
+	R_SYSTEM->PRCR = RA4M1_PRCR_KEY | protect;
+	SystemCoreClockUpdate();
+	EnableInterrupt(state);
+	return ready;
 }
 
 void SystemOscInit(void)
@@ -630,10 +721,11 @@ void SystemInit(void)
 	if (!Ra4m1MakePlan(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq,
 					  g_McuOsc.bUSBClk, &plan))
 		Ra4m1StartupStop(RA4M1_STARTUP_BAD_OSC);
-	if (!Ra4m1CoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, false))
+	if (!Ra4m1CoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq))
 		Ra4m1StartupStop((Ra4m1StartupError_t)g_Ra4m1StartupError);
-	if (!SystemLowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq))
+	if (!Ra4m1LowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq))
 		Ra4m1StartupStop((Ra4m1StartupError_t)g_Ra4m1StartupError);
+	s_PerformanceDividers = R_SYSTEM->SCKDIVCR;
 	SystemCoreClockUpdate();
 	EnableInterrupt(state);
 }

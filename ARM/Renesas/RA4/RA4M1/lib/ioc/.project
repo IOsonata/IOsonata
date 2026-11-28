@@ -2096,6 +2096,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi_soft.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sdelay.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sdelay.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/timer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>

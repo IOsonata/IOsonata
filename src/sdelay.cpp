@@ -144,10 +144,10 @@ static bool SDelayTimerInit(int First, int Count, int Step, bool bLowFreq, uint3
 
 bool sDelay(uint32_t Seconds)
 {
-	uint64_t startNs;
+	uint64_t remaining;
+	uint64_t actual;
 	uint64_t ns;
 	uint32_t startUs;
-	uint32_t part;
 	uint32_t state;
 	int count;
 	bool success;
@@ -184,29 +184,28 @@ bool sDelay(uint32_t Seconds)
 
 	if (success)
 	{
-		startNs = (uint64_t)startUs * 1000ULL;
+		remaining = (uint64_t)Seconds * 1000000000ULL;
+		actual = (uint64_t)startUs * 1000ULL;
+		remaining -= actual < remaining ? actual : remaining;
 #if defined(__arm__) || defined(__ICCARM__)
 		// Light sleep, the timer keeps running
 		scr = SDELAY_SCR;
 		SDELAY_SCR = scr & ~(SDELAY_SCR_SLEEPDEEP | SDELAY_SCR_SLEEPONEXIT);
 #endif
-		while (success && Seconds != 0U)
+		while (success && remaining != 0U)
 		{
-			part = Seconds > SDELAY_PART_SEC ? SDELAY_PART_SEC : Seconds;
-			Seconds -= part;
-			ns = (uint64_t)part * 1000000000ULL;
-			if (startNs >= ns)
+			ns = SDELAY_PART_SEC * 1000000000ULL;
+			if (remaining < ns)
 			{
-				// The clock start took this part of the delay
-				startNs -= ns;
-				continue;
+				ns = remaining;
 			}
-			ns -= startNs;
-			startNs = 0U;
-
 			s_bSDelayDone = false;
-			success = nsTimerEnableTrigger(&s_SDelayTimer, 0, ns, TIMER_TRIG_TYPE_SINGLE,
-				SDelayTimerHandler, nullptr) != 0U;
+			actual = nsTimerEnableTrigger(&s_SDelayTimer, 0, ns, TIMER_TRIG_TYPE_SINGLE,
+				SDelayTimerHandler, nullptr);
+			success = actual != 0U;
+			// A narrow counter can fit only part of the requested interval.
+			// Treat rounding within one timer tick as the full interval.
+			remaining -= actual < ns && ns - actual > s_SDelayTimer.nsPeriod ? actual : ns;
 
 			// With the interrupts masked a pending timer interrupt still ends
 			// the wait, its handler runs once they are on again. No interrupt

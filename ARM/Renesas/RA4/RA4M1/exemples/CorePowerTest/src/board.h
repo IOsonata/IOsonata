@@ -5,7 +5,7 @@
 
 This file contains the I/O definitions for this application firmware.
 Keep it in the application project and modify it for the hardware in use.
-The supplied pin assignments are examples, not a development-board definition.
+EK-RA4M1. SCI0 uses P410/P411 and user switch S1 uses P105.
 
 @license
 
@@ -42,12 +42,12 @@ SOFTWARE.
 
 // UART device 0. Configure RX before TX in the pin map.
 #define UART_DEVNO			0
-#define UART_RX_PORT		1
-#define UART_RX_PIN			0
+#define UART_RX_PORT		4
+#define UART_RX_PIN			10
 #define UART_RX_PINOP		IOPINOP_FUNC3
 
-#define UART_TX_PORT		1
-#define UART_TX_PIN			1
+#define UART_TX_PORT		4
+#define UART_TX_PIN			11
 #define UART_TX_PINOP		IOPINOP_FUNC3
 
 #define UART_PINS			{ \
@@ -56,11 +56,11 @@ SOFTWARE.
 }
 
 #define UART_BAUDRATE 1000000
-#define WAKE_BUT_PORT 0
-#define WAKE_BUT_PIN 0
+#define WAKE_BUT_PORT 1
+#define WAKE_BUT_PIN 5
 #define WAKE_BUT_PINOP IOPINOP_GPIO
 #define WAKE_BUT_SENSE IOPINSENSE_LOW_TRANSITION
-#define POWER_DEMO_RESUME_WAKE 1
+#define CORE_POWER_TEST_TIMER_DEVNO 1
 #define POWER_DEMO_STANDBY_RAM_TEST 1
 #define POWER_DEMO_UART_DMA false
 

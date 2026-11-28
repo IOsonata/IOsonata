@@ -57,7 +57,7 @@ struct Ra4m1TimerData {
 	IRQn_Type Irq;
 	TIMER_CLKSRC Source;
 	uint8_t No, ClockBits, MaxTrigger, Priority;
-	bool Agt, Running, Fault;
+	bool Agt, Running, Fault, ClockHeld;
 };
 struct TimerPlan { uint32_t Base, Divider, Frequency, SyncCycles; uint8_t Bits; TIMER_CLKSRC Source; };
 
@@ -67,6 +67,8 @@ static R_GPT0_Type * const s_GptRegs[8] = {
 	R_GPT4, R_GPT5, R_GPT6, R_GPT7
 };
 static const uint8_t s_GptCompareIndex[6] = {0, 1, 2, 4, 3, 5};
+// GPT channels share two module-stop bits. Restore only clocks started here.
+static uint32_t s_GptModuleMask;
 static Ra4m1TimerData s_Timer[RA4M1_TIMER_COUNT];
 static Ra4m1TimerTrigger s_AgtTrigger[2];
 static Ra4m1TimerTrigger s_GptTrigger[8][6];
@@ -160,8 +162,20 @@ static void ClearOverflow(Ra4m1TimerData &d)
 	Sync(d);
 	if (d.Irq >= 0) Ra4m1AcknowledgeInt(d.Irq);
 }
+static void AgtWake(Ra4m1TimerData &d, bool enable)
+{
+	if (d.No == 1)
+	{
+		if (enable && d.Trigger[0].Active)
+			R_ICU->WUPEN |= R_ICU_WUPEN_AGT1UDWUPEN_Msk;
+		else
+			R_ICU->WUPEN &= ~(uint32_t)R_ICU_WUPEN_AGT1UDWUPEN_Msk;
+	}
+}
+
 static void IrqsEnable(Ra4m1TimerData &d, bool Enable)
 {
+	AgtWake(d, Enable);
 	if (d.Irq >= 0) {
 		if (Enable) NVIC_EnableIRQ(d.Irq); else NVIC_DisableIRQ(d.Irq);
 	}
@@ -172,6 +186,22 @@ static void IrqsEnable(Ra4m1TimerData &d, bool Enable)
 		}
 	}
 }
+static void ReleaseClock(Ra4m1TimerData &d)
+{
+	if (d.ClockHeld)
+	{
+		if (d.Agt)
+		{
+			SystemLowFreqClockDisable();
+		}
+		else
+		{
+			SystemHighFreqClockDisable();
+		}
+		d.ClockHeld = false;
+	}
+}
+
 static bool Stop(Ra4m1TimerData &d)
 {
 	if (d.Agt) {
@@ -197,6 +227,14 @@ static bool Stop(Ra4m1TimerData &d)
 static bool Start(Ra4m1TimerData &d)
 {
 	if (d.Fault) return false;
+	if (!d.ClockHeld)
+	{
+		d.ClockHeld = d.Agt ? SystemLowFreqClockEnable() : SystemHighFreqClockEnable();
+		if (!d.ClockHeld)
+		{
+			return false;
+		}
+	}
 	if (d.Agt) {
 		ClearOverflow(d);
 		NVIC_ClearPendingIRQ(d.Irq);
@@ -310,7 +348,11 @@ static void OverflowIrq(int IrqNo, void *Ctx)
 			handler=d.Timer->EvtHandler;
 			if (d.Agt && d.Trigger[0].Active) {
 				Ra4m1TimerTrigger &tr=d.Trigger[0]; info=tr.Info;
-				if (info.Type==TIMER_TRIG_TYPE_SINGLE) tr.Active=false;
+				if (info.Type==TIMER_TRIG_TYPE_SINGLE)
+				{
+					tr.Active=false;
+					AgtWake(d, false);
+				}
 				generation=tr.Generation; call=true;
 			}
 		}
@@ -389,7 +431,10 @@ static void Disable(TimerDev_t *t)
 {
 	Ra4m1TimerData *d=Data(t); if (!d) return;
 	TimerAccess access(*d); if (!access.Ok) return;
-	Rebase(*d,d->Cycle,false); // Pause count; restart active trigger periods on Enable.
+	if (Rebase(*d,d->Cycle,false))
+	{
+		ReleaseClock(*d);
+	}
 }
 static bool Enable(TimerDev_t *t)
 {
@@ -501,6 +546,77 @@ static void TriggerDisable(TimerDev_t *t, int No)
 static void ExtDisable(TimerDev_t *) {}
 static bool ExtEnable(TimerDev_t *, int, TIMER_EXTTRIG_SENSE) { return false; }
 
+static bool PowerOff(TimerDev_t *t)
+{
+	uint32_t state = DisableInterrupt();
+	Ra4m1TimerData *d = Data(t);
+
+	if (!d)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	bool stopped = true;
+	{
+		TimerAccess access(*d);
+		if (!access.Ok || !Stop(*d))
+		{
+			stopped = false;
+		}
+		else
+		{
+			IrqsEnable(*d, false);
+			for (unsigned i = 0; i < d->MaxTrigger; i++)
+			{
+				if (d->Trigger[i].Irq >= 0)
+				{
+					Ra4m1UnregisterIntHandler(d->Trigger[i].Irq);
+					d->Trigger[i].Irq = (IRQn_Type)-1;
+				}
+				d->Trigger[i].Active = false;
+			}
+			Ra4m1UnregisterIntHandler(d->Irq);
+			d->Irq = (IRQn_Type)-1;
+		}
+	}
+	if (!stopped)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	uint32_t bit = ModuleBit(*d);
+	if (!d->Agt && (s_GptModuleMask & bit))
+	{
+		bool shared = false;
+		for (unsigned i = 2; i < RA4M1_TIMER_COUNT; i++)
+		{
+			if (&s_Timer[i] != d && s_Timer[i].Timer && ModuleBit(s_Timer[i]) == bit)
+			{
+				shared = true;
+				break;
+			}
+		}
+		if (!shared)
+		{
+			if (!ModuleWrite(R_MSTP->MSTPCRD | bit))
+			{
+				EnableInterrupt(state);
+				return false;
+			}
+			s_GptModuleMask &= ~bit;
+		}
+	}
+	ReleaseClock(*d);
+	d->Timer = nullptr;
+	t->PowerOff = nullptr;
+	t->Freq = 0;
+	t->nsPeriod = 0;
+	EnableInterrupt(state);
+	return true;
+}
+
 bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 {
 	if (!t || !cfg || (unsigned)cfg->DevNo>=RA4M1_TIMER_COUNT || cfg->bTickInt ||
@@ -508,7 +624,19 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	TimerPlan plan={}; bool agt=cfg->DevNo<2;
 	if (!Plan(agt,cfg->ClkSrc,cfg->Freq,plan)) return false;
 	uint32_t state=DisableInterrupt();
-	for (unsigned i=0;i<RA4M1_TIMER_COUNT;++i) if (s_Timer[i].Timer==t) {EnableInterrupt(state);return false;}
+	if (s_Timer[cfg->DevNo].Timer && s_Timer[cfg->DevNo].Timer != t)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	for (unsigned i = 0; i < RA4M1_TIMER_COUNT; i++)
+	{
+		if (s_Timer[i].Timer == t && (s_Timer[i].Running || !PowerOff(t)))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+	}
 	Ra4m1TimerData &d=s_Timer[cfg->DevNo];
 	if (d.Timer || d.Fault) {EnableInterrupt(state);return false;}
 	// A stopped channel may still belong to a CPU/DTC/DMAC client.
@@ -605,7 +733,7 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 						d.Timer=t; t->DevNo=d.No; t->Freq=plan.Frequency;
 						t->nsPeriod=(1000000000ULL+t->Freq/2U)/t->Freq;
 						t->Rollover=0; t->LastCount=0; t->EvtHandler=cfg->EvtHandler;
-						t->PowerOff = NULL;
+						t->PowerOff = PowerOff;
 						t->Disable=Disable; t->Enable=Enable; t->Reset=Reset; t->GetTickCount=GetCount;
 						t->SetFrequency=Frequency; t->GetMaxTrigger=MaxTrigger; t->FindAvailTrigger=FindTrigger;
 						t->DisableTrigger=TriggerDisable; t->EnableTrigger=TriggerEnable;
@@ -620,7 +748,11 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 			// No caller buffer or IRQ callback may survive failed Init.
 			// Quarantine an unconfirmed stop until reset, rather than reusing
 			// a channel that may still be running after a failed handshake.
-			if (startAttempted) d.Fault=!Stop(d);
+			if (startAttempted)
+			{
+				d.Fault = !Stop(d);
+				if (!d.Fault) ReleaseClock(d);
+			}
 			if (d.Irq>=0) {Ra4m1UnregisterIntHandler(d.Irq);d.Irq=(IRQn_Type)-1;}
 			d.Timer=nullptr;
 		}
@@ -629,6 +761,10 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	// that was already clocked before this initialization attempt.
 	if (!ok && !agt && (previous&ModuleBit(d)))
 		ModuleWrite(R_MSTP->MSTPCRD|ModuleBit(d));
+	if (ok && !agt)
+	{
+		s_GptModuleMask |= previous & ModuleBit(d);
+	}
 	EnableInterrupt(state); return ok;
 }
 int TimerGetLowFreqDevCount(void) {return RA4M1_TIMER_AGT_COUNT;}

@@ -186,7 +186,6 @@ static void wr32(uintptr_t a,uint32_t value)
 }
 static void reset(void)
 {
-	s_WakePins=0;
 	memset(s_IntHook,0,sizeof(s_IntHook));memset(s_PinHook,0,sizeof(s_PinHook));
 	memset(links,0,sizeof(links));memset(dma,0,sizeof(dma));memset(portregs,0,sizeof(portregs));memset(pfs,0,sizeof(pfs));memset(pfs_seen,0,sizeof(pfs_seen));memset(irqcr,0,sizeof(irqcr));
 	test_primask=test_disabled=test_cleared=test_enabled=test_active=test_pending=wakeup=0;
@@ -302,22 +301,15 @@ int main()
 	reset();test_primask=1;irq=Ra4m1RegisterIntHandler(1,3,cb,nullptr);CHECK(test_primask==1);Ra4m1UnregisterIntHandler((IRQn_Type)irq);CHECK(test_primask==1);
 	reset();
 	cfg(0,0,0,IOPINDIR_INPUT,IOPINRES_PULLUP);
-	CHECK(SystemWakePin(0,0,IOPINSENSE_LOW_TRANSITION));
+	CHECK(IOPinAllocateInterrupt(3,0,0,IOPINSENSE_LOW_TRANSITION,cb,nullptr)==6);
 	CHECK(wakeup == (1U << 6));
 	CHECK(!IOPinEnableInterrupt(6,3,3,1,IOPINSENSE_TOGGLE,cb,nullptr));
-	CHECK(!SystemWakePin(3,1,IOPINSENSE_DISABLE));
-	CHECK(SystemWakePin(0,0,IOPINSENSE_LOW_TRANSITION));
-	CHECK(!SystemWakePin(0,0,IOPINSENSE_HIGH_TRANSITION));
-	irq=s_PinHook[6].Irq;
-	fire(irq);
-	CHECK(SystemWakePin(0,0,IOPINSENSE_DISABLE));
-	CHECK(wakeup == 0 && test_enabled == 0 && s_WakePins == 0);
-	CHECK(SystemWakePin(0,0,IOPINSENSE_HIGH_TRANSITION));
+	fire(s_PinHook[6].Irq);
 	IOPinDisableInterrupt(6);
-	CHECK(wakeup == 0 && s_WakePins == 0);
+	CHECK(wakeup == 0 && test_enabled == 0);
 	reset();
 	wakeup=1U<<6;
-	CHECK(!SystemWakePin(0,0,IOPINSENSE_LOW_TRANSITION));
+	CHECK(IOPinAllocateInterrupt(3,0,0,IOPINSENSE_LOW_TRANSITION,cb,nullptr)<0);
 	CHECK(wakeup == (1U<<6));
 	printf("PASS: %u GPIO/ICU assertions, package %d\n",checks,RA4M1_PACKAGE_PINS);
 	return 0;
