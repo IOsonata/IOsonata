@@ -89,7 +89,6 @@ __attribute__((weak)) McuOsc_t g_McuOsc = {
 // Nominal EXTAL frequency, the registers do not give it
 static uint32_t s_ExtalFreq;
 static uint32_t s_SourceHz = R9A02_MOCO_FREQ;
-static uint32_t s_PclkbHz;
 
 // Snooze set by R9a02SnoozeSet: SNZCR without SNZE, 0 when off
 static uint8_t s_R9a02SnzCr;
@@ -601,10 +600,7 @@ void SystemCoreClockUpdate(void)
 {
 	uint32_t divcr = R9A02_SYSC_SCKDIVCR;
 	uint32_t ick = (divcr & R9A02_SCKDIVCR_ICK_Msk) >> R9A02_SCKDIVCR_ICK_Pos;
-	uint32_t pckb = (divcr & R9A02_SCKDIVCR_PCKB_Msk) >> R9A02_SCKDIVCR_PCKB_Pos;
 	uint32_t hz = ick <= R9A02_SCKDIVCR_DIV_MAX ? s_SourceHz >> ick : 0U;
-
-	s_PclkbHz = pckb <= R9A02_SCKDIVCR_DIV_MAX ? s_SourceHz >> pckb : 0U;
 
 	if (hz == 0U)
 	{
@@ -626,7 +622,16 @@ uint32_t SystemCoreClockGet(void)
 
 uint32_t SystemPeriphClockGet(int Idx)
 {
-	return Idx == 0 ? s_PclkbHz : 0U;
+	uint32_t div;
+
+	if (Idx != 0)
+	{
+		return 0U;
+	}
+
+	div = (R9A02_SYSC_SCKDIVCR & R9A02_SCKDIVCR_PCKB_Msk) >> R9A02_SCKDIVCR_PCKB_Pos;
+
+	return div <= R9A02_SCKDIVCR_DIV_MAX ? R9a02SourceHz() >> div : 0U;
 }
 
 // PCLKB is shared. Peripheral drivers select their own prescalers.
