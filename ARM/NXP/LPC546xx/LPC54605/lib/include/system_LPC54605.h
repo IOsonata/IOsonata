@@ -74,9 +74,8 @@ void SystemInit (void);
 /**
  * @brief Updates the SystemCoreClock variable.
  *
- * It must be called whenever the core clock is changed during program
- * execution. SystemCoreClockUpdate() evaluates the clock register settings and calculates
- * the current core clock.
+ * SystemCoreClock is the main clock set by SystemInit divided by the AHB
+ * divider. The delay factors are updated with it.
  */
 void SystemCoreClockUpdate (void);
 

@@ -231,10 +231,14 @@ and the voltage registers in mapped memory and checks the audio PLL: the
 exact output for the audio rates the I2S driver asks from 12 MHz (FRO or
 crystal), 16, 24 and 24.576 MHz inputs, the closest output against a search
 of every N, M and P (CCO 275 to 550 MHz, Fin / N 10 kHz or more), the lowest
-and highest outputs, the registers read back with the NXP decoders, the
-bandwidth bits, the clock input, power down and the other SYSCON registers
-unchanged, and the failures (VD3 not ready, no lock, no setting). The lock
-and VD3 ready bits are written by the test.
+and highest outputs, the registers read back with the NXP decoders (a copy
+in the test), the bandwidth bits, the clock input, power down and the other
+SYSCON registers unchanged, and the failures (VD3 not ready, no lock, no
+setting). It also checks the startup core clock: the PLL closest to the device
+limit, the peripheral clock enables left alone, the 12 MHz FRO when the PLL
+does not lock, invalid oscillators refused without a register change, and
+SystemCoreClockUpdate dividing the stored main clock by AHBCLKDIV without
+reading the PLL registers. The lock and VD3 ready bits are written by the test.
 
 `lcd_test.cpp` compiles the LCD controller driver
 (`ARM/NXP/LPC546xx/src/lcd_lpc546xx.cpp`), set up from `DisplayCfg_t` with

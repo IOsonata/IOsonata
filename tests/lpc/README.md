@@ -10,7 +10,7 @@ Each subfolder has its own `run.py` and README for focused checks:
 
 | Suite | Coverage |
 | --- | --- |
-| `clock` | LPC11Uxx/LPC17xx clock decoding, setter linkage and device speed limits |
+| `clock` | LPC11Uxx/LPC17xx startup clock setup, stored clocks and device speed limits |
 | `gpio` | LPC11Uxx pin configuration/interrupts and LPC17xx access widths/interrupt exclusion |
 | `uart` | Shared LPC11Uxx/LPC17xx UART rates, transfers and lifecycle |
 | `ssp` | Shared LPC11Uxx/LPC17xx SSP rates, pin validation and polling transfers |

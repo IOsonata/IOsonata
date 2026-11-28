@@ -62,7 +62,8 @@ extern uint32_t SystemCoreClock;
 void SystemInit(void);
 
 /**
- * @brief	Update SystemCoreClock from the clock registers.
+ * @brief	Update SystemCoreClock from the main clock set by SystemInit and
+ *			the AHB divider, and the delay factors.
  */
 void SystemCoreClockUpdate(void);
 

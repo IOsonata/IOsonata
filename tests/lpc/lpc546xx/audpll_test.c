@@ -78,6 +78,51 @@ typedef struct {
 static uint8_t s_Before[MAP_SIZE];
 static volatile bool s_Watched;
 
+// Divider value of an NDEC, PDEC or MDEC encoding (UM10912, NXP SDK
+// pllDecodeN, pllDecodeP, pllDecodeM), independent of the encoders under test
+static uint32_t TestPllDecode(uint32_t Dec, uint32_t Max, uint32_t Seed, uint32_t Mask)
+{
+	uint32_t x;
+	uint32_t i;
+
+	x = Seed;
+	for (i = Max; i >= 3U; i--)
+	{
+		if (Max == 0x100U)
+		{
+			x = (((x ^ (x >> 2U) ^ (x >> 3U) ^ (x >> 4U)) & 1U) << 7U) | ((x >> 1U) & 0x7FU);
+		}
+		else if (Max == 0x20U)
+		{
+			x = (((x ^ (x >> 2U)) & 1U) << 4U) | ((x >> 1U) & 0xFU);
+		}
+		else
+		{
+			x = (((x ^ (x >> 1U)) & 1U) << 14U) | ((x >> 1U) & 0x3FFFU);
+		}
+		if ((x & Mask) == Dec)
+		{
+			return i;
+		}
+	}
+	return UINT32_MAX;
+}
+
+static uint32_t pllDecodeN(uint32_t NDEC)
+{
+	return NDEC == 0x302U ? 1U : NDEC == 0x202U ? 2U : TestPllDecode(NDEC, 0x100U, 0x80U, 0x3FFU);
+}
+
+static uint32_t pllDecodeP(uint32_t PDEC)
+{
+	return PDEC == 0x62U ? 1U : PDEC == 0x42U ? 2U : TestPllDecode(PDEC, 0x20U, 0x10U, 0x7FU);
+}
+
+static uint32_t pllDecodeM(uint32_t MDEC)
+{
+	return MDEC == 0x18003U ? 1U : MDEC == 0x10003U ? 2U : TestPllDecode(MDEC, 0x8000U, 0x4000U, 0x1FFFFU);
+}
+
 static volatile uint32_t *VdStatus(void)
 {
 	return (volatile uint32_t *)0x40020054UL;
@@ -354,77 +399,46 @@ static void TestFailures(void)
 	printf("failures: PASS\n");
 }
 
-// Runtime core selection must leave every register unchanged when busy.
-static void TestCoreClockUsers(void)
+// Startup core clock: the PLL at the closest frequency to the device limit,
+// the 12 MHz FRO when the PLL does not lock. The CPU clock is the stored main
+// clock divided by AHBCLKDIV, the PLL registers are not read.
+static void TestCoreClock(void)
 {
-	for (unsigned bank = 0; bank < 3; bank++)
-	{
-		for (unsigned bit = 0; bit < 32; bit++)
-		{
-			Fresh();
-			SYSCON->PDRUNCFG[1] = SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK |
-				SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK;
-			SYSCON->CLKOUTDIV = SYSCON_CLKOUTDIV_HALT_MASK;
-			SYSCON->AHBCLKCTRL[bank] = 1U << bit;
-			if (!Lpc546xxClockUsers())
-			{
-				continue;
-			}
-			Snapshot();
-			g_IrqMasked = bit & 1U;
-			assert(!SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
-			assert(g_IrqMasked == (bit & 1U));
-			assert(memcmp(s_Before, (const void *)MAP_BASE, MAP_SIZE) == 0);
-		}
-	}
-	for (unsigned busy = 0; busy < 3; busy++)
-	{
-		Fresh();
-		SYSCON->PDRUNCFG[1] = SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK |
-			SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK;
-		SYSCON->CLKOUTDIV = SYSCON_CLKOUTDIV_HALT_MASK;
-		if (busy == 0)
-		{
-			SYSCON->PDRUNCFG[1] &= ~SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK;
-		}
-		else if (busy == 1)
-		{
-			SYSCON->PDRUNCFG[1] &= ~SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK;
-		}
-		else
-		{
-			SYSCON->CLKOUTDIV = 0;
-		}
-		Snapshot();
-		assert(!SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
-		assert(memcmp(s_Before, (const void *)MAP_BASE, MAP_SIZE) == 0);
-	}
 	Fresh();
-	SYSCON->PDRUNCFG[1] = SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK |
-		SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK;
-	SYSCON->CLKOUTDIV = SYSCON_CLKOUTDIV_HALT_MASK;
 	SYSCON->AHBCLKCTRL[0] = SYSCON_AHBCLKCTRL_RTC_MASK | SYSCON_AHBCLKCTRL_GPIO0_MASK;
+	SYSCON->AHBCLKCTRL[1] = SYSCON_AHBCLKCTRL_CTIMER0_MASK;
 	SYSCON->SYSPLLSTAT = SYSCON_SYSPLLSTAT_LOCK_MASK;
-	assert(SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
+	assert(Lpc546xxCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
 	assert(SystemCoreClock > 210000000U && SystemCoreClock <= SYSTEM_CORE_CLOCK_MAX);
+	assert(s_Lpc546xxMainFreq == SystemCoreClock);
+	// Peripheral clocks of the application are not checked or changed
 	assert(SYSCON->AHBCLKCTRL[0] == (SYSCON_AHBCLKCTRL_RTC_MASK | SYSCON_AHBCLKCTRL_GPIO0_MASK));
+	assert(SYSCON->AHBCLKCTRL[1] == SYSCON_AHBCLKCTRL_CTIMER0_MASK);
+	assert(SystemPeriphClockGet(0) == SystemCoreClock && SystemPeriphClockGet(1) == 0);
+	assert(SystemPeriphClockSet(0, 1000000) == SystemCoreClock);
+	assert(SystemPeriphClockSet(1, 1000000) == 0);
 	SYSCON->SYSPLLSTAT = 0;
-	SystemCoreClockUpdate();
-	assert(SystemCoreClock == 0);
-	SYSCON->SYSPLLSTAT = SYSCON_SYSPLLSTAT_LOCK_MASK;
 	SYSCON->SYSPLLNDEC = 0x3ff;
 	SystemCoreClockUpdate();
-	assert(SystemCoreClock == 0);
+	assert(SystemCoreClock == s_Lpc546xxMainFreq);
+	for (uint32_t div = 0; div < 256; div++)
+	{
+		SYSCON->AHBCLKDIV = div;
+		SystemCoreClockUpdate();
+		assert(SystemCoreClock == s_Lpc546xxMainFreq / (div + 1U));
+	}
+	SYSCON->AHBCLKDIV = 0;
 	SYSCON->SYSPLLSTAT = 0;
-	assert(!SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
-	assert(SystemCoreClock == CLK_FRO_12MHZ);
-	SYSCON->PDRUNCFG[0] = SYSCON_PDRUNCFG_PDEN_FRO_MASK;
-	SystemCoreClockUpdate();
-	assert(SystemCoreClock == 0);
+	assert(!Lpc546xxCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ));
+	assert(SystemCoreClock == CLK_FRO_12MHZ && s_Lpc546xxMainFreq == CLK_FRO_12MHZ);
+	assert(SYSCON->AHBCLKDIV == 0);
 	Snapshot();
-	assert(!SystemLowFreqClockSelect(OSC_TYPE_XTAL, 32768));
+	assert(!Lpc546xxCoreClockSelect(OSC_TYPE_RC, 11999999));
+	assert(!Lpc546xxCoreClockSelect(OSC_TYPE_XTAL, 999999));
+	assert(!Lpc546xxCoreClockSelect(OSC_TYPE_XTAL, 25000001));
+	assert(!Lpc546xxCoreClockSelect((OSC_TYPE)99, 12000000));
 	assert(memcmp(s_Before, (const void *)MAP_BASE, MAP_SIZE) == 0);
-	printf("core clock ownership and failure: PASS\n");
+	printf("core clock setup and failure: PASS\n");
 }
 
 int main(void)
@@ -432,7 +446,7 @@ int main(void)
 	setvbuf(stdout, NULL, _IONBF, 0);
 	assert(mmap((void *)MAP_BASE, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) ==
 		   (void *)MAP_BASE);
-	TestCoreClockUsers();
+	TestCoreClock();
 	TestAudioRates();
 	TestClosest();
 	TestFailures();

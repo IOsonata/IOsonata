@@ -117,8 +117,6 @@ __WEAK McuOsc_t g_McuOsc = {
 	0
 };
 
-static const uint8_t wdtFreqLookup[32] = {0, 8, 12, 15, 18, 20, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 42, 44, 45, 46,
-                                            48, 49, 50, 52, 53, 54, 56, 57, 58, 59, 60, 61};
 // Flash access time is FLASHTIM + 1 system clocks. Entry n is the highest
 // system clock for FLASHTIM n.
 static const uint32_t s_FlashTimFreq[] = {
@@ -134,186 +132,12 @@ uint32_t SystemnsDelayFactor = 1000000UL;
 
 static uint32_t s_Lpc546xxAudioPllFreq = 0;
 
-static bool Lpc546xxCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq, bool CheckUsers);
+// Main clock set by the clock setup, the 12 MHz FRO after reset
+static uint32_t s_Lpc546xxMainFreq = CLK_FRO_12MHZ;
 
-/* Get WATCH DOG Clk */
-static uint32_t getWdtOscFreq(void)
-{
-    uint8_t freq_sel, div_sel;
-    if (SYSCON->PDRUNCFG[0] & SYSCON_PDRUNCFG_PDEN_WDT_OSC_MASK)
-    {
-        return 0U;
-    }
-    else
-    {
-        div_sel = (uint8_t)((SYSCON->WDTOSCCTRL & SYSCON_WDTOSCCTRL_DIVSEL_MASK) + 1UL) << 1UL;
-        freq_sel = wdtFreqLookup[((SYSCON->WDTOSCCTRL & SYSCON_WDTOSCCTRL_FREQSEL_MASK) >> SYSCON_WDTOSCCTRL_FREQSEL_SHIFT)];
-        return ((uint32_t) freq_sel * 50000U)/((uint32_t)div_sel);
-    }
-}
-/* Find decoded N value for raw NDEC value */
-static uint32_t pllDecodeN(uint32_t NDEC)
-{
-    uint32_t n, x, i;
+static bool Lpc546xxCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
 
-    /* Find NDec */
-    switch (NDEC)
-    {
-        case 0x3FF:
-            n = 0UL;
-            break;
-        case 0x302:
-            n = 1UL;
-            break;
-        case 0x202:
-            n = 2UL;
-            break;
-        default:
-            x = 0x080UL;
-            n = 0xFFFFFFFFUL;
-            for (i = NVALMAX; i >= 3UL; i--)
-            {
-                x = (((x ^ (x >> 2UL) ^ (x >> 3UL) ^ (x >> 4UL)) & 1UL) << 7UL) | ((x >> 1UL) & 0x7FUL);
-                if ((x & (PLL_NDEC_VAL_M >> PLL_NDEC_VAL_P)) == NDEC)
-                {
-                    /* Decoded value of NDEC */
-                    n = i;
-                }
-                if (n != 0xFFFFFFFFUL)
-                {
-                    break;
-                }
-            }
-            break;
-    }
-    return n;
-}
-
-/* Find decoded P value for raw PDEC value */
-static uint32_t pllDecodeP(uint32_t PDEC)
-{
-    uint32_t p, x, i;
-    /* Find PDec */
-    switch (PDEC)
-    {
-        case 0x7F:
-            p = 0UL;
-            break;
-        case 0x62:
-            p = 1UL;
-            break;
-        case 0x42:
-            p = 2UL;
-            break;
-        default:
-            x = 0x10UL;
-            p = 0xFFFFFFFFUL;
-            for (i = PVALMAX; i >= 3UL; i--)
-            {
-                x = (((x ^ (x >> 2UL)) & 1UL) << 4UL) | ((x >> 1UL) & 0xFUL);
-                if ((x & (PLL_PDEC_VAL_M >> PLL_PDEC_VAL_P)) == PDEC)
-                {
-                    /* Decoded value of PDEC */
-                    p = i;
-                }
-                if (p != 0xFFFFFFFFUL)
-                {
-                    break;
-                }
-            }
-            break;
-    }
-    return p;
-}
-
-/* Find decoded M value for raw MDEC value */
-static uint32_t pllDecodeM(uint32_t MDEC)
-{
-    uint32_t m, i, x;
-
-    /* Find MDec */
-    switch (MDEC)
-    {
-        case 0x1FFFF:
-            m = 0UL;
-            break;
-        case 0x18003:
-            m = 1UL;
-            break;
-        case 0x10003:
-            m = 2UL;
-            break;
-        default:
-            x = 0x04000UL;
-            m = 0xFFFFFFFFUL;
-            for (i = MVALMAX; i >= 3UL; i--)
-            {
-                x = (((x ^ (x >> 1UL)) & 1UL) << 14UL) | ((x >> 1UL) & 0x3FFFUL);
-                if ((x & (PLL_MDEC_VAL_M >> PLL_MDEC_VAL_P)) == MDEC)
-                {
-                    /* Decoded value of MDEC */
-                    m = i;
-                }
-                if (m != 0xFFFFFFFFUL)
-                {
-                    break;
-                }
-            }
-            break;
-    }
-    return m;
-}
-
-/* Get predivider (N) from PLL NDEC setting */
-static uint32_t findPllPreDiv(uint32_t ctrlReg, uint32_t nDecReg)
-{
-    uint32_t preDiv = 1;
-
-    /* Direct input is not used? */
-    if ((ctrlReg & SYSCON_SYSPLLCTRL_DIRECTI_MASK) == 0UL)
-    {
-        /* Decode NDEC value to get (N) pre divider */
-        preDiv = pllDecodeN(nDecReg & 0x3FFUL);
-        if (preDiv == 0UL || preDiv == UINT32_MAX)
-        {
-            preDiv = 0;
-        }
-    }
-    /* Adjusted by 1, directi is used to bypass */
-    return preDiv;
-}
-
-/* Get postdivider (P) from PLL PDEC setting */
-static uint32_t findPllPostDiv(uint32_t ctrlReg, uint32_t pDecReg)
-{
-    uint32_t postDiv = 1;
-
-    /* Direct input is not used? */
-    if ((ctrlReg & SYSCON_SYSPLLCTRL_DIRECTO_MASK) == 0UL)
-    {
-        /* Decode PDEC value to get (P) post divider */
-        postDiv = pllDecodeP(pDecReg & 0x7FUL);
-        postDiv = postDiv == UINT32_MAX ? 0 : 2UL * postDiv;
-    }
-    /* Adjusted by 1, directo is used to bypass */
-    return postDiv;
-}
-
-/* Get multiplier (M) from PLL MDEC and BYPASS_FBDIV2 settings */
-static uint32_t findPllMMult(uint32_t ctrlReg, uint32_t mDecReg)
-{
-    uint32_t mMult = 1;
-
-    /* Decode MDEC value to get (M) multiplier */
-    mMult = pllDecodeM(mDecReg & 0x1FFFFUL);
-    if (mMult == 0UL || mMult == UINT32_MAX)
-    {
-        mMult = 0;
-    }
-    return mMult;
-}
-
-// NDEC, PDEC and MDEC encodings, the reverse of the decoders above
+// NDEC, PDEC and MDEC encodings of the PLL dividers (UM10912)
 static uint32_t pllEncodeN(uint32_t N)
 {
 	if (N == 1U)
@@ -522,6 +346,7 @@ static void Lpc546xxMainClockFro12M(void)
 	SYSCON->MAINCLKSELA = SYSCON_MAINCLKSELA_SEL(0);
 	SYSCON->MAINCLKSELB = SYSCON_MAINCLKSELB_SEL(LPC546XX_MAINCLKSELB_MAINA);
 	SYSCON->AHBCLKDIV = 0;
+	s_Lpc546xxMainFreq = CLK_FRO_12MHZ;
 }
 
 // Program and start the system PLL. The main clock must not be on the PLL.
@@ -595,42 +420,14 @@ void SystemInit(void)
 
 	// On failure the PLL is tried from the FRO. If it does not lock either,
 	// the core stays on the 12 MHz FRO.
-	if (Lpc546xxCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, false) == false)
+	if (Lpc546xxCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq) == false)
 	{
-		Lpc546xxCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ, false);
+		Lpc546xxCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ);
 	}
-}
-
-// Memory, GPIO, pin routing and RTC gates do not own the changing clocks.
-// All other enabled peripheral gates must be released before a change.
-static bool Lpc546xxClockUsers(void)
-{
-	uint32_t allowed = SYSCON_AHBCLKCTRL_ROM_MASK | SYSCON_AHBCLKCTRL_SRAM1_MASK |
-		SYSCON_AHBCLKCTRL_SRAM2_MASK | SYSCON_AHBCLKCTRL_SRAM3_MASK |
-		SYSCON_AHBCLKCTRL_FLASH_MASK | SYSCON_AHBCLKCTRL_FMC_MASK |
-		SYSCON_AHBCLKCTRL_INPUTMUX_MASK | SYSCON_AHBCLKCTRL_IOCON_MASK |
-		SYSCON_AHBCLKCTRL_GPIO0_MASK | SYSCON_AHBCLKCTRL_GPIO1_MASK |
-		SYSCON_AHBCLKCTRL_GPIO2_MASK | SYSCON_AHBCLKCTRL_GPIO3_MASK |
-		SYSCON_AHBCLKCTRL_PINT_MASK | SYSCON_AHBCLKCTRL_GINT_MASK |
-		SYSCON_AHBCLKCTRL_RTC_MASK;
-
-	if ((SYSCON->AHBCLKCTRL[0] & ~allowed) != 0 ||
-		SYSCON->AHBCLKCTRL[1] != 0 || SYSCON->AHBCLKCTRL[2] != 0)
-	{
-		return true;
-	}
-	// Audio and USB PLLs share the oscillator and voltage domains.
-	if ((SYSCON->PDRUNCFG[1] & (SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK |
-		 SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK)) !=
-		(SYSCON_PDRUNCFG_PDEN_AUD_PLL_MASK | SYSCON_PDRUNCFG_PDEN_USB1_PLL_MASK))
-	{
-		return true;
-	}
-	return (SYSCON->CLKOUTDIV & SYSCON_CLKOUTDIV_HALT_MASK) == 0;
 }
 
 /**
- * @brief	Select the core clock oscillator.
+ * @brief	Select the core clock oscillator. Startup only.
  *
  * The core runs from the system PLL at SYSTEM_CORE_CLOCK_MAX, or the closest
  * frequency below it. The PLL input is the 12 MHz FRO for OSC_TYPE_RC, the
@@ -640,16 +437,15 @@ static bool Lpc546xxClockUsers(void)
  * @param	ClkSrc	: Oscillator type
  * @param	OscFreq	: Oscillator frequency in Hz, 12 MHz for OSC_TYPE_RC
  *
- * @param	CheckUsers : Refuse clocks owned by application peripherals
- *
  * @return	true - core on the PLL
- * 			false - busy peripheral, invalid oscillator, or PLL failure. The core is
- * 			then on the 12 MHz FRO when the PLL was tried.
+ * 			false - invalid oscillator, or PLL failure. The core is then on the
+ * 			12 MHz FRO when the PLL was tried.
  */
-static bool Lpc546xxCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq, bool CheckUsers)
+static bool Lpc546xxCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	uint32_t clksel = LPC546XX_PLLCLKSEL_FRO12M;
 	Lpc546xxPll_t pll;
+	uint32_t state;
 
 	if (ClkSrc == OSC_TYPE_RC)
 	{
@@ -676,13 +472,7 @@ static bool Lpc546xxCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq, bool Chec
 		return false;
 	}
 
-	uint32_t state = DisableInterrupt();
-
-	if (CheckUsers && Lpc546xxClockUsers())
-	{
-		EnableInterrupt(state);
-		return false;
-	}
+	state = DisableInterrupt();
 
 	// Run from the FRO while the voltage, the flash access time and the PLL
 	// change. The higher voltage and longer flash access are safe at 12 MHz.
@@ -715,6 +505,7 @@ static bool Lpc546xxCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq, bool Chec
 	}
 
 	SYSCON->MAINCLKSELB = SYSCON_MAINCLKSELB_SEL(LPC546XX_MAINCLKSELB_PLL);
+	s_Lpc546xxMainFreq = pll.Freq;
 
 	g_McuOsc.CoreOsc.Type = ClkSrc;
 	g_McuOsc.CoreOsc.Freq = OscFreq;
@@ -723,19 +514,6 @@ static bool Lpc546xxCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq, bool Chec
 	EnableInterrupt(state);
 
 	return true;
-}
-
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	return Lpc546xxCoreClockSelect(ClkSrc, OscFreq, true);
-}
-
-bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	// The RTC driver owns the fixed crystal and its startup checks.
-	(void)ClkSrc;
-	(void)OscFreq;
-	return false;
 }
 
 uint32_t SystemCoreClockGet(void)
@@ -758,96 +536,25 @@ uint32_t SystemPeriphClockGet(int Idx)
 	return Idx == 0 ? SystemCoreClock : 0;
 }
 
-/* ----------------------------------------------------------------------------
-   -- SystemCoreClockUpdate()
-   ---------------------------------------------------------------------------- */
+/**
+ * @brief	Peripheral bus clock frequency in effect.
+ *
+ * The AHB clock is the CPU clock, AHBCLKDIV divides both. A peripheral
+ * request does not change it.
+ *
+ * @return	Frequency in Hz of the AHB clock, 0 for an invalid index
+ */
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+{
+	(void)Freq;
 
-void SystemCoreClockUpdate (void) {
-uint32_t clkRate = 0;
-    uint32_t prediv, postdiv;
-    uint64_t workRate;
+	return SystemPeriphClockGet(Idx);
+}
 
-    switch (SYSCON->MAINCLKSELB & SYSCON_MAINCLKSELB_SEL_MASK)
-    {
-        case 0x00: /* MAINCLKSELA clock (main_clk_a)*/
-            switch (SYSCON->MAINCLKSELA & SYSCON_MAINCLKSELA_SEL_MASK)
-            {
-                case 0x00: /* FRO 12 MHz (fro_12m) */
-                    clkRate = (SYSCON->PDRUNCFG[0] & SYSCON_PDRUNCFG_PDEN_FRO_MASK) ? 0 : CLK_FRO_12MHZ;
-                    break;
-                case 0x01: /* CLKIN Source (clk_in) */
-					clkRate = Lpc546xxClkInFreq();
-                    break;
-                case 0x02: /* Watchdog oscillator (wdt_clk) */
-                    clkRate = getWdtOscFreq();
-                    break;
-                default: /* = 0x03 = FRO 96 or 48 MHz (fro_hf) */
-					if ((SYSCON->PDRUNCFG[0] & SYSCON_PDRUNCFG_PDEN_FRO_MASK) ||
-						(SYSCON->FROCTRL & SYSCON_FROCTRL_HSPDCLK_MASK) == 0)
-					{
-						break;
-					}
-                    if ((SYSCON->FROCTRL & SYSCON_FROCTRL_SEL_MASK) == SYSCON_FROCTRL_SEL_MASK)
-                    {
-                        clkRate = CLK_FRO_96MHZ;
-                    }
-                    else
-                    {
-                        clkRate = CLK_FRO_48MHZ;
-                    }
-                    break;
-            }
-            break;
-        case 0x02: /* System PLL clock (pll_clk)*/
-			if ((SYSCON->PDRUNCFG[0] & SYSCON_PDRUNCFG_PDEN_SYS_PLL_MASK) ||
-				((SYSCON->SYSPLLCTRL & SYSCON_SYSPLLCTRL_BYPASS_MASK) == 0 &&
-				 (SYSCON->SYSPLLSTAT & SYSCON_SYSPLLSTAT_LOCK_MASK) == 0))
-			{
-				break;
-			}
-            switch (SYSCON->SYSPLLCLKSEL & SYSCON_SYSPLLCLKSEL_SEL_MASK)
-            {
-                case 0x00: /* FRO 12 MHz (fro_12m) */
-                    clkRate = (SYSCON->PDRUNCFG[0] & SYSCON_PDRUNCFG_PDEN_FRO_MASK) ? 0 : CLK_FRO_12MHZ;
-                    break;
-                case 0x01: /* CLKIN Source (clk_in) */
-					clkRate = Lpc546xxClkInFreq();
-                    break;
-                case 0x02: /* Watchdog oscillator (wdt_clk) */
-                    clkRate = getWdtOscFreq();
-                    break;
-                case 0x03: /* RTC oscillator 32 kHz output (32k_clk) */
-                    clkRate = (SYSCON->RTCOSCCTRL & SYSCON_RTCOSCCTRL_EN_MASK) ? CLK_RTC_32K_CLK : 0;
-                    break;
-                default:
-                    break;
-            }
-            if ((SYSCON->SYSPLLCTRL & SYSCON_SYSPLLCTRL_BYPASS_MASK) == 0UL)
-            {
-                /* PLL is not in bypass mode, get pre-divider, post-divider, and M divider */
-                prediv = findPllPreDiv(SYSCON->SYSPLLCTRL, SYSCON->SYSPLLNDEC);
-                postdiv = findPllPostDiv(SYSCON->SYSPLLCTRL, SYSCON->SYSPLLPDEC);
-                if (prediv == 0 || postdiv == 0)
-				{
-					clkRate = 0;
-					break;
-				}
-                /* Adjust input clock */
-                clkRate = clkRate / prediv;
-
-                /* MDEC used for rate */
-                workRate = (uint64_t)(clkRate) * (uint64_t)findPllMMult(SYSCON->SYSPLLCTRL, SYSCON->SYSPLLMDEC);
-                clkRate = (uint32_t)(workRate / ((uint64_t)postdiv));
-                clkRate = clkRate * 2; /* PLL CCO output is divided by 2 before to M-Divider */
-            }
-            break;
-        case 0x03: /* RTC oscillator 32 kHz output (32k_clk) */
-            clkRate = (SYSCON->RTCOSCCTRL & SYSCON_RTCOSCCTRL_EN_MASK) ? CLK_RTC_32K_CLK : 0;
-            break;
-        default:
-            break;
-    }
-    SystemCoreClock = clkRate / ((SYSCON->AHBCLKDIV & 0xFFUL) + 1UL);
+// CPU clock from the main clock the clock setup set and the AHB divider
+void SystemCoreClockUpdate(void)
+{
+	SystemCoreClock = s_Lpc546xxMainFreq / ((SYSCON->AHBCLKDIV & 0xFFUL) + 1UL);
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		16000000UL, (LPC546XX_NSDELAY_LOOP_CLK * 1000000UL));
 }
