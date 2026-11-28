@@ -36,6 +36,7 @@ static uint8_t stuck_ready;
 static bool fail_invalidate;
 static unsigned hocowtcr_writes;
 static unsigned checks;
+static unsigned pllControlReads;
 static uint32_t mstp[4];
 
 static uint32_t nominal(void)
@@ -56,7 +57,7 @@ static void check_clocks(void)
 	assert(((dividers>>16)&7)==((dividers>>8)&7));
 	if(ic>32000000){assert(sys[0x31]==1);assert((sys[0xA0]&3)==0);}
 }
-static uint8_t rd8(uintptr_t a){assert(a>=0x4001E000UL && a<0x4001E500UL);return sys[a-0x4001E000UL];}
+static uint8_t rd8(uintptr_t a){if (a == RA4M1_PLLCCR2) ++pllControlReads;assert(a>=0x4001E000UL && a<0x4001E500UL);return sys[a-0x4001E000UL];}
 static uint16_t rd16(uintptr_t a)
 {
 	if (a == RA4M1_PRCR)
@@ -151,6 +152,9 @@ int main(void)
 		assert(Ra4m1CoreClockSelect(OSC_TYPE_XTAL, input_hz));
 		assert(SystemCoreClock == 48000000 && SystemUsbClockGet() == 48000000);
 		assert(sys[0xD0] == 0);
+		unsigned beforeUpdate = pllControlReads;
+		SystemCoreClockUpdate();
+		assert(SystemCoreClock == 48000000 && pllControlReads == beforeUpdate);
 		pass("external crystal to exact 48 MHz PLL and USB source");
 	}
 	reset_model();input_hz=12000000;assert(Ra4m1CoreClockSelect(OSC_TYPE_TCXO,input_hz));assert(sys[0x413]==0x40&&sys[0xA2]==0&&SystemCoreClock==48000000);pass("external-clock bypass and zero MOSC wait");

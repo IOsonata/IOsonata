@@ -154,9 +154,8 @@ measurement or low-voltage power optimization. The hardware's wider supply
 range does not permit 48 MHz across that entire range.
 
 `SystemPeriphClockGet` indices are 0=PCLKA, 1=PCLKB, 2=PCLKC, 3=PCLKD.
-`SystemFlashClockGet` reports FCLK. Queries decode the live source and divider
-registers and never change Flash timing. External input frequency is necessarily
-kept in software; software cannot discover a crystal's frequency from a selector.
+`SystemFlashClockGet` reports FCLK. SystemCoreClockUpdate applies the current dividers to the source frequency
+set at startup and stores the four peripheral clock rates for the getters.
 The oscillator-stop fallback is accounted for: MOSC redirected to MOCO reports
 MOCO, and a free-running PLL reports zero (unknown frequency).
 

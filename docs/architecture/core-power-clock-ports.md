@@ -258,7 +258,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Clocks set once in SystemInit, shared clock requests, divider running mode and timer PowerOff checked in host models and firmware builds; hardware pending |
 | LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Clocks set once in SystemInit, shared clock requests, divider running mode and timer PowerOff checked in host models and firmware builds; hardware pending |
 | LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Clocks set once in SystemInit, shared clock requests, AHB divider running mode and timer PowerOff checked in host models and firmware builds; LPCXpresso54628 runs pending |
-| RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
+| RA4M1 | Reset reporting, external IRQ and AGT1 Software Standby wake, ordinary Sleep | CPU divider and wake routing covered by register models. Board tests pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Clock supply type A supports reduced CPU speed. Timer and GPIO wake require board validation |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Startup oscillator setup, CPU divider modes and shared timer clocks implemented. Hardware validation pending |
 | ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; optional 160 MHz PLL profile and RTC/LP SRAM retention implemented, hardware validation pending |
@@ -924,23 +924,15 @@ pending; the delay factors are nominal values until then.
 
 RA4M1 has Sleep, Software Standby and Snooze, but no Deep Software Standby.
 The shared vendor header includes registers belonging to other RA variants;
-the port does not use those as evidence of RA4M1 capabilities. There is no
-SystemPowerOff implementation. The existing generic CorePowerTest uses its
-resume path through SystemSleep, with P000/IRQ6 and SCI0 P100/P101.
+the port does not use those as evidence of RA4M1 capabilities. CorePowerTest uses AGT1 for timer wake and P105 for button wake.
+UART device 0 uses P410 (RX) and P411 (TX) at 1 Mbaud.
 
-SystemWakePin uses the existing GPIO interrupt allocator. Falling and rising
-edges are supported, with the IRQ filter disabled. A pin, IRQ line or event
-route already owned by GPIO, DMA/DTC or another wake source is refused.
-Disabling the owned pin releases its WUPEN bit and interrupt route. Ordinary
-GPIO interrupt release also removes a wake bit owned by this port. Unrelated
-WUPEN bits and pin routes are preserved.
-
-SystemSleep uses Software Standby when external IRQ wake is configured and
-an associated NVIC interrupt is enabled, DMA/DTC are stopped, Snooze is off,
-and oscillator-stop detection is disabled. Otherwise it uses ordinary Sleep.
-Other Software Standby wake sources are not yet handled by this implementation.
-Active SysTick/PendSV pending work returns without sleep so it can be serviced.
-Applications must stop incompatible peripheral transfers before entry.
+The GPIO interrupt driver arms the external IRQ wake bit when allocating the
+interrupt and releases it with the interrupt route. Software Standby supports
+external IRQs and AGT1 underflow. At least one corresponding NVIC interrupt
+must be enabled. Other wake configurations, Snooze and oscillator-stop
+detection use ordinary Sleep. The application prepares its peripherals before
+calling SystemSleep. Pending SysTick or PendSV work returns to the caller.
 
 The Standby entry follows procedure B of Renesas technical update
 [TN-RA*-A0146A/E](https://www.renesas.com/en/document/tcu/note-about-interruption-during-transition-low-power-modes-0):
@@ -960,31 +952,16 @@ have no exact generic reason bit and are not mislabeled as CPU lockup. RSTSR2
 cold/warm history is left untouched. Startup option words keep WDT and IWDT
 auto-start disabled; sleep and clock selection do not feed or start them.
 
-Runtime core-clock changes now refuse enabled peripheral module gates,
-DMAC/DTC's enabled module gate, and CLKOUT before unlocking protected registers.
-The SRAM gates and MSTPC0 clock-domain policy are excluded from that test.
-This is conservative: a stopped but ungated peripheral still prevents a change.
-Startup bypasses the application-ownership check. The existing oscillator
-plans, bounded ready waits and protection/interrupt restoration are retained.
-LF selection starts LOCO or SOSC without stopping the other oscillator or
-resetting the RTC; the peripheral chooses its own LF source. Callers still
-own SysTick/scheduler retiming after a successful core-clock change. Module-gate
-checks do not track a watchdog started directly through registers; applications
-must not change its PCLK timing while it is running.
+SystemInit configures the oscillators from g_McuOsc. LOW_POWER halves ICLK
+and divides any bus or flash clock that would exceed the reduced CPU rate.
+With the default 48 MHz setup, PCLKB stays at 24 MHz. PERFORMANCE restores
+the startup dividers. The clock update applies the dividers to the configured
+source frequency and updates the delay factors. Both modes preserve the
+oscillator-stop fallback.
 
-All 305 enabled library sources compile in Debug and Release. All 19 managed
-demo projects link in both configurations, including CorePowerTest. GCC host
-checks run the existing clock and GPIO models at O0/O2 with undefined-behavior
-checks, including wake ownership and runtime busy refusal. The existing timer
-model also passes at O0/O2. UART passes at O0/Os/O2 and with address/undefined-
-behavior checks (1,167,463 interrupts per run). I2C and SPI models pass their optimization and
-address/undefined-behavior checks, with leak detection disabled because the
-workspace runs under ptrace. Temporary power
-register checks cover reset caching, mode selection, pending work, interrupt
-masking and register restoration at O0/O2. The original all-in-one validation
-runner additionally requires Clang/LLD, which are not installed in this workspace;
-its separate Clang ELF probes were not run. Hardware wake, current draw and
-oscillator restoration remain pending; D11 is still the hardware test target.
+The clock register model covers startup, CPU divider changes, oscillator
+faults and USB clock selection. Hardware wake, delay timing and current
+measurements remain pending.
 
 Reference: RA4M1 hardware manual R01UH0887EJ0110, chapters 5, 8, 10 and 13,
 and the RA4M1 feature definitions in Renesas FSP.

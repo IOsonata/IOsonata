@@ -86,6 +86,8 @@ __WEAK McuOsc_t g_McuOsc = {
 // Only an external oscillator's frequency is not recoverable from registers.
 // Keep its configured nominal frequency independently of the selected source.
 static uint32_t s_MainOscFreq;
+static uint32_t s_CoreSourceHz;
+static uint8_t s_CoreSource;
 
 typedef struct __Ra4m1_Clock_Plan {
 	uint32_t SourceHz;
@@ -402,7 +404,7 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 		RA4M1_STARTUP_OK : RA4M1_STARTUP_FLASH;
 }
 
-static uint32_t Ra4m1SourceHz(uint8_t Source)
+static uint32_t Ra4m1SourceHz(uint8_t Source, uint32_t ConfiguredHz)
 {
 	const uint8_t ready = R_SYSTEM->OSCSF;
 	if ((R_SYSTEM->OSTDSR & 1U) != 0U)
@@ -419,7 +421,7 @@ static uint32_t Ra4m1SourceHz(uint8_t Source)
 		case RA4M1_CK_HOCO:
 			return (R_SYSTEM->HOCOCR & 1U) == 0U &&
 				(ready & RA4M1_OSCSF_HOCO) != 0U ?
-				Ra4m1HocoHz(RA4M1_HOCOCR2) : 0U;
+				(ConfiguredHz ? ConfiguredHz : Ra4m1HocoHz(RA4M1_HOCOCR2)) : 0U;
 		case RA4M1_CK_MOCO:
 			return (R_SYSTEM->MOCOCR & 1U) == 0U ? RA4M1_MOCO_HZ : 0U;
 		case RA4M1_CK_LOCO:
@@ -434,7 +436,7 @@ static uint32_t Ra4m1SourceHz(uint8_t Source)
 				(ready & (RA4M1_OSCSF_PLL | RA4M1_OSCSF_MOSC)) !=
 						 (RA4M1_OSCSF_PLL | RA4M1_OSCSF_MOSC))
 				return 0U;
-			return Ra4m1PllHz(s_MainOscFreq, R_SYSTEM->PLLCCR2);
+			return ConfiguredHz ? ConfiguredHz : Ra4m1PllHz(s_MainOscFreq, R_SYSTEM->PLLCCR2);
 		default: return 0U;
 	}
 }
@@ -444,7 +446,7 @@ static uint32_t Ra4m1DividedClock(unsigned Shift)
 	const uint32_t state = DisableInterrupt();
 	const uint8_t source = R_SYSTEM->SCKSCR & 7U;
 	const uint32_t div = (R_SYSTEM->SCKDIVCR >> Shift) & 7U;
-	const uint32_t freq = Ra4m1SourceHz(source);
+	const uint32_t freq = Ra4m1SourceHz(source, source == s_CoreSource ? s_CoreSourceHz : 0U);
 	EnableInterrupt(state);
 	return div <= 6U ? freq >> div : 0U;
 }
@@ -454,7 +456,8 @@ static uint32_t s_PeriphClock[4];
 void SystemCoreClockUpdate(void)
 {
 	// Read/report only: never change flash timing in a clock query.
-	uint32_t source = Ra4m1SourceHz(R_SYSTEM->SCKSCR & 7U);
+	uint8_t selected = R_SYSTEM->SCKSCR & 7U;
+	uint32_t source = Ra4m1SourceHz(selected, selected == s_CoreSource ? s_CoreSourceHz : 0U);
 	uint32_t dividers = R_SYSTEM->SCKDIVCR;
 	uint32_t shift = (dividers >> 24) & 7U;
 
@@ -490,7 +493,7 @@ uint32_t SystemUsbClockGet(void)
 	if (g_McuOsc.bUSBClk)
 	{
 		const bool hoco = (R_SYSTEM->USBCKCR_ALT & 1U) != 0U;
-		hz = Ra4m1SourceHz(hoco ? RA4M1_CK_HOCO : RA4M1_CK_PLL);
+		hz = Ra4m1SourceHz(hoco ? RA4M1_CK_HOCO : RA4M1_CK_PLL, 0U);
 		if (hoco && R_SYSTEM->HOCOUTCR != 0U)
 			hz = 0U;
 	}
@@ -517,8 +520,14 @@ static bool Ra4m1CoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 		result = RA4M1_STARTUP_PROTECT;
 	if (result == RA4M1_STARTUP_OK)
 	{
+		s_CoreSource = plan.Source;
+		s_CoreSourceHz = plan.SourceHz;
 		g_McuOsc.CoreOsc.Type = ClkSrc;
 		g_McuOsc.CoreOsc.Freq = Freq;
+	}
+	else
+	{
+		s_CoreSourceHz = 0U;
 	}
 	SystemCoreClockUpdate();
 	g_Ra4m1StartupError = result;
