@@ -259,7 +259,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |
 | LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Runtime peripheral/PLL ownership and clock decoding checked; hardware pending |
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
-| R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Runtime module and LF ownership checks added; explicit Snooze entry still needs erratum review; hardware pending |
+| R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Clock supply type A supports reduced CPU speed. Timer and GPIO wake require board validation |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Startup oscillator setup, CPU divider modes and shared timer clocks implemented. Hardware validation pending |
 | ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; optional 160 MHz PLL profile and RTC/LP SRAM retention implemented, hardware validation pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
@@ -964,59 +964,27 @@ reset to SOFT. An all-zero status maps to PIN following the manual's reset
 source flow. SRAM parity/ECC and bus faults have no matching generic reason
 bit and are not reported as CPU lockup. RSTSR2 cold/warm history is preserved.
 
-SystemWakePin uses the existing GPIO/ICU allocator, supports falling and rising
-edges, and refuses owned pins, wake bits and Snooze requests. Releasing the
-owned GPIO interrupt also releases its wake bit. It does not change another
-source's WUPEN bits. Watchdogs remain application-controlled and stopped by
-the default option words.
+The GPIO interrupt driver arms the ICU wake bit on allocation and clears it
+on release. An IRQ assigned to a Snooze request keeps that configuration.
+On FPB-R9A02G021, SW1 uses P108/IRQ4. UART0 uses P303 (RX) and P302 (TX)
+at 1 Mbaud.
 
-SystemSleep uses the existing target sleep implementation. Software Standby
-is selected only with DTC stopped, Snooze unconfigured and an enabled wake
-interrupt. Other configurations use Sleep. Enabled pending CLIC/ICU work
-returns immediately. In Standby the generic wrapper masks non-wake CLIC
-interrupts and restores their enables afterward without clearing pending flags
-or routes, following procedure B of
-[TN-RIS-A0001B/E](https://www.renesas.com/en/document/tcu/note-about-interruption-during-transition-low-power-modes-1).
-Call it from normal application context after stopping incompatible transfers.
-There is no reset-on-wake mode or generic retention storage on this part.
+Clock supply type A uses half the source frequency for PCLKB (peripheral
+clock 0). LOW_POWER halves ICLK and leaves PCLKB unchanged. Type B keeps
+ICLK and PCLKB equal and supports PERFORMANCE only. The delay functions
+read the machine cycle counter and use the current ICLK frequency.
 
-The existing explicit R9a02LowPowerEnter Snooze path is retained for the
-UART, SPI and ADC demos. It is not covered by the generic wrapper's interrupt
-masking. Its DTC/Snooze transition still needs a separate erratum review;
-passing the existing emulator does not validate that hardware transition.
+Timer 0 uses the machine timer clocked by LOCO. Timers 1 through 8 use TAU
+channels 0 through 7. A disabled channel keeps its prescaler until PowerOff.
+The last channel to power off restores the TAU module gate if the timer
+driver started the module.
 
-Core and peripheral clock changes refuse enabled module gates, CLKOUT,
-Snooze and flash programming before protected writes. Startup bypasses the
-runtime module check. A stopped peripheral with its module gate enabled still
-prevents retiming. Direct-register watchdog use is not represented by module
-gates; callers must not retime a running PCLK watchdog. Machine-timer and
-scheduler handling remain application-owned.
-
-LF selection no longer stops an RTC or silently substitutes the requested
-source. A source change is refused while RTC, UARTA, TML32, REMC, CLKOUT,
-Snooze or a core using SOSC owns the clock. Startup preserves a running RTC's
-current source. Clock getters return zero for stopped sources and reserved
-dividers; HOCO reporting also requires the stable flag. This does not measure
-external clock presence or crystal stability.
-
-CorePowerTest uses the shared example's resume path on FPB-R9A02G021 with SW1
-and the existing UART pins. RE01 remains a separate task: its startup still
-needs boost/PLL failure-path cleanup and generic power integration.
-
-Validation uses xPack RISC-V GCC 15.2.0. All 196 managed library sources
-compile in both configurations, including Release LTO. Direct builds using
-project source links, defines and linker flags pass 34 of 36 demo configurations.
-All 18 Release configurations pass. CryptoTest Debug and DfuBoot Debug overflow
-flash; both also fail with the previous commit's sources. I2CScan Debug's
-forced semihost syscall archive caused duplicate stddev definitions and is now
-linked without whole-archive.
-
-Temporary checks execute the compiled RISC-V code at O0 and Os for reset
-caching, clock refusal, divider changes, wake ownership/release, CLIC masking,
-pending work and Sleep fallback. Existing UART/Snooze, I2C and SPI slave
-emulators pass at O0 and Os. These are compiler/linker and register checks,
-not an Eclipse headless build or hardware power validation. D11 remains the
-current hardware target.
+An armed machine timer uses ordinary Sleep. With an enabled ICU wake source
+and Snooze off, SystemSleep can use Software Standby. The application prepares
+its peripherals before the call. The port temporarily masks non-wake CLIC
+interrupts for Software Standby and restores their enables on return, as
+required by Renesas TN-RIS-A0001B/E. Explicit Snooze entry for UART, SPI and
+ADC retains its driver hooks. There is no reset-on-wake System OFF mode.
 
 ## RE01
 

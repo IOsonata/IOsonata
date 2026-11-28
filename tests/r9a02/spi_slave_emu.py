@@ -401,8 +401,11 @@ def hook_wfi(u, addr, size, ud):
     if size == 4 and struct.unpack("<I", u.mem_read(addr, 4))[0] == WFI:
         wfi_at[0] = addr
         u.emu_stop()
-_lpe = S("R9a02LowPowerEnter")
-uc.hook_add(UC_HOOK_CODE, hook_wfi, begin=_lpe, end=_lpe + symsize["R9a02LowPowerEnter"] - 1)
+for address, data in segs:
+    for offset in range(0, len(data) - 3, 2):
+        if data[offset:offset + 4] == WFI.to_bytes(4, "little"):
+            uc.hook_add(UC_HOOK_CODE, hook_wfi, begin=address + offset, end=address + offset)
+
 XREGS = [UC_RISCV_REG_X1 + i for i in range(31)]
 AT_WFI = [None]         # ICU_SNZCANCEL CLIC IE and IR at WFI
 

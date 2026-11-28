@@ -42,13 +42,11 @@ IR = 1 << 16
 DTCE = 1 << 24
 
 sym = {}
-symsize = {}
 with open(ELF, "rb") as f:
     elf = ELFFile(f)
     entry = elf.header["e_entry"]
     for s in elf.get_section_by_name(".symtab").iter_symbols():
         sym.setdefault(s.name, s["st_value"])
-        symsize.setdefault(s.name, s["st_size"])
     segs = [(seg["p_paddr"], seg.data()) for seg in elf.iter_segments()
             if seg["p_type"] == "PT_LOAD" and seg["p_filesz"]]
 
@@ -537,8 +535,11 @@ def hook_wfi(u, addr, size, ud):
     if size == 4 and struct.unpack("<I", u.mem_read(addr, 4))[0] == WFI:
         wfi_at[0] = addr
         u.emu_stop()
-_lpe = S("R9a02LowPowerEnter")
-uc.hook_add(UC_HOOK_CODE, hook_wfi, begin=_lpe, end=_lpe + symsize["R9a02LowPowerEnter"] - 1)
+for address, data in segs:
+    for offset in range(0, len(data) - 3, 2):
+        if data[offset:offset + 4] == WFI.to_bytes(4, "little"):
+            uc.hook_add(UC_HOOK_CODE, hook_wfi, begin=address + offset, end=address + offset)
+
 
 def standby(during, first=None):
     uc.mem_write(0x4001E03C, b"\x01")       # OSCSF.HOCOSF, the HOCO runs

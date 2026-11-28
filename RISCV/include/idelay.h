@@ -46,6 +46,7 @@ SOFTWARE.
 #ifndef __IDELAY_H__
 #define __IDELAY_H__
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
