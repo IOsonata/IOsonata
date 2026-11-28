@@ -54,7 +54,8 @@ TARGET_APPLICATIONS = {
 SYMBOLS = {
     'UartLoopback': ['UARTInit'],
     'UartPrbsTxTest': ['UARTInit'],
-    'PowerOffDemo': ['SystemPowerOff', 'SystemResetReason', 'SystemRetRegWrite'],
+    'CorePowerTest': ['SystemPowerCapabilitiesGet', 'SystemPowerModeSet', 'SystemPowerModeGet',
+                      'SystemSleep', 'SystemResetReason', 'SystemRetRegWrite'],
     'SpiLoopback': ['SPIInit'],
     'I2CScan': ['I2CInit'],
     'I2CMasterSlave': ['I2CInit', 'DMA0_IRQHandler', 'FLEXCOMM2_IRQHandler', 'FLEXCOMM8_IRQHandler'],

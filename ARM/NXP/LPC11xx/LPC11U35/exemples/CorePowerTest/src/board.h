@@ -51,6 +51,7 @@ SOFTWARE.
 // External button to ground and external pull-up to VDD on PIO0_16.
 // The internal pull-up and RESET pin do not operate in Deep power-down.
 #define WAKE_BUT_PORT 0
+#define WAKE_BUT_SYSTEM_OFF 1
 #define WAKE_BUT_PIN 16
 #define WAKE_BUT_PINOP IOPINOP_GPIO
 #define WAKE_BUT_SENSE IOPINSENSE_LOW_TRANSITION
