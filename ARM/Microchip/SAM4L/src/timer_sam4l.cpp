@@ -39,18 +39,22 @@ static uint32_t s_TcClockMask;
 
 // Hardware of each DevNo, kept in flash. TimerInit copies it to the timer
 // data, which is zero initialized and takes no flash. A null TcReg is the AST.
+// nsSetup is the setup time of a delay on the timer in nsec, TimerInit sets
+// it in TimerDev_t nsSetup. TimerTest prints the value of each timer. 0 until
+// measured.
 static const struct {
 	TcChannel *TcReg;
 	IRQn_Type Irq;
 	uint32_t ClockMask;
+	int32_t nsSetup;
 } s_Sam4lTimerHw[SAM4L_TIMER_MAXCNT] = {
-	{nullptr, AST_ALARM_IRQn, PM_PBDMASK_AST},
-	{&SAM4L_TC0->TC_CHANNEL[0], TC00_IRQn, PM_PBAMASK_TC0},
-	{&SAM4L_TC0->TC_CHANNEL[1], TC01_IRQn, PM_PBAMASK_TC0},
-	{&SAM4L_TC0->TC_CHANNEL[2], TC02_IRQn, PM_PBAMASK_TC0},
-	{&SAM4L_TC1->TC_CHANNEL[0], TC10_IRQn, PM_PBAMASK_TC1},
-	{&SAM4L_TC1->TC_CHANNEL[1], TC11_IRQn, PM_PBAMASK_TC1},
-	{&SAM4L_TC1->TC_CHANNEL[2], TC12_IRQn, PM_PBAMASK_TC1},
+	{nullptr, AST_ALARM_IRQn, PM_PBDMASK_AST, 0},
+	{&SAM4L_TC0->TC_CHANNEL[0], TC00_IRQn, PM_PBAMASK_TC0, 0},
+	{&SAM4L_TC0->TC_CHANNEL[1], TC01_IRQn, PM_PBAMASK_TC0, 0},
+	{&SAM4L_TC0->TC_CHANNEL[2], TC02_IRQn, PM_PBAMASK_TC0, 0},
+	{&SAM4L_TC1->TC_CHANNEL[0], TC10_IRQn, PM_PBAMASK_TC1, 0},
+	{&SAM4L_TC1->TC_CHANNEL[1], TC11_IRQn, PM_PBAMASK_TC1, 0},
+	{&SAM4L_TC1->TC_CHANNEL[2], TC12_IRQn, PM_PBAMASK_TC1, 0},
 };
 
 Sam4l_TimerData_t g_Sam4lTimerData[SAM4L_TIMER_MAXCNT];
@@ -440,6 +444,7 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	}
 	d.Timer = t; d.Healthy = true;
 	t->DevNo = cfg->DevNo; t->Freq = freq; t->nsPeriod = (1000000000ULL + freq / 2) / freq;
+	t->nsSetup = s_Sam4lTimerHw[cfg->DevNo].nsSetup;
 	t->EvtHandler = cfg->EvtHandler;
 	t->Disable = Disable; t->Enable = Enable; t->Reset = Reset; t->GetTickCount = GetCount;
 	t->PowerOff = PowerOff;

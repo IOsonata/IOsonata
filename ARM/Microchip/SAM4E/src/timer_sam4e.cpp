@@ -48,6 +48,11 @@ typedef struct {
 	Sam4eTimerTrigger_t Trigger[SAM4E_TIMER_TRIGGERS];
 } Sam4eTimerData_t;
 
+// Setup time of a delay on each timer in nsec, DevNo order: TimerInit sets
+// it in TimerDev_t nsSetup. TimerTest prints the value of each timer. 0 until
+// measured.
+static const int32_t s_Sam4eTimerSetup[SAM4E_TIMER_COUNT] = { 0 };
+
 static Sam4eTimerData_t s_Timer[SAM4E_TIMER_COUNT];
 
 static TcChannel *Sam4eChannel(int DevNo)
@@ -627,6 +632,7 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *pCfg)
 	pTimer->DevNo = pCfg->DevNo;
 	pTimer->Freq = frequency;
 	pTimer->nsPeriod = (1000000000ULL + frequency / 2) / frequency;
+	pTimer->nsSetup = s_Sam4eTimerSetup[pCfg->DevNo];
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;

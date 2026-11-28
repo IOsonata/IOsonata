@@ -162,6 +162,11 @@ static const SamdTimerHw_t s_SamdTimerHw[SAMD_TIMER_MAXCNT] = {
 #endif
 };
 
+// Setup time of a delay on each timer in nsec, DevNo order, SysTick last:
+// TimerInit sets it in TimerDev_t nsSetup. TimerTest prints the value of each
+// timer. 0 until measured.
+static const int32_t s_SamdTimerSetup[SAMD_SYSTICK_TIMER_DEVNO + 1] = { 0 };
+
 static SamdTimerData_t s_SamdRtcData;
 static SamdTimerData_t *s_SamdTimerData[SAMD_TIMER_MAXCNT];
 static TimerDev_t *s_SamdSysTickOwner;
@@ -1380,6 +1385,7 @@ static __attribute__((noinline)) bool SamdSysTickInit(TimerDev_t * const pTimer,
 		return false;
 	}
 	pTimer->DevNo = pCfg->DevNo;
+	pTimer->nsSetup = s_SamdTimerSetup[pCfg->DevNo];
 	pTimer->PowerOff = SamdSysTickPowerOff;
 	s_SamdSysTickBusy = SysTickTimerEnabled;
 	s_SamdSysTickOwner = pTimer;
@@ -1471,6 +1477,7 @@ static __attribute__((noinline)) bool SamdHardwareTimerInit(TimerDev_t *pTimer,
 	pTimer->DevNo = DevNo;
 	pTimer->Freq = freq;
 	pTimer->nsPeriod = (1000000000U + freq / 2U) / freq;
+	pTimer->nsSetup = s_SamdTimerSetup[DevNo];
 	pTimer->Rollover = 0;
 	pTimer->LastCount = 0;
 	pTimer->EvtHandler = pCfg->EvtHandler;
