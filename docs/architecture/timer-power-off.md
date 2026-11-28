@@ -69,6 +69,19 @@ SYSCOUNTER.
 | SAM4L | AST and TC | Stops the AST prescaler or TC channel. Releases a driver-enabled TC block clock after the last assigned channel powers off. |
 | SAM4E | TC | Stops the channel, disables its interrupt and gates its peripheral clock. |
 
+## NXP timer drivers
+
+The LPC11Uxx, LPC17xx and LPC546xx ports share `ARM/NXP/src/timer_lpcxx.cpp`.
+PowerOff stops the counter, clears the match interrupts, the triggers and the
+pending NVIC interrupt, releases the high frequency clock request of a running
+timer and turns the timer clock off.
+
+| MCU | Hardware | PowerOff clock behavior |
+| --- | --- | --- |
+| LPC11Uxx | CT16B0, CT16B1, CT32B0 and CT32B1 | Clears the SYSAHBCLKCTRL bit of the timer. |
+| LPC17xx | TIMER0 to TIMER3 | Clears the PCONP bit of the timer. The PCLKSEL divider is kept. |
+| LPC546xx | CTIMER3 and 4 on the async APB bridge, CTIMER0 to 2 | Clears the AHBCLKCTRL or async bridge clock bit of the timer. Turns the async bridge off after the last of CTIMER3 and 4. |
+
 Initialize C timer structures to zero before their first use. Drivers with
 no PowerOff callback return false. Other MCU families will implement
 TimerPowerOff with their respective Power & Clock ports.

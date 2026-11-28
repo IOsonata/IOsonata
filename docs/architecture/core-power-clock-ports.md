@@ -13,7 +13,7 @@ November 25, 2026.
 | SAM4E | No | No | Not reviewed | No |
 | nRF52, nRF5340 App/Net, nRF54L15/LM20A/LM20B, nRF9160/91x1 | Yes | Yes | Yes | Yes |
 | ST | No | Not reviewed | Not reviewed | No |
-| NXP | No | Not reviewed | Not reviewed | No |
+| NXP LPC11Uxx, LPC17xx, LPC546xx | Yes, not run on hardware | Yes, not run on hardware | Yes, not run on hardware | Yes, not run on hardware |
 | Renesas | No | Not reviewed | Not reviewed | No |
 | Espressif | No | Not reviewed | No | No |
 
@@ -255,9 +255,9 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | SAM4E | Reset, Backup mode, wake pins, GPBR; no SRAM retention in Backup | Slow-clock and main-clock/PLLA selection implemented; hardware validation pending |
 | SAM4L | Reset, Backup mode, EIC wake pins, four backup registers; SLEEP0/WAIT/RETENTION resume implemented | SAM4LC clock/delay checks and eight consecutive Backup wakes passed; three Release SLEEP0 cycles passed with clocks, delays, timer IRQs and UART RX; six EIC RETENTION cycles and PBA dividers passed; AST RETENTION and four Backup timer wakes passed; TWIS WAIT hardware validation deferred |
 | SAM D11/D21 | PM reset reasons and interrupt-resumable Standby; D11 SW0 and D21 SW0/OLED1 BUTTON1 repeated resume passed | D21 clocks, delays, timer IRQs, UART RX and SRAM samples passed; full SRAM continuity, LF switching and sleep current remain unverified |
-| LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Core/LF selectors and enabled peripheral checks compiled; hardware pending |
-| LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Runtime core/USB clock checks compiled; fixed RTC source has no selector; hardware pending |
-| LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Runtime peripheral/PLL ownership and clock decoding checked; hardware pending |
+| LPC11Uxx | Deep power-down, fixed wake pin, four retention words, reset causes and ordinary Sleep implemented | Clocks set once in SystemInit, shared clock requests, divider running mode and timer PowerOff checked in host models and firmware builds; hardware pending |
+| LPC17xx | Deep Power-down, reset reasons, five backup words and ordinary Sleep implemented | Clocks set once in SystemInit, shared clock requests, divider running mode and timer PowerOff checked in host models and firmware builds; hardware pending |
+| LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Clocks set once in SystemInit, shared clock requests, AHB divider running mode and timer PowerOff checked in host models and firmware builds; LPCXpresso54628 runs pending |
 | RA4M1 | Reset reporting, external-IRQ Software Standby and ordinary Sleep; no reset-on-wake power-off mode | Runtime module/CLKOUT checks added; protected clock models and firmware builds passed; hardware pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Clock supply type A supports reduced CPU speed. Timer and GPIO wake require board validation |
 | RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Startup oscillator setup, CPU divider modes and shared timer clocks implemented. Hardware validation pending |
@@ -736,55 +736,63 @@ sections 6.1.3, 10.7.15, 11.5, 11.6.9..11, 12.7.18 and 21.6.
 
 ## LPC11Uxx power and clock port
 
-The LPC11U35 library implements the existing generic power functions using
-UM10462 chapters 3 and 4. `SystemPowerOff` enters Deep power-down and discards
-pending CPU interrupts. PIO0_16 wakes the chip on a falling edge and starts a
-reset. The pin needs an external pull-up; the RESET pin is inactive in this
-mode. `SystemWakePin` accepts only that pin and polarity. It returns false for
-disable because the hardware wake input cannot be disabled. Applications must
-not set the write-once PCON NODPD bit if they intend to use Deep power-down.
+The LPC11U35 library implements the generic power functions using UM10462
+chapters 3 and 4. `SystemPowerOff` enters Deep power-down and discards pending
+CPU interrupts. PIO0_16 wakes the chip on a falling edge and starts a reset.
+The pin needs an external pull-up; the RESET pin is inactive in this mode. The
+wake input is fixed in hardware and cannot be disabled. Applications must not
+set the write-once PCON NODPD bit if they intend to use Deep power-down.
 
 `SystemResetReason` caches the first read and clears the recorded flags.
 DPDFLAG identifies wakeup rather than a cold power-on, even though wakeup
 internally generates POR. Four full-width GPREG words survive Deep power-down
 and software reset. GPREG4 is left to the application because it also contains
 wake-pin hysteresis control. SRAM retention in Deep power-down is unsupported.
-`SystemSleep` currently uses ordinary Sleep, preserves RAM and peripheral
-clocks, and wakes from an enabled NVIC interrupt. Deep-sleep and Power-down
-with clock restoration are not implemented. `SystemWakePin` selects the
-Deep power-down input only; ordinary Sleep uses the normal interrupt drivers.
+`SystemSleep` uses ordinary Sleep, preserves RAM and peripheral clocks, calls
+no driver and wakes from an enabled NVIC interrupt, a pin interrupt set up with
+`IOPinAllocateInterrupt` or `IOPinEnableInterrupt` included. Deep-sleep and
+Power-down with clock restoration are not implemented.
 
-Runtime core-clock requests refuse enabled timer, SSP, UART, ADC, USB and WWDT
-clock gates, an enabled I2C controller, or CLKOUT. Stopped timers whose gates
-remain enabled are conservatively refused. These checks apply to the legacy
-setters as well as `SystemCoreClockSelect`; startup configures the clocks before
-drivers take ownership. Applications must stop and reconfigure SysTick and
-scheduler timing around an accepted runtime change. Clock decoding reports
-zero for powered-down sources or an unlocked PLL. The existing fixed 48 MHz
-CPU target and bounded PLL recovery to 12 MHz IRC remain unchanged.
+`SystemInit` sets the clocks once from `g_McuOsc`. The CPU runs at 48 MHz from
+the system PLL on the IRC, a crystal or an external clock on XTALIN; USB uses
+the USB PLL with a crystal and `bUSBClk`. A crystal input with no 48 MHz PLL
+setting, or a PLL that does not lock, gives 48 MHz from the IRC without USB and
+the descriptor then describes the IRC. A system PLL that does not lock leaves
+the CPU on the 12 MHz IRC. The watchdog oscillator starts at the closest
+nominal rate when `g_McuOsc.LowPwrOsc` is an RC with a nonzero frequency; the
+default has frequency zero and leaves it off. There is no run time source
+selection and the clock code reads no peripheral register.
 
-`SystemLowFreqClockSelect` selects the closest nominal watchdog-oscillator
-rate for an RC request. Actual nominal frequency and 40-percent oscillator
-accuracy are recorded in `g_McuOsc.LowPwrOsc`. A running WWDT, its enabled bus
-clock, a main-clock WDO selection, or a WDO CLKOUT selection prevents changing
-it. This does not enable or feed the watchdog. The default LF descriptor has
-frequency zero, so startup leaves WDO unconfigured; an application-supplied
-nonzero LF descriptor is applied during startup.
+`SystemCoreClockUpdate` divides the main clock stored by the setup by
+SYSAHBCLKDIV. `SystemPeriphClockGet(0)` and `SystemPeriphClockSet(0)` give the
+bus clock, the CPU clock; the bus has no divider of its own. The high
+frequency request counts the users of the CPU clock, the low frequency request
+the users of the watchdog oscillator and fails when it was not started. Both
+oscillators start in `SystemInit`, the start times are 0. There is no
+calibration.
 
-The managed `CorePowerTest` project links the existing generic demo, with UART
-DMA disabled for LPC11U35. Validation includes all 115 enabled library source
-files in Debug and Release, TimerDemo, UART PRBS TX and loopback, SPI loopback,
-I2CScan and CorePowerTest links in both configurations, existing clock tests in
-C and C++, and temporary power-register checks at O0/O2. These are compilation
-and register-model results; sleep entry, wake reset, retention and current draw
-still need hardware validation. D11 remains the current hardware test target.
+`SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER)` doubles SYSAHBCLKDIV, from
+48 MHz to 24 MHz, with the flash access time for the system clock.
+PERFORMANCE restores the divider of `SystemInit`. The CPU, AHB and APB clocks,
+the CT16B/CT32B timers and SysTick follow. The UART, SSP and USB clocks come
+from the main clock through their own dividers and keep their rate. The setter
+refuses an interrupt context.
+
+The CT16B0, CT16B1, CT32B0 and CT32B1 timers hold the high frequency request
+while running. PowerOff stops the timer and clears its SYSAHBCLKCTRL bit.
+
+Host register models cover the clock setup with each descriptor and failure,
+the stored clock, the clock requests, both running modes and the timer rules.
+The library, CoreClockTest, CorePowerTest, TimerTest, TimerDemo and the USB
+examples link in Debug and Release. Sleep entry, wake reset, retention, delay
+factors and current draw still need hardware validation.
 
 ## LPC17xx power and clock port
 
 The LPC1769 managed library includes reset reporting, Deep Power-down,
 ordinary interrupt-resumable Sleep and five full-width RTC backup registers.
 RTC register access temporarily enables PCONP.PCRTC and restores the previous
-gate state. Backup contents survive software reset and Deep Power-down while
+power state. Backup contents survive software reset and Deep Power-down while
 the VBAT domain remains supplied. SRAM cannot be retained in Deep Power-down.
 The watchdog is neither enabled nor fed by these functions.
 
@@ -792,10 +800,10 @@ Deep Power-down wakes through the RESET pin or an application-configured RTC
 interrupt. `SystemPowerOff` preserves the RTC interrupt enable and pending
 state, stops SysTick, and disables other CPU interrupts before entry. The
 application must arm a future RTC event and handle any already-pending event
-before entering. `SystemWakePin` returns false because there is no selectable
-GPIO wake input for this mode. `SystemSleep` uses ordinary Sleep and enabled
-NVIC interrupts; Deep Sleep and Power-down with PLL restoration are not yet
-implemented.
+before entering. There is no GPIO wake input for this mode. `SystemSleep` uses
+ordinary Sleep, calls no driver and wakes from enabled NVIC interrupts, a pin
+interrupt set up through the pin driver included; Deep Sleep and Power-down
+with PLL restoration are not implemented.
 
 `SystemResetReason` caches and clears RSID and DPDFLAG on the first call.
 It reports power-on/brownout, external reset and watchdog reset. After Deep
@@ -806,33 +814,43 @@ Read the reset reason before application RTC initialization clears wake flags.
 With a separately supplied VBAT domain, retention and DPDFLAG can outlive a
 loss of core supply; the registers do not identify every such power sequence.
 
-Runtime core-clock changes refuse enabled peripheral gates except RTC and
-GPIO, active PLL1, CLKOUT, a PCLK-clocked running watchdog, and the DAC counter.
-The gate check is conservative: powered but idle peripherals must also be
-released. Startup configures clocks before application drivers own them.
-The divider/PLL search remains outside the interrupt lock; register changes
-and ownership checks run under the lock. The closest-frequency calculation,
-100/120 MHz device limits and bounded PLL failure handling remain in place.
-Applications must stop and reconfigure SysTick and scheduler timing around a
-runtime change. Peripheral-clock setters remain caller-controlled because
-drivers use them while configuring their own peripherals.
+`SystemInit` sets the CPU clock once from `g_McuOsc.CoreOsc`: the 4 MHz IRC, a
+crystal or an external clock on XTAL1 at 1 to 25 MHz, at CORE_FREQ or the
+closest rate below the device limit, 120 MHz on LPC1759/LPC1769 and 100 MHz on
+the others. The PLL0 search, the bounded oscillator, lock, connect,
+disconnect and stop waits, the safe flash timing during the change and the
+USB divider for a MAIN PLL0 at 288, 384 or 480 MHz are kept. A PLL0 left
+running by a bootloader is disconnected and stopped first; a range change of a
+main oscillator that drives the CPU is refused. A failure leaves the CPU on the
+undivided IRC and the descriptor then describes it. There is no run time
+source selection, the RTC is not a PLL0 input, and the clock code reads no
+peripheral register.
 
-The port refuses an oscillator-range change while MAIN feeds the CPU. Switch
-to IRC first; changing the range of an unused oscillator stops and restarts it
-with bounded ready checks. Other SCS fields are preserved. PLL1 configuration
-refuses an enabled USB peripheral. The RTC has a fixed 32768 Hz external clock;
-`SystemLowFreqClockSelect` returns false because there is no programmable LF
-source selector. This does not stop or reset the RTC.
+`SystemCoreClockUpdate` divides the clock the setup left at the CPU divider,
+the PLL0 output or the input with PLL0 off, by CCLKCFG. When PLL0 does not
+acknowledge a disconnect or a stop, that clock is not known and
+`SystemCoreClock` is 0. `SystemPeriphClockGet` and `SystemPeriphClockSet` use
+the `LPC17_PCLK` indices; the setter selects the closest PCLKSEL divider and
+returns the rate in effect. The high frequency request counts the users of
+the CPU clock. The RTC crystal is the only low frequency oscillator and the
+RTC drives it: no driver takes a clock from the low frequency request, which
+returns false. The start times are 0. There is no calibration.
 
-Validation covers all 124 enabled library sources in Debug and Release,
-TimerDemo, CorePowerTest, UART PRBS TX/loopback, SPI loopback, I2CScan and the six
-USB demos in both configurations. Clock register tests cover C/C++ callers,
-LPC1758/1759/1768/1769 limits, oscillator/PLL failures and busy-user rejection.
-Temporary power-register checks cover reset caching, backup access, interrupt
-selection and sleep register restoration at O0/O2. USB project source links
-and four C++ event initializers were corrected; USB_IRQHandler now has the C
-linkage required by the vector table. Hardware sleep/wake, retention and current
-measurements remain pending. D11 remains the current hardware test board.
+`SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER)` doubles the CPU divider, from
+120 MHz to 60 MHz on the LPC1769, with the flash access time for the CPU clock.
+PERFORMANCE restores the divider of `SystemInit`. Every PCLK is CCLK divided by
+PCLKSEL and follows: a UART sets its baud rate again, timers and SysTick count
+at half the rate. The USB clock keeps its PLL0 divider. The setter refuses an
+interrupt context.
+
+TIMER0 to TIMER3 hold the high frequency request while running. PowerOff
+stops the timer and clears its PCONP bit; the PCLKSEL divider is kept.
+
+Host register models cover the clock setup, PLL0 sequencing and failures, the
+stored clock, the peripheral clocks, the clock requests, both running modes
+and the timer rules. The library, CoreClockTest, CorePowerTest, TimerTest,
+TimerDemo, DfuBoot and the USB examples link in Debug and Release. Hardware
+sleep/wake, retention, delay factors and current measurements remain pending.
 
 ## LPC546xx power and clock port
 
@@ -850,41 +868,57 @@ Deep power-down leaves only the RTC domain and RESET wake input. RTC CTRL
 alarm/countdown wake configuration is preserved. Applications must arm a
 future RTC event and handle existing flags before entry. CPU interrupts and
 SysTick are stopped; ordinary Sleep preserves their configuration and restores
-the incoming SCR and interrupt mask. Deep-sleep clock and voltage restoration
-is not implemented. No watchdog is enabled or fed by these functions.
+the incoming SCR and interrupt mask, calls no driver and wakes from enabled
+interrupts, a pin interrupt set up through the pin driver included. Deep-sleep
+clock and voltage restoration is not implemented. No watchdog is enabled or
+fed by these functions.
 
-There is no selectable GPIO wake input for Deep power-down, so SystemWakePin
-returns false. SRAM retention is unsupported. Seven full-width backup words
-alias the RTC driver's GPREG0..6; applications must coordinate their use.
-GPREG7 remains the RTC time-valid marker. Backup access temporarily enables the
-RTC bus clock and restores its prior state without resetting the RTC.
-Reset reporting uses only the hardware POR, BOD, EXTRST, WDT and SYSRST flags.
-It does not infer a Deep power-down wake cause from a possibly stale RTC flag.
+There is no GPIO wake input for Deep power-down. SRAM retention is
+unsupported. Seven full-width backup words alias the RTC driver's GPREG0..6;
+applications must coordinate their use. GPREG7 remains the RTC time-valid
+marker. Backup access temporarily enables the RTC bus clock and restores its
+prior state without resetting the RTC. Reset reporting uses only the hardware
+POR, BOD, EXTRST, WDT and SYSRST flags. It does not infer a Deep power-down
+wake cause from a possibly stale RTC flag.
 
-Runtime core selection refuses peripheral clock gates other than memory,
-GPIO/pin routing and RTC, active audio/USB PLLs, or CLKOUT. This is conservative:
-a stopped peripheral with its gate enabled must still release it. The PLL
-search precedes the interrupt lock; the ownership check and transition are
-atomic against interrupts. Startup uses the same setup without application
-ownership checks. Applications must stop and reconfigure SysTick and scheduler
-rates around a runtime change. An external oscillator is stopped before its
-mode/range is changed. Failed PLL setup leaves the core on the 12 MHz FRO.
+`SystemInit` sets the core clock once from `g_McuOsc`: the system PLL at
+SYSTEM_CORE_CLOCK_MAX (220 MHz on LPC54628, 180 MHz on LPC54605), or the
+closest frequency below, from the 12 MHz FRO or the system oscillator, with
+the core voltage and the flash access time for that frequency. When the
+oscillator or the PLL does not start, the PLL is tried from the FRO; if it
+does not lock either, the core stays on the 12 MHz FRO. There is no run time
+source selection and the clock code reads no peripheral register.
 
-Clock decoding rejects powered-down FRO, system oscillator and PLL sources,
-unlocked PLLs, disabled FRO high-frequency output, and invalid PLL divisors.
-The RTC's system-clock output must be enabled to be decoded. This is register
-state, not an oscillator-health measurement. The LF descriptor now describes
-the fixed 32768 Hz crystal; SystemLowFreqClockSelect returns false, and the RTC
-driver retains ownership of oscillator startup and verification.
+`SystemCoreClockUpdate` divides the main clock stored by the setup by
+AHBCLKDIV. `SystemPeriphClockGet(0)` and `SystemPeriphClockSet(0)` give the AHB
+clock; Flexcomm and timer function clocks are selected by their drivers. The
+high frequency request counts the users of the core clock. The low frequency
+oscillator is the 32768 Hz RTC crystal; its power-down bit is in RTC CTRL and
+the RTC driver starts and checks it. No driver takes a clock from the low
+frequency request, which returns false. The start times are 0. There is no
+calibration.
 
-The new LPC54628 CorePowerTest uses the existing generic example and VCOM UART.
-It wakes through hardware RESET; P0.4 cannot wake Deep power-down. All 179 LPC54628 and 32 LPC54605 managed library sources compile in Debug
-and Release. The LPC54628 timer, peripheral and USB checks pass 60 firmware
-links across those configurations. Existing register tests cover clock ownership, failed PLL setup,
-RTC, timers, transfers, storage, audio and other peripherals. Temporary power
-register checks ran at O0/O2. These do not establish hardware wake behavior,
-backup retention or current draw. D11 remains the current hardware test board.
+`SystemPowerModeSet(SYSTEM_POWER_MODE_LOW_POWER)` sets AHBCLKDIV to divide the
+main clock by two, from 220 MHz to 110 MHz on the LPC54628, with the flash
+access time for the CPU clock. PERFORMANCE restores it. The core voltage stays
+at the level of the PLL output, which still drives the divider. The CPU, the
+AHB clock, CTIMER0 to 2 and SysTick follow; the Flexcomm function clocks and
+CTIMER3 and 4 stay on the 12 MHz FRO, so the console UART keeps its baud rate.
+The setter refuses an interrupt context.
 
+CTIMER3 and 4 (DevNo 0 and 1, async bridge on the FRO) and CTIMER0 to 2 (DevNo
+2 to 4) hold the high frequency request while running. PowerOff stops the
+timer and clears its clock enable; the async bridge is turned off after the
+last of CTIMER3 and 4.
+
+The LPC54628 CorePowerTest uses the generic example and VCOM UART. It wakes
+through hardware RESET; P0.4 cannot wake Deep power-down. Host register models
+cover the core clock setup and failure, the stored clock, the clock requests,
+both running modes, the audio PLL and the timer rules. The LPC54628 library and
+its examples, CoreClockTest, CorePowerTest and TimerTest included, link in
+Debug and Release; the LPC54605 library builds. The LPCXpresso54628 runs of
+CoreClockTest, with the delay calibration, TimerTest and CorePowerTest are
+pending; the delay factors are nominal values until then.
 
 ## RA4M1 power and clock port
 
