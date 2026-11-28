@@ -251,7 +251,13 @@ static void Re01GptReset(TimerDev_t *pTimer)
 static uint32_t Re01GptSetFrequency(TimerDev_t *pTimer, uint32_t Freq)
 {
 	RE01_TimerData_t *dev = Re01TimerData(pTimer);
-	if (dev == NULL || dev->BaseFreq == 0)
+	if (dev == NULL)
+	{
+		return 0;
+	}
+	// The count clock is ICLK, which SystemPowerModeSet changes
+	dev->BaseFreq = SystemPeriphClockGet(0);
+	if (dev->BaseFreq == 0)
 	{
 		return 0;
 	}

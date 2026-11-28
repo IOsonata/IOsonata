@@ -692,6 +692,10 @@ static void gptTimers()
 			assert(timer.SetFrequency(&timer, rate) == rate && reg->GTCR_b.TPCS == code);
 		}
 		assert(timer.SetFrequency(&timer, 0) == 48000000);
+		// LOW_POWER halves ICLK, the count clock: SetFrequency uses the new rate
+		SystemCoreClock = 24000000;
+		assert(timer.SetFrequency(&timer, UINT32_MAX) == 24000000 && timer.Freq == 24000000);
+		SystemCoreClock = 48000000;
 		assert(timer.SetFrequency(&timer, 65000000) == 48000000 && timer.Freq == 48000000);
 		assert(timer.SetFrequency(&timer, 3000000) == 3000000);
 		unsigned hits[4] = {};
