@@ -67,6 +67,10 @@ static R_GPT0_Type * const s_GptRegs[8] = {
 	R_GPT4, R_GPT5, R_GPT6, R_GPT7
 };
 static const uint8_t s_GptCompareIndex[6] = {0, 1, 2, 4, 3, 5};
+// Setup time of a delay on each timer in nsec, DevNo order: TimerInit sets it
+// in TimerDev_t nsSetup. TimerTest prints the value of each timer. 0 until
+// measured.
+static const int32_t s_TimerSetup[RA4M1_TIMER_COUNT] = { 0 };
 // GPT channels share two module-stop bits. Restore only clocks started here.
 static uint32_t s_GptModuleMask;
 static Ra4m1TimerData s_Timer[RA4M1_TIMER_COUNT];
@@ -732,6 +736,7 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 					if (ok) {
 						d.Timer=t; t->DevNo=d.No; t->Freq=plan.Frequency;
 						t->nsPeriod=(1000000000ULL+t->Freq/2U)/t->Freq;
+						t->nsSetup=s_TimerSetup[d.No];
 						t->Rollover=0; t->LastCount=0; t->EvtHandler=cfg->EvtHandler;
 						t->PowerOff = PowerOff;
 						t->Disable=Disable; t->Enable=Enable; t->Reset=Reset; t->GetTickCount=GetCount;

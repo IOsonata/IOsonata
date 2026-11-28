@@ -90,6 +90,11 @@ typedef struct __R9a02_Timer_Dev {
 
 static R9a02TimerDev_t s_R9a02TimerDev[R9A02_TIMER_DEV_CNT];
 
+// Setup time of a delay on each timer in nsec, DevNo order: TimerInit sets it
+// in TimerDev_t nsSetup. TimerTest prints the value of each timer. 0 until
+// measured.
+static const int32_t s_R9a02TimerSetup[R9A02_TIMER_DEV_CNT] = { 0 };
+
 static bool s_TauGateOwned;
 
 static bool R9a02TimerClockEnable(R9a02TimerDev_t *pDev)
@@ -1014,6 +1019,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	if (R9a02TimerClockEnable(dev))
 	{
 		ready = machine ? R9a02MtimerInit(pTimer, pCfg) : R9a02TauInit(pTimer, pCfg);
+		pTimer->nsSetup = s_R9a02TimerSetup[pCfg->DevNo];
 		if (!ready)
 		{
 			R9a02TimerClockDisable(dev);

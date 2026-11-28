@@ -19,7 +19,7 @@ typedef void (*TimerTrigEvtHandler_t)(TimerDev_t *,int,void *);
 typedef struct {TIMER_TRIG_TYPE Type;uint64_t nsPeriod;TimerTrigEvtHandler_t Handler;void *pContext;} TimerTrig_t;
 typedef struct {int DevNo;TIMER_CLKSRC ClkSrc;uint32_t Freq;int IntPrio;TimerEvtHandler_t EvtHandler;bool bTickInt;} TimerCfg_t;
 struct __Timer_Device {
-	int DevNo;uint32_t Freq;uint64_t nsPeriod,Rollover;uint32_t LastCount;
+	int DevNo;uint32_t Freq;uint64_t nsPeriod;int32_t nsSetup;uint64_t Rollover;uint32_t LastCount;
 	TimerEvtHandler_t EvtHandler;void *pObj;
 	void (*Disable)(TimerDev_t *);bool (*Enable)(TimerDev_t *);void (*Reset)(TimerDev_t *);
 	uint64_t (*GetTickCount)(TimerDev_t *);uint32_t (*SetFrequency)(TimerDev_t *,uint32_t);

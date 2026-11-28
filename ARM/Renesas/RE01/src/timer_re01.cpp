@@ -71,6 +71,11 @@ RE01_TimerData_t g_Re01TimerData[RE01_TIMER_MAXCNT] = {
 	{.DevNo = 8, .pGptReg = (GPT320_Type*)GPT165, .IrqOvr = (IRQn_Type)-1},
 };
 
+// Setup time of a delay on each timer in nsec, DevNo order: TimerInit sets it
+// in TimerDev_t nsSetup. TimerTest prints the value of each timer. 0 until
+// measured.
+static const int32_t s_TimerSetup[RE01_TIMER_MAXCNT] = { 0 };
+
 static uint32_t s_TimerModuleGates;
 
 bool Re01TimerClockEnable(RE01_TimerData_t *pDev)
@@ -246,6 +251,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		result = Re01GptInit(dev, pCfg);
 	}
 	pTimer->PowerOff = Re01TimerPowerOff;
+	pTimer->nsSetup = s_TimerSetup[pCfg->DevNo];
 	if (!result)
 	{
 		Re01TimerPowerOff(pTimer);
