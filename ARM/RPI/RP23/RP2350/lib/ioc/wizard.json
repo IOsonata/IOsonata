@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "mcu": "RP2350",
+  "cpu": "cortex-m33",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [
+    "RP2350",
+    "__PROGRAM_START"
+  ],
+  "includes": [
+    "${iosonata}/ARM/RPI/include",
+    "${external}/pico-sdk/src/rp2350/hardware_regs/include"
+  ],
+  "linker_script": "${iosonata}/ARM/RPI/RP23/RP2350/ldscript/gcc_rp2350.ld",
+  "lib_path": "${iosonata}/ARM/RPI/RP23/RP2350/lib/ioc/${config}",
+  "lib": "IOsonata_RP2350"
+}

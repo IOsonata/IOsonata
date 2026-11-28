@@ -360,6 +360,7 @@ done
 
 # Legacy LVGL graphics and LM20 TinyUSB ISO builds use validated revisions.
 # Shared external/lvgl and external/tinyusb continue to track current SDKs.
+clone_pinned_commit_repo "https://github.com/raspberrypi/pico-sdk.git" "$EXT/pico-sdk" "a1438dff1d38bd9c65dbd693f0e5db4b9ae91779"
 clone_pinned_commit_repo "https://github.com/lvgl/lvgl.git" "$EXT/lvgl_legacy" "69aa421acd78e0d3809200b9bc1f21c8586f5cf0"
 clone_pinned_commit_repo "https://github.com/hathach/tinyusb.git" "$EXT/tinyusb_lm20" "064afa3774cbbb2093d6af9805bdaa15b4e0f751"
 

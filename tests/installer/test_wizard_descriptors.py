@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parents[2]
 # These projects cannot yet create a standalone wizard application.
 # Every other Arm/RISC-V library project must have a descriptor.
 KNOWN_INCOMPLETE = {
-    "ARM/RPI/RP20/RP2040/lib/ioc": "No application linker script",
     "ARM/NXP/LPC546xx/LPC54605/lib/ioc":
         "Only DFU linker layouts; no standalone application layout",
     "ARM/Nordic/nRF54/nRF54H20/nRF54H20_App/lib/ioc":
@@ -127,12 +126,6 @@ class WizardDescriptorTests(unittest.TestCase):
                                    if o.get("superClass", "").endswith(".compiler.defs")
                                    for v in o.findall("listOptionValue")}
                     self.assertIn(data["mcu"], definitions)
-
-    def test_incomplete_rp2040_has_no_wizard_descriptor(self):
-        self.assertFalse(
-            (ROOT / "ARM/RPI/RP20/RP2040/lib/ioc/wizard.json").exists(),
-            "RP2040 wizard must not advertise an unimplemented linker layout"
-        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "mcu": "RP2040",
+  "cpu": "cortex-m0plus",
+  "fpu": false,
+  "fpu_unit": "none",
+  "defines": [
+    "RP2040",
+    "__PROGRAM_START"
+  ],
+  "includes": [
+    "${iosonata}/ARM/RPI/include",
+    "${external}/pico-sdk/src/rp2040/hardware_regs/include"
+  ],
+  "linker_script": "${iosonata}/ARM/RPI/RP20/RP2040/ldscript/gcc_rp2040.ld",
+  "lib_path": "${iosonata}/ARM/RPI/RP20/RP2040/lib/ioc/${config}",
+  "lib": "IOsonata_RP2040"
+}

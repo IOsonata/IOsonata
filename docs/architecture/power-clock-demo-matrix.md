@@ -148,7 +148,8 @@ external oscillator accuracy have not been measured here.
 LPC54605 has no existing board example to supply console wiring. nRF52805 and
 nRF52810 lack a suitable UART board configuration; no pin maps were guessed.
 nRF5340 network-core CoreClockTest has no companion CorePowerTest because the
-application core controls system power. RP2040, nRF54H20 and ESP32C2/C5/C61
+application core controls system power. Pico and Pico 2 have core 0 test projects.
+nRF54H20 and ESP32C2/C5/C61
 remain outside this batch because their relevant ports are incomplete.
 
 ## Delay calibration after clock changes

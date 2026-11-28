@@ -297,22 +297,29 @@ static void TimerTestOne(int DevNo)
 }
 
 // sDelay(1) timed by a high frequency timer
-static void TimerTestSleepDelay(const char *pName)
+static void TimerTestSleepDelay(const char *pName, TimerDev_t *pRef = nullptr)
 {
 	uint32_t start;
 	uint32_t us;
 	int32_t diff;
 	bool ok;
 
-	if (!TimerTestRefInit(TimerGetHighFreqDevNo()))
+	if (pRef == nullptr && !TimerTestRefInit(TimerGetHighFreqDevNo()))
 	{
 		TimerTestResult("sDelay reference timer", false);
 		return;
 	}
-	start = TimerGetMicrosecond(&s_RefTimer);
+	if (pRef == nullptr)
+	{
+		pRef = &s_RefTimer;
+	}
+	start = TimerGetMicrosecond(pRef);
 	ok = sDelay(1);
-	us = TimerGetMicrosecond(&s_RefTimer) - start;
-	(void)TimerPowerOff(&s_RefTimer);
+	us = TimerGetMicrosecond(pRef) - start;
+	if (pRef == &s_RefTimer)
+	{
+		(void)TimerPowerOff(pRef);
+	}
 
 	diff = (int32_t)us - 1000000;
 	UARTprintf(&s_Uart, "sDelay(1) %s: %lu us, %ld us from 1 s\r\n", pName,
@@ -358,7 +365,15 @@ static void TimerTestSleepDelays(void)
 		}
 	}
 	TimerTestResult("Low power timers held", held == count);
-	TimerTestSleepDelay("low power timers held");
+	// Leave the only HF timer free for the delay fallback.
+	if (held == count && TimerGetHighFreqDevCount() == 1)
+	{
+		TimerTestSleepDelay("low power timers held", &s_LfTimer[0]);
+	}
+	else
+	{
+		TimerTestSleepDelay("low power timers held");
+	}
 	for (i = 0; i < count; i++)
 	{
 		(void)TimerPowerOff(&s_LfTimer[i]);

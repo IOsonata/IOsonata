@@ -200,8 +200,7 @@ Get-ChildItem -Path "$ROOT\IOsonata" -Recurse -Filter ".project" -ErrorAction Si
         }
 
         # Skeleton projects without MCU sources, they do not build yet
-        if ($relPath -eq "ARM\RPI\RP20\RP2040\lib\ioc" -or
-            $relPath -eq "RISCV\Nordic\nRF54\nRF54H20\lib\ioc") {
+        if ($relPath -eq "RISCV\Nordic\nRF54\nRF54H20\lib\ioc") {
             return
         }
 

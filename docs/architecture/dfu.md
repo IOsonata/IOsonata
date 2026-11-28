@@ -39,9 +39,8 @@ one has no slot 1.
 
 ESP32-C3 and ESP32-C6 are updated by wire with their ROM download mode
 (esptool, UART or the built in USB Serial/JTAG) and get no stage 0 from
-IOsonata. The RP2040 library holds generic sources only (no startup, linker
-script or UART port) and STM32F3 has no library project, so neither has a
-target layer yet. On nRF54H20 the FLPR and PPR coprocessor images are loaded
+IOsonata. RP2040 and RP2350 use the ROM BOOTSEL loader. STM32F3 has no
+library project. On nRF54H20 the FLPR and PPR coprocessor images are loaded
 by the application core and are updated with it.
 
 ## What was taken from MCUboot and what was not

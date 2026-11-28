@@ -265,8 +265,7 @@ while IFS= read -r proj_file; do
   fi
 
   # Skeleton projects without MCU sources, they do not build yet
-  if [[ "$rel_path" == "/ARM/RPI/RP20/RP2040/lib/ioc" ]] || \
-     [[ "$rel_path" == "/RISCV/Nordic/nRF54/nRF54H20/lib/ioc" ]]; then
+  if [[ "$rel_path" == "/RISCV/Nordic/nRF54/nRF54H20/lib/ioc" ]]; then
     continue
   fi
 

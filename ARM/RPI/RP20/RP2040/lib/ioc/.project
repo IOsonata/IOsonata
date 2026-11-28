@@ -981,11 +981,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/mot_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_invn_icm20948.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/motion/mot_mpu9250.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
@@ -1119,11 +1114,6 @@
 			<name>src/sensors/agm_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/agm_mpu9250.cpp</name>
@@ -1699,6 +1689,61 @@
 			<name>src/video/cam_arducam_mega.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/video/cam_arducam_mega.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/iopincfg_rp2.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/RPI/src/iopincfg_rp2.c</locationURI>
+		</link>
+		<link>
+			<name>src/system_rp2.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/RPI/src/system_rp2.c</locationURI>
+		</link>
+		<link>
+			<name>src/timer_rp2.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/RPI/src/timer_rp2.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/uart_rp2.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/RPI/src/uart_rp2.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/vectors_rp2.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/RPI/src/vectors_rp2.c</locationURI>
+		</link>
+		<link>
+			<name>src/boot2.S</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/RPI/RP20/RP2040/lib/src/boot2.S</locationURI>
+		</link>
+		<link>
+			<name>src/ResetEntry.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/src/ResetEntry.c</locationURI>
+		</link>
+		<link>
+			<name>src/iatomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/src/iatomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/timer_systick.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/src/timer_systick.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sdelay.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sdelay.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

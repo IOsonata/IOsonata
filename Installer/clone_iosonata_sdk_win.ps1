@@ -286,6 +286,7 @@ foreach ($repo in $repos.GetEnumerator()) {
 
 # ---------------------------------------------------------
 # Preserve current shared SDKs while installing example-specific revisions.
+Sync-PinnedCommitRepository -Url "https://github.com/raspberrypi/pico-sdk.git" -Target "$EXT\pico-sdk" -Commit "a1438dff1d38bd9c65dbd693f0e5db4b9ae91779"
 Sync-PinnedCommitRepository -Url "https://github.com/lvgl/lvgl.git" -Target "$EXT\lvgl_legacy" -Commit "69aa421acd78e0d3809200b9bc1f21c8586f5cf0"
 Sync-PinnedCommitRepository -Url "https://github.com/hathach/tinyusb.git" -Target "$EXT\tinyusb_lm20" -Commit "064afa3774cbbb2093d6af9805bdaa15b4e0f751"
 
