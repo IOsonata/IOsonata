@@ -6,7 +6,7 @@ CXXFLAGS := $(COMMON) -std=gnu++17 -fno-exceptions -fno-rtti
 CFLAGS := $(COMMON) -std=gnu11 -Wno-int-to-pointer-cast
 PORT := $(ROOT)/ARM/Renesas/RE01/src
 CXXSRC := $(PORT)/interrupt_re01.cpp $(PORT)/timer_re01.cpp $(PORT)/timer_re01_agt.cpp $(PORT)/timer_re01_tmr.cpp $(PORT)/timer_re01_gpt.cpp $(PORT)/uart_re01.cpp $(PORT)/i2c_re01.cpp $(PORT)/spi_re01.cpp re01_port_test.cpp
-CSRC := $(PORT)/system_re01.c $(PORT)/iopincfg_re01.c $(ROOT)/src/cfifo.c
+CSRC := $(PORT)/system_re01.c $(PORT)/system_power_re01.c $(PORT)/iopincfg_re01.c $(ROOT)/src/cfifo.c
 OBJS := $(addprefix $(BUILD)/,$(notdir $(CXXSRC:.cpp=.o) $(CSRC:.c=.o)))
 vpath %.cpp $(sort $(dir $(CXXSRC)))
 vpath %.c $(sort $(dir $(CSRC)))

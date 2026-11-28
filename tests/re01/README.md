@@ -25,6 +25,8 @@ ICU ownership and reserved events, IRQ8/9 routing, GPIO validation and failed
 allocation cleanup, TMR resume, AGT reset/divider limits, comparator allocation
 and reuse, UART polling and interrupt paths, SCI9 module control, repeated
 initialization, RX drops, error clearing, and partial IRQ allocation cleanup.
+It also checks the AGT Software Standby wake bit and which wake sources make
+SystemSleep select Software Standby; the shim records SBYCR at WFI.
 The baud-rate check uses an independent exhaustive BRR/MDDR calculation.
 
 Build and link Blinky, TimerDemo, UartPrbsTxTest, PulseTrain, UartRetargetDemo,

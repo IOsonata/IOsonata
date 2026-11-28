@@ -35,6 +35,11 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 
+// Software Standby wake sources used by SystemSleep: IRQ0 to IRQ9 and the AGT
+// compare match A and AGT1 underflow events
+#define RE01_STANDBY_WAKE_MSK	(0x3ffUL | ICU_WUPEN_AGT0CAWUPEN_Msk | ICU_WUPEN_AGT1CAWUPEN_Msk | \
+								 ICU_WUPEN_AGT1UDWUPEN_Msk)
+
 static uint32_t s_ResetReason;
 static bool s_ResetRead;
 
@@ -100,13 +105,14 @@ void SystemSleep(void)
 	uint8_t power = SYSTEM->PWSTCR;
 	uint8_t ram = SYSTEM->RAMSDCR;
 	uint32_t tick = SysTick->CTRL;
+	uint32_t wake = ICU->WUPEN;
 
 	// Boost cannot enter Software Standby. Keep an application's Snooze or
 	// DTC configuration intact by using ordinary Sleep in those cases.
 	bool deep = SYSTEM->PWSTF == SYSTEM_PWSTF_ALLPWONM_Msk &&
 		(SYSTEM->SNZCR & SYSTEM_SNZCR_SNZE_Msk) == 0 &&
 		(SYSTEM->MSTPCRA & SYSTEM_MSTPCRA_MSTPA22_Msk) != 0 &&
-		(ICU->WUPEN & 0x3ffUL) != 0 && (ICU->WUPEN & ~0x3ffUL) == 0;
+		(wake & RE01_STANDBY_WAKE_MSK) != 0 && (wake & ~RE01_STANDBY_WAKE_MSK) == 0;
 	if (SCB->ICSR & (SCB_ICSR_PENDSTSET_Msk | SCB_ICSR_PENDSVSET_Msk))
 	{
 		EnableInterrupt(state);

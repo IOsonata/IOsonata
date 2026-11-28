@@ -66,6 +66,23 @@ static bool Re01AgtStop(RE01_TimerData_t *dev)
 	return false;
 }
 
+// Compare match A wakes the MCU from Software Standby. Only an AGT counting
+// LOCO or SOSC runs in Software Standby, the wake is set while trigger 0 is
+// armed. A wake bit set before TimerInit is kept.
+static void Re01AgtWake(RE01_TimerData_t *dev, bool bEnable)
+{
+	uint32_t bit = ICU_WUPEN_AGT0CAWUPEN_Msk >> dev->DevNo;
+
+	if (bEnable && dev->LowClock)
+	{
+		ICU->WUPEN |= bit;
+	}
+	else if (!bEnable && !dev->WakeWasEnabled)
+	{
+		ICU->WUPEN &= ~bit;
+	}
+}
+
 static void Re01AgtUnfIRQHandler(int IntNo, void *pCtx)
 {
 	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
@@ -475,6 +492,10 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
 		Re01AgtArm(dev, other, count, off);
 	}
 	dev->pAgtReg->AGTCMSR |= (1 << (TrigNo << 2));
+	if (TrigNo == 0)
+	{
+		Re01AgtWake(dev, true);
+	}
 
 	if (running)
 	{
@@ -509,6 +530,10 @@ void Re01AgtDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	dev->IrqMatch[TrigNo] = (IRQn_Type)-1;
 	dev->CC[TrigNo] = 0;
 	dev->Trigger[TrigNo] = {};
+	if (TrigNo == 0)
+	{
+		Re01AgtWake(dev, false);
+	}
 	// Do not write the compare register while the counter is running.
 	EnableInterrupt(state);
 }
@@ -665,11 +690,6 @@ bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	if (pCfg->DevNo == 0)
 	{
 		pTimerData->pAgtReg->AGTCMB = 0xFFFF;
-		ICU->WUPEN_b.AGT0CAWUPEN = 1;
-	}
-	else
-	{
-		ICU->WUPEN_b.AGT1CAWUPEN = 1;
 	}
 	Re01AgtReset(pTimerData->pTimer);
 	return Re01AgtEnable(pTimerData->pTimer);

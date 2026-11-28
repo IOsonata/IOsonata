@@ -260,7 +260,7 @@ of every clock mode. Existing clock code still needs a family-by-family review.
 | LPC546xx | Deep power-down, ordinary Sleep, reset causes and seven RTC backup words implemented | Clocks set once in SystemInit, shared clock requests, AHB divider running mode and timer PowerOff checked in host models and firmware builds; LPCXpresso54628 runs pending |
 | RA4M1 | Reset reporting, external IRQ and AGT1 Software Standby wake, ordinary Sleep | CPU divider and wake routing covered by register models. Board tests pending |
 | R9A02G021 | Reset reporting, wake pins and resumable Sleep/Software Standby; no reset-on-wake power off | Clock supply type A supports reduced CPU speed. Timer and GPIO wake require board validation |
-| RE01 | Reset reporting, external-IRQ Software Standby, ordinary Sleep and reset-on-wake Deep Software Standby | Startup oscillator setup, CPU divider modes and shared timer clocks implemented. Hardware validation pending |
+| RE01 | Reset reporting, external IRQ and AGT Software Standby wake, ordinary Sleep and reset-on-wake Deep Software Standby | Startup oscillator setup, CPU divider modes and shared timer clocks implemented. Hardware validation pending |
 | ESP32 C-series | C3 RTC and C6 PMU Light-sleep/Deep-sleep implemented; C6 repeated GPIO9 resume and GPIO3 reset-on-wake passed with UART output drained and Disable() called; C3 repeated Light-sleep and GPIO3 Deep-sleep wake passed | LF calibration, direct XTAL/RC CPU selection and APB rates implemented; C3/C6 combined sleep/clock checks passed; current measurements pending; optional 160 MHz PLL profile and RTC/LP SRAM retention implemented, hardware validation pending |
 | nRF54H, Raspberry Pi ports | No generic power implementation found | Review port maturity and vendor startup integration first |
 
@@ -1009,9 +1009,12 @@ and clears the Deep Standby mode selection without clearing those wake flags.
 No retention registers or reset-on-wake RAM retention are exposed.
 
 `SystemSleep()` uses Software Standby only in normal ALLPWON mode, with Snooze
-disabled, the DMAC/DTC module stopped, and an enabled external IRQ wake route.
+disabled, the DMAC/DTC module stopped, and only IRQ0-IRQ9 or AGT wake sources
+enabled. The AGT driver enables the compare match A wake of AGT0 or AGT1 while
+trigger 0 is armed on an AGT counting LOCO or SOSC; an AGT counting PCLKB
+stops in Software Standby. A wake bit set before TimerInit is kept.
 It selects ALLPWON -> EXFPWON -> ALLPWON and retains all eight SRAM banks.
-Boost, other power-domain modes, Snooze, enabled DMAC/DTC, or other wake policies
+Boost, other power-domain modes, Snooze, enabled DMAC/DTC, or other wake sources
 use ordinary Sleep. Both paths preserve the caller's interrupt mask, register
 protection, sleep settings and pending interrupts. Drivers still own stopping
 peripherals before Standby. The port does not enable a watchdog.

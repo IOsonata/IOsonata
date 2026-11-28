@@ -84,6 +84,18 @@ static void (* const handlers[])() = {
 
 static volatile uint32_t * const routes = &ICU->IELSR0;
 static uint32_t backup[32];
+SCB_Type g_TestScb;
+SysTick_Type g_TestSysTick;
+NVIC_Type g_TestNvic;
+static int s_WfiCount;
+static uint16_t s_WfiStandby;
+
+void TestWfi(void)
+{
+	s_WfiCount++;
+	s_WfiStandby = SYSTEM->SBYCR;
+}
+
 static void irq(int Group, int Value)
 {
 	for (int i = Group; i < 32; i += 8)
@@ -508,6 +520,18 @@ static void timers()
 	restore();
 	assert(TimerInit(&a, &cfg) && a.Freq == 32768);
 	assert(AGT0->AGTMR2_b.CKS == 0);
+	// The LOCO AGT wakes Software Standby while trigger 0 is armed
+	assert((ICU->WUPEN & ICU_WUPEN_AGT0CAWUPEN_Msk) == 0);
+	assert(a.EnableTrigger(&a, 1, 100000000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
+	assert((ICU->WUPEN & ICU_WUPEN_AGT0CAWUPEN_Msk) == 0);
+	a.DisableTrigger(&a, 1);
+	assert(a.EnableTrigger(&a, 0, 100000000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr));
+	assert(ICU->WUPEN & ICU_WUPEN_AGT0CAWUPEN_Msk);
+	a.DisableTrigger(&a, 0);
+	assert((ICU->WUPEN & ICU_WUPEN_AGT0CAWUPEN_Msk) == 0);
+	assert(a.EnableTrigger(&a, 0, 100000000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr));
+	AGT0->AGTCR |= AGT0_AGTCR_TCMAF_Msk; timerIrq(g_Re01TimerData[0].IrqMatch[0]);
+	assert(a.FindAvailTrigger(&a) == 0 && (ICU->WUPEN & ICU_WUPEN_AGT0CAWUPEN_Msk) == 0);
 	// Above the range: the closest, the highest
 	assert(a.SetFrequency(&a, UINT32_MAX) == 32768 && AGT0->AGTMR2_b.CKS == 0);
 	cfg.Freq = 100000000;
@@ -523,6 +547,8 @@ static void timers()
 	assert(TimerInit(&a, &cfg));
 	assert(AGT0->AGTMR1_b.TCK == 0 && a.Freq == 24000000);
 	assert(a.EnableTrigger(&a, 0, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 10000);
+	// PCLKB stops in Software Standby: no AGT wake
+	assert((ICU->WUPEN & ICU_WUPEN_AGT0CAWUPEN_Msk) == 0);
 	assert(a.FindAvailTrigger(&a) == 1);
 	assert(a.EnableTrigger(&a, 1, 20000, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr) == 20000);
 	assert(a.FindAvailTrigger(&a) == -1);
@@ -589,12 +615,15 @@ static void timers()
 
 	static TimerDev_t b = {};
 	cfg.DevNo = 1;
+	// A wake bit set before TimerInit is not changed by the driver
+	ICU->WUPEN |= ICU_WUPEN_AGT1CAWUPEN_Msk;
 	assert(TimerInit(&b, &cfg));
 	assert(b.GetMaxTrigger(&b) == 1);
 	assert(b.EnableTrigger(&b, 1, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 0);
 	assert(b.EnableTrigger(&b, 0, 10000, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 10000);
 	assert(b.FindAvailTrigger(&b) == -1);
 	b.DisableTrigger(&b, 0); b.Disable(&b);
+	assert(ICU->WUPEN & ICU_WUPEN_AGT1CAWUPEN_Msk);
 	b.Reset(&b);
 	assert((AGT1->AGTCR & AGT0_AGTCR_TSTART_Msk) == 0 && b.GetTickCount(&b) == 0);
 	AGT1->AGT = 0xFFFF - 7; AGT1->AGTCR |= AGT0_AGTCR_TUNDF_Msk;
@@ -605,6 +634,8 @@ static void timers()
 	assert(!TimerInit(&b, &cfg));
 	assert(TimerPowerOff(&b) && TimerPowerOff(&a) && TimerPowerOff(&t));
 	assert(!a.Enable(&a) && countRoutes() == 0);
+	assert((ICU->WUPEN & ICU_WUPEN_AGT1CAWUPEN_Msk) && (ICU->WUPEN & ICU_WUPEN_AGT0CAWUPEN_Msk) == 0);
+	ICU->WUPEN &= ~ICU_WUPEN_AGT1CAWUPEN_Msk;
 	assert(TimerInit(&t, &moved));
 	t.Disable(&t);
 	moved.DevNo = 1;
@@ -971,11 +1002,41 @@ static void busRates()
 	assert(spi.DevIntrf.SetRate(&spi.DevIntrf, 1) == pclka / 4096);
 }
 
+// SystemSleep uses Software Standby for IRQ0-9 and AGT wake sources only
+static bool standbyFor(uint32_t Wake)
+{
+	ICU->WUPEN = Wake;
+	s_WfiCount = 0;
+	SystemSleep();
+	assert(s_WfiCount == 1 && SYSTEM->SBYCR == 0);
+	return (s_WfiStandby & SYSTEM_SBYCR_SSBY_Msk) != 0;
+}
+
+static void standby()
+{
+	uint32_t wake = ICU->WUPEN;
+
+	*(volatile uint8_t *)&SYSTEM->PWSTF = SYSTEM_PWSTF_ALLPWONM_Msk;
+	SYSTEM->SNZCR = 0;
+	SYSTEM->SBYCR = 0;
+	SYSTEM->MSTPCRA = SYSTEM_MSTPCRA_MSTPA22_Msk;
+	assert(!standbyFor(0));
+	assert(standbyFor(ICU_WUPEN_IRQWUPEN4_Msk));
+	assert(standbyFor(ICU_WUPEN_AGT0CAWUPEN_Msk));
+	assert(standbyFor(ICU_WUPEN_AGT1CAWUPEN_Msk | ICU_WUPEN_IRQWUPEN2_Msk));
+	assert(standbyFor(ICU_WUPEN_AGT1UDWUPEN_Msk));
+	assert(!standbyFor(ICU_WUPEN_AGT0CAWUPEN_Msk | ICU_WUPEN_RTCALMWUPEN_Msk));
+	SYSTEM->MSTPCRA = 0;
+	assert(!standbyFor(ICU_WUPEN_AGT0CAWUPEN_Msk));
+	SYSTEM->MSTPCRA = SYSTEM_MSTPCRA_MSTPA22_Msk;
+	ICU->WUPEN = wake;
+}
+
 int main()
 {
 	assert(mmap((void*)0x40000000, 0xA0000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
 	assert(mmap((void*)0x407fe000, 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
 	assert(mmap((void*)FLASH_BASE, 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
-	clocks(); icuAndGpio(); timers(); gptTimers(); uarts(); busRates();
-	puts("RE01 clock, ICU, GPIO, timer, UART, I2C and SPI rate regression checks passed");
+	clocks(); icuAndGpio(); timers(); gptTimers(); uarts(); busRates(); standby();
+	puts("RE01 clock, ICU, GPIO, timer, UART, I2C, SPI rate and sleep regression checks passed");
 }
