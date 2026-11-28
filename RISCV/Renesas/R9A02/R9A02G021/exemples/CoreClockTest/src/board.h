@@ -81,4 +81,7 @@ SOFTWARE.
 // Internal sources only; external crystal frequency is not assumed.
 #define CLOCK_DEMO_IRQ_PRIORITY 1
 
+// Keep the 100 ms delay measurement within one 16-bit TAU period.
+#define CORE_CLOCK_TEST_HF_TIMER_FREQ 375000U
+
 #endif
