@@ -4,7 +4,6 @@ File   : system_LPC11Uxx.h
 Author : Hoang Nguyen Hoan          Dec. 9, 2014
 
 Desc   : Implementation of CMSIS Cortex-M0 Device for LPC11Uxx Device Series
-		 Added SystemSetCoreClock for on the fly clock setting
 
 Copyright (c) 2014, I-SYST inc., all rights reserved
 
@@ -100,24 +99,10 @@ void SystemInit (void);
  * @param  none
  * @return none
  *
- * @brief  Updates the SystemCoreClock with current core Clock
- *         retrieved from cpu registers.
+ * @brief  Updates SystemCoreClock from the main clock set by SystemInit
+ *         and the AHB divider, and the delay factors.
  */
 void SystemCoreClockUpdate (void);
-
-// Configure the PLL for the existing 48 MHz startup target.
-// ClkFreq is the crystal input frequency in Hz; IRC uses its fixed 12 MHz.
-// Returns the CPU frequency after the AHB divider and updates the clock globals.
-// Returns zero without register changes if the crystal input cannot produce
-// the fixed 48 MHz CPU/USB target within the PLL limits.
-// Release clock-dependent peripheral gates (including USB) before calling.
-// Runtime requests refuse enabled peripheral users and CLKOUT. Successful
-// IRC operation leaves USB disabled. PLL lock failure returns zero with the
-// CPU on the 12 MHz IRC and USB disabled; reinitialize peripherals after retry.
-uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq);
-
-// Retain the name exported by older LPC11Uxx libraries.
-uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq);
 
 #ifdef __cplusplus
 }

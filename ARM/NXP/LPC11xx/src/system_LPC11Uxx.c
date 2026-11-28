@@ -4,7 +4,6 @@ File   : system_LPC11Uxx.c
 Author : Hoang Nguyen Hoan          Dec. 9, 2014
 
 Desc   : Implementation of CMSIS Cortex-M0 Device for LPC11Uxx Device Series
-		 Added SystemSetCoreClock for on the fly clock setting
 
 Copyright (c) 2014, I-SYST inc., all rights reserved
 
@@ -42,16 +41,14 @@ Modified by          Date              Description
 #include "LPC11Uxx.h"
 
 
-#define OSC_FREQ				XTAL_FREQ_12MHZ	// Installed oscillator frequency
-#define IRC_FREQ				(12000000UL)	// Internal RC freq */
+#define IRC_FREQ				(12000000UL)	// Internal RC freq
+#define IRC_ACCURACY			10000U			// ppm, UM10462 +/-1 percent
 
-#define SYSTEM_CORE_CLOCK				48000000UL		// TODO: Adjust value for CPU with fixed core frequency
+#define SYSTEM_CORE_CLOCK				48000000UL		// Fixed CPU and USB target
 #define SYSTEM_NSDELAY_CORE_FACTOR		(93UL)			// TODO: Adjustment value
 
 #define LPC11_CLOCK_WAIT_MAX		100000U
-
-// Select system clock oscillator source
-#define DEF_CLK_SRC				IRC_FREQ
+#define LPC11_WDTOSC_ACCURACY		400000U			// ppm, +/-40 percent
 
 __WEAK McuOsc_t g_McuOsc = {
 	{OSC_TYPE_XTAL, 12000000, 20},
@@ -63,10 +60,8 @@ __WEAK McuOsc_t g_McuOsc = {
 extern uint32_t SystemMicroSecLoopCnt;
 
 uint32_t SystemCoreClock = IRC_FREQ;	// System Clock Frequency (Core Clock)
-uint32_t SystemMainClkFreq = IRC_FREQ;		// System clock frequency, reset default IRC
+uint32_t SystemMainClkFreq = IRC_FREQ;	// Main clock set by the clock setup, reset default IRC
 uint32_t SystemnsDelayFactor = 1000000UL;
-
-static uint32_t s_SysOscFreq = OSC_FREQ;
 
 // Nominal watchdog analog frequencies, UM10462 Table 14. Index zero is undefined.
 static const uint32_t s_WdtOscFreq[] = {
@@ -76,61 +71,14 @@ static const uint32_t s_WdtOscFreq[] = {
 	4000000, 4200000, 4400000, 4600000,
 };
 
-static inline uint32_t GetSysPllClk(void)
-{
-	switch (LPC_SYSCON->SYSPLLCLKSEL & SYSPLLCLKSEL_MASK)
-	{
-	case SYSPLLCLKSEL_SYSOSC:
-		return (LPC_SYSCON->PDRUNCFG & PDRUNCFG_SYSOSC_PD) == 0 ? s_SysOscFreq : 0;
-	case SYSPLLCLKSEL_IRC:
-		return (LPC_SYSCON->PDRUNCFG & (PDRUNCFG_IRC_PD | PDRUNCFG_IRCOUT_PD)) == 0 ? IRC_FREQ : 0;
-	default:
-		return 0;
-	}
-}
-
-// Update clock frequencies from the selected source and AHB divider.
+// CPU clock from the main clock the clock setup set and the AHB divider
 void SystemCoreClockUpdate(void)
 {
-	uint32_t sysclk = 0;
-	uint32_t mainclk = LPC_SYSCON->MAINCLKSEL & MAINCLKSEL_MASK;
-	uint32_t div = LPC_SYSCON->SYSAHBCLKDIV & 0xffU;
+	uint32_t div;
 
-	switch (mainclk)
-	{
-	case MAINCLKSEL_PLLIN:
-		sysclk = GetSysPllClk();
-		break;
-	case MAINCLKSEL_PLLOUT:
-		// PLL output is FIN * M; P selects the internal CCO frequency.
-		if ((LPC_SYSCON->PDRUNCFG & PDRUNCFG_SYSPLL_PD) == 0 &&
-			(LPC_SYSCON->SYSPLLSTAT & 1U) != 0)
-		{
-			sysclk = GetSysPllClk() * ((LPC_SYSCON->SYSPLLCTRL & 0x1fU) + 1U);
-		}
-		break;
-	case MAINCLKSEL_WDT:
-	{
-		uint32_t ctrl = LPC_SYSCON->WDTOSCCTRL;
-		uint32_t wdtdiv = 2U * ((ctrl & 0x1fU) + 1U);
-
-		if ((LPC_SYSCON->PDRUNCFG & PDRUNCFG_WDTOSC_PD) == 0)
-		{
-			sysclk = s_WdtOscFreq[(ctrl >> 5) & 0xfU] / wdtdiv;
-		}
-		break;
-	}
-	case MAINCLKSEL_IRC:
-		if ((LPC_SYSCON->PDRUNCFG & (PDRUNCFG_IRC_PD | PDRUNCFG_IRCOUT_PD)) == 0)
-		{
-			sysclk = IRC_FREQ;
-		}
-		break;
-	}
-
-	SystemMainClkFreq = sysclk;
-	// Divider zero disables the system clock; do not retain a stale frequency.
-	SystemCoreClock = div != 0 ? sysclk / div : 0;
+	div = LPC_SYSCON->SYSAHBCLKDIV & 0xffU;
+	// Divider zero stops the system clock
+	SystemCoreClock = div != 0U ? SystemMainClkFreq / div : 0U;
 	(void)ArmDelayClockSetDivisors(SystemCoreClock,
 		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
 }
@@ -165,22 +113,20 @@ static void Lpc11ClockDelay(uint32_t Reads)
 	}
 }
 
+// Main clock on the IRC, AHB divider 1. Interrupts are disabled.
 static bool Lpc11MainClockIRC(void)
 {
 	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_IRC;
 	if (!Lpc11ClockLatch(&LPC_SYSCON->MAINCLKUEN))
 	{
+		// The main clock source is not known
 		SystemMainClkFreq = 0;
-		SystemCoreClock = 0;
-		(void)ArmDelayClockSetDivisors(SystemCoreClock,
-			16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
+		SystemCoreClockUpdate();
 		return false;
 	}
 	LPC_SYSCON->SYSAHBCLKDIV = 1;
 	SystemMainClkFreq = IRC_FREQ;
-	SystemCoreClock = IRC_FREQ;
-	(void)ArmDelayClockSetDivisors(SystemCoreClock,
-		16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
+	SystemCoreClockUpdate();
 
 	return true;
 }
@@ -191,7 +137,6 @@ static bool Lpc11ConnectPll(OSC_TYPE Type, uint32_t sysclk, uint32_t pll,
 {
 	bool external = Type != OSC_TYPE_RC;
 
-	// Callers must stop USB and other clock-dependent peripherals first.
 	LPC_SYSCON->USBCLKDIV = 0;
 	LPC_SYSCON->PDRUNCFG |= PDRUNCFG_USBPAD_PD | PDRUNCFG_SYSPLL_PD | PDRUNCFG_USBPLL_PD;
 	if (external)
@@ -203,7 +148,6 @@ static bool Lpc11ConnectPll(OSC_TYPE Type, uint32_t sysclk, uint32_t pll,
 		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSOSC_PD;
 		// At least 1 ms at the 12 MHz IRC; PLL lock is checked separately.
 		Lpc11ClockDelay(12000U);
-		s_SysOscFreq = sysclk;
 	}
 	LPC_SYSCON->SYSPLLCLKSEL = external ? SYSPLLCLKSEL_SYSOSC : SYSPLLCLKSEL_IRC;
 	if (!Lpc11ClockLatch(&LPC_SYSCON->SYSPLLCLKUEN))
@@ -253,14 +197,23 @@ static bool Lpc11ConnectPll(OSC_TYPE Type, uint32_t sysclk, uint32_t pll,
 	return true;
 }
 
+// The 48 MHz CPU clock from the PLL. ClkFreq is the crystal or external clock
+// input, the IRC is 12 MHz. Returns the CPU frequency, 0 when the input cannot
+// give 48 MHz or the PLL does not lock, the CPU is then on the 12 MHz IRC.
 static uint32_t Lpc11SetCoreClock(OSC_TYPE Type, uint32_t ClkFreq, bool UsbClock)
 {
-	bool external = Type != OSC_TYPE_RC;
-	uint32_t sysclk = IRC_FREQ;
-	uint32_t pll = 0;
-	uint32_t div = 0;
-	uint32_t fclko = 0;
+	bool external;
+	uint32_t sysclk;
+	uint32_t pll;
+	uint32_t div;
+	uint32_t fclko;
+	uint32_t state;
 
+	external = Type != OSC_TYPE_RC;
+	sysclk = IRC_FREQ;
+	pll = 0;
+	div = 0;
+	fclko = 0;
 	if (external)
 	{
 		// ClkFreq describes the physical input, not a requested CPU rate.
@@ -299,7 +252,7 @@ static uint32_t Lpc11SetCoreClock(OSC_TYPE Type, uint32_t ClkFreq, bool UsbClock
 		return 0;
 	}
 
-	uint32_t state = DisableInterrupt();
+	state = DisableInterrupt();
 
 	// Three flash clocks are required at 48 MHz. Preserve reserved bits.
 	LPC_SYSCON->SYSAHBCLKCTRL |= 1U << 3;
@@ -316,9 +269,7 @@ static uint32_t Lpc11SetCoreClock(OSC_TYPE Type, uint32_t ClkFreq, bool UsbClock
 	if (Lpc11ConnectPll(Type, sysclk, pll, div, UsbClock))
 	{
 		SystemMainClkFreq = fclko;
-		SystemCoreClock = fclko / div;
-		(void)ArmDelayClockSetDivisors(SystemCoreClock,
-			16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
+		SystemCoreClockUpdate();
 		EnableInterrupt(state);
 		return SystemCoreClock;
 	}
@@ -329,79 +280,79 @@ static uint32_t Lpc11SetCoreClock(OSC_TYPE Type, uint32_t ClkFreq, bool UsbClock
 	{
 		LPC_SYSCON->PDRUNCFG |= PDRUNCFG_SYSPLL_PD | PDRUNCFG_USBPLL_PD;
 	}
-	else
-	{
-		// A failed clock-source latch leaves the active frequency unknown.
-		SystemMainClkFreq = 0;
-		SystemCoreClock = 0;
-		(void)ArmDelayClockSetDivisors(SystemCoreClock,
-			16000000UL, ((uint64_t)SYSTEM_NSDELAY_CORE_FACTOR * SYSTEM_CORE_CLOCK / 1000UL));
-	}
 	EnableInterrupt(state);
 
 	return 0;
 }
 
-// Enabled peripheral gates must be released before a runtime clock change.
-// The I2C gate is enabled at reset, so inspect its controller enable bit.
-static uint32_t Lpc11SelectCoreClock(OSC_TYPE Type, uint32_t Freq, bool UsbClock)
+// CPU clock from g_McuOsc.CoreOsc. A missing crystal or a PLL that does not
+// lock gives 48 MHz from the IRC, without USB, and the descriptor then
+// describes the IRC.
+static void Lpc11CoreClockInit(void)
 {
-	uint32_t state = DisableInterrupt();
-	uint32_t clocks = LPC_SYSCON->SYSAHBCLKCTRL;
-	uint32_t freq = 0;
-	uint32_t busy = (0x1ffU << 7) | (1U << 18);
-
-	if ((clocks & busy) == 0 && LPC_SYSCON->CLKOUTDIV == 0 &&
-		((clocks & (1U << 5)) == 0 || (LPC_I2C->CONSET & (1U << 6)) == 0))
+	if (g_McuOsc.CoreOsc.Type != OSC_TYPE_RC &&
+		Lpc11SetCoreClock(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, g_McuOsc.bUSBClk) != 0)
 	{
-		freq = Lpc11SetCoreClock(Type, Freq, UsbClock);
+		return;
 	}
-	EnableInterrupt(state);
-	return freq;
+	if (Lpc11SetCoreClock(OSC_TYPE_RC, IRC_FREQ, false) == 0)
+	{
+		return;
+	}
+	if (g_McuOsc.CoreOsc.Type != OSC_TYPE_RC)
+	{
+		// External accuracy and crystal load do not describe the IRC.
+		// Application calibration of an RC descriptor is kept.
+		g_McuOsc.CoreOsc.Accuracy = IRC_ACCURACY;
+		g_McuOsc.CoreOsc.LoadCap = 0;
+	}
+	g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
+	g_McuOsc.CoreOsc.Freq = IRC_FREQ;
 }
 
-/**
- * Select the physical PLL input for the fixed 48 MHz CPU target.
- * USB follows g_McuOsc.bUSBClk and is disabled for IRC input.
- * Callers must stop clock-dependent peripherals before changing clocks.
- * Failure preserves the requested oscillator descriptor. PLL lock failure
- * leaves the CPU on IRC; SystemCoreClock reports that fallback frequency.
- */
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+// Watchdog oscillator from g_McuOsc.LowPwrOsc, the closest nominal rate to
+// its frequency. It stays powered down with a frequency of 0, the default.
+// The watchdog is neither enabled nor fed.
+static void Lpc11LowFreqInit(void)
 {
-	if (ClkSrc == OSC_TYPE_RC && OscFreq != IRC_FREQ)
-	{
-		return false;
-	}
-	if (Lpc11SelectCoreClock(ClkSrc, OscFreq, g_McuOsc.bUSBClk) == 0)
-	{
-		return false;
-	}
-	g_McuOsc.CoreOsc.Type = ClkSrc;
-	g_McuOsc.CoreOsc.Freq = OscFreq;
+	uint32_t best;
+	uint32_t value;
+	uint32_t error;
+	uint32_t rate;
+	uint32_t diff;
 
-	return true;
+	if (g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC || g_McuOsc.LowPwrOsc.Freq == 0)
+	{
+		return;
+	}
+	best = 0;
+	value = 0;
+	error = UINT32_MAX;
+	for (uint32_t sel = 1; sel < 16; sel++)
+	{
+		for (uint32_t div = 0; div < 32; div++)
+		{
+			rate = s_WdtOscFreq[sel] / (2U * (div + 1U));
+			diff = rate > g_McuOsc.LowPwrOsc.Freq ? rate - g_McuOsc.LowPwrOsc.Freq :
+				g_McuOsc.LowPwrOsc.Freq - rate;
+			if (diff < error)
+			{
+				error = diff;
+				best = rate;
+				value = (sel << 5) | div;
+			}
+		}
+	}
+	LPC_SYSCON->WDTOSCCTRL = value;
+	LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_WDTOSC_PD;
+	g_McuOsc.LowPwrOsc.Freq = best;
+	g_McuOsc.LowPwrOsc.Accuracy = LPC11_WDTOSC_ACCURACY;
 }
 
-uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
+void SystemInit(void)
 {
-	return Lpc11SelectCoreClock(Crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC,
-		(uint32_t)ClkFreq, Crystal);
-}
-
-uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq)
-{
-	return SystemCoreClockSet(Crystal, ClkFreq);
-}
-
-void SystemInit (void)
-{
-	Lpc11SetCoreClock(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, g_McuOsc.bUSBClk);
-	SystemCoreClockUpdate();
-	if (g_McuOsc.LowPwrOsc.Freq != 0)
-	{
-		SystemLowFreqClockSelect(g_McuOsc.LowPwrOsc.Type, g_McuOsc.LowPwrOsc.Freq);
-	}
+	Lpc11CoreClockInit();
+	Lpc11LowFreqInit();
 }
 
 /**
@@ -419,79 +370,21 @@ uint32_t SystemPeriphClockGet(int Idx)
 }
 
 /**
- * @brief Independent peripheral bus clock changes are not supported.
+ * @brief Peripheral bus clock frequency in effect.
  *
- * Changing SYSAHBCLKDIV also changes the CPU clock. Do not silently change
- * it through a peripheral-only request.
+ * The bus clock is the CPU clock, SYSAHBCLKDIV divides both. A peripheral
+ * request does not change it.
  *
- * @return Zero; no clock registers are changed.
+ * @return Frequency in Hz of the bus clock, 0 for an invalid index.
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-	(void)Idx;
 	(void)Freq;
 
-	return 0;
+	return SystemPeriphClockGet(Idx);
 }
 
-uint32_t SystemCoreClockGet()
+uint32_t SystemCoreClockGet(void)
 {
 	return SystemCoreClock;
-}
-
-
-// Select the closest nominal watchdog oscillator output without enabling WWDT.
-bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
-{
-	if (ClkSrc != OSC_TYPE_RC || OscFreq == 0)
-	{
-		return false;
-	}
-	uint32_t best = 0;
-	uint32_t value = 0;
-	uint32_t error = UINT32_MAX;
-
-	for (uint32_t sel = 1; sel < 16; sel++)
-	{
-		for (uint32_t div = 0; div < 32; div++)
-		{
-			uint32_t rate = s_WdtOscFreq[sel] / (2U * (div + 1U));
-			uint32_t diff = rate > OscFreq ? rate - OscFreq : OscFreq - rate;
-
-			if (diff < error)
-			{
-				error = diff;
-				best = rate;
-				value = (sel << 5) | div;
-			}
-		}
-	}
-	uint32_t state = DisableInterrupt();
-
-	if ((LPC_SYSCON->SYSAHBCLKCTRL & (1U << 15)) != 0 ||
-		(LPC_SYSCON->MAINCLKSEL & 3U) == MAINCLKSEL_WDT ||
-		(LPC_SYSCON->CLKOUTDIV != 0 && (LPC_SYSCON->CLKOUTSEL & 3U) == 2U))
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	uint32_t clocks = LPC_SYSCON->SYSAHBCLKCTRL;
-
-	LPC_SYSCON->SYSAHBCLKCTRL = clocks | (1U << 15);
-	(void)LPC_SYSCON->SYSAHBCLKCTRL;
-	bool running = (LPC_WWDT->MOD & 1U) != 0;
-
-	LPC_SYSCON->SYSAHBCLKCTRL = clocks;
-	if (running)
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	LPC_SYSCON->WDTOSCCTRL = value;
-	LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_WDTOSC_PD;
-	g_McuOsc.LowPwrOsc.Type = OSC_TYPE_RC;
-	g_McuOsc.LowPwrOsc.Freq = best;
-	g_McuOsc.LowPwrOsc.Accuracy = 400000;
-	EnableInterrupt(state);
-	return true;
 }

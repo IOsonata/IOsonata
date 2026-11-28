@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	clock_test.c
 
-@brief	LPC11Uxx clock decoding regression using vendor CMSIS registers.
+@brief	LPC11Uxx CPU clock from the stored main clock, vendor CMSIS registers.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -42,125 +42,74 @@ uint32_t SystemMicroSecLoopCnt;
 
 extern uint32_t SystemMainClkFreq;
 
-static void Check(uint32_t Main, uint32_t Core)
+// The CPU clock is the stored main clock divided by SYSAHBCLKDIV. No register
+// is written and the clock source registers are not read.
+static void Check(uint32_t Main, uint32_t Div)
 {
 	LPC_SYSCON_Type before;
 	uint32_t loops;
+	uint32_t core;
 
+	core = Div != 0U ? Main / Div : 0U;
+	SystemMainClkFreq = Main;
+	LPC_SYSCON->SYSAHBCLKDIV = Div;
 	memcpy(&before, (const void *)LPC_SYSCON, sizeof(before));
 	loops = SystemMicroSecLoopCnt;
 	SystemCoreClockUpdate();
 	assert(SystemMainClkFreq == Main);
-	assert(SystemCoreClockGet() == Core);
+	assert(SystemCoreClockGet() == core);
 	// ArmDelayClockSetDivisors keeps the delay factors of the last running
 	// clock when the core clock is stopped.
-	if (Core == 0)
+	if (core == 0)
 	{
 		assert(SystemMicroSecLoopCnt == loops);
 	}
 	else
 	{
-		assert(SystemMicroSecLoopCnt == ((uint64_t)Core * 1000000ULL) / 16000000U);
+		assert(SystemMicroSecLoopCnt == ((uint64_t)core * 1000000ULL) / 16000000U);
 	}
-	assert(SystemPeriphClockGet(0) == Core);
+	assert(SystemPeriphClockGet(0) == core);
 	assert(SystemPeriphClockGet(-1) == 0);
 	assert(SystemPeriphClockGet(1) == 0);
-	assert(SystemPeriphClockSet(0, 1000000) == 0);
-	assert(SystemCoreClockGet() == Core);
+	// The frequency in effect, the bus clock does not change
+	assert(SystemPeriphClockSet(0, 1000000) == core);
+	assert(SystemPeriphClockSet(0, 0) == core);
+	assert(SystemPeriphClockSet(1, 1000000) == 0);
+	assert(SystemPeriphClockSet(-1, 1000000) == 0);
+	assert(SystemCoreClockGet() == core);
 	assert(memcmp(&before, (const void *)LPC_SYSCON, sizeof(before)) == 0);
 }
 
 int main(void)
 {
+	static const uint32_t mains[] = { 12000000, 48000000, 96000000, 9375 };
+
 	assert(mmap((void *)0x40048000, 0x1000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)0x40048000);
 
 	assert(GetHighFreqOscType() == OSC_TYPE_XTAL);
 	assert(GetHighFreqOscFreq() == 12000000);
 	assert(g_McuOsc.bUSBClk);
+	// Reset value: the IRC at 12 MHz, divider 1
+	assert(SystemMainClkFreq == 12000000);
+	assert(SystemCoreClock == 12000000);
 
-	uint32_t locked = 1;
-
-	memcpy((void *)&LPC_SYSCON->SYSPLLSTAT, &locked, sizeof(locked));
-	// Reset IRC source must report 12 MHz, not 6 MHz.
-	LPC_SYSCON->SYSAHBCLKDIV = 1;
-	Check(12000000, 12000000);
-	for (unsigned div = 1; div <= 255; div++)
+	for (unsigned i = 0; i < sizeof(mains) / sizeof(mains[0]); i++)
 	{
-		LPC_SYSCON->SYSAHBCLKDIV = div;
-		Check(12000000, 12000000 / div);
-	}
-
-	// PLL bypass ignores M and P. Both supported inputs are 12 MHz here.
-	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLIN;
-	LPC_SYSCON->SYSAHBCLKDIV = 1;
-	LPC_SYSCON->SYSPLLCTRL = 0x7f;
-	for (unsigned source = 0; source < 2; source++)
-	{
-		LPC_SYSCON->SYSPLLCLKSEL = source;
-		Check(12000000, 12000000);
-		LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLOUT;
-		for (unsigned p = 0; p < 4; p++)
+		for (unsigned div = 0; div <= 255; div++)
 		{
-			// Decode the full field range, including configurations above CPU limits.
-			for (unsigned m = 1; m <= 32; m++)
-			{
-				LPC_SYSCON->SYSPLLCTRL = (p << 5) | (m - 1);
-				Check(12000000 * m, 12000000 * m);
-			}
+			Check(mains[i], div);
 		}
-		LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLIN;
 	}
-	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLOUT;
-	LPC_SYSCON->SYSPLLCTRL = 0x23;
-	LPC_SYSCON->SYSAHBCLKDIV = 2;
-	Check(48000000, 24000000);
 
-	// WDT uses its own analog source and divider, independently of SYSPLL.
+	// Clock source registers do not change the stored frequency
 	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_WDT;
 	LPC_SYSCON->WDTOSCCTRL = 1U << 5;
-	LPC_SYSCON->SYSAHBCLKDIV = 1;
-	Check(300000, 300000);
-	LPC_SYSCON->WDTOSCCTRL = (1U << 5) | 31U;
-	Check(9375, 9375);
-	LPC_SYSCON->WDTOSCCTRL = (2U << 5) | 2U;
-	LPC_SYSCON->SYSAHBCLKDIV = 7;
-	Check(175000, 25000);
-	LPC_SYSCON->WDTOSCCTRL = 15U << 5;
-	LPC_SYSCON->SYSAHBCLKDIV = 1;
-	Check(2300000, 2300000);
-	LPC_SYSCON->WDTOSCCTRL = 0;
-	Check(0, 0);
-
-	// Disabled divider and reserved PLL sources cannot retain stale rates.
-	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_IRC;
-	LPC_SYSCON->SYSAHBCLKDIV = 0;
-	Check(12000000, 0);
-	LPC_SYSCON->SYSAHBCLKDIV = 1;
-	for (unsigned source = 2; source < 4; source++)
-	{
-		LPC_SYSCON->SYSPLLCLKSEL = source;
-		LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLIN;
-		Check(0, 0);
-		LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLOUT;
-		Check(0, 0);
-	}
-	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_IRC;
-	LPC_SYSCON->PDRUNCFG = PDRUNCFG_IRCOUT_PD;
-	Check(0, 0);
+	LPC_SYSCON->PDRUNCFG = PDRUNCFG_IRC_PD | PDRUNCFG_IRCOUT_PD | PDRUNCFG_SYSPLL_PD;
+	Check(48000000, 2);
 	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLOUT;
-	LPC_SYSCON->SYSPLLCLKSEL = SYSPLLCLKSEL_SYSOSC;
-	LPC_SYSCON->PDRUNCFG = PDRUNCFG_SYSPLL_PD;
-	Check(0, 0);
-	LPC_SYSCON->PDRUNCFG = PDRUNCFG_SYSOSC_PD;
-	Check(0, 0);
-	LPC_SYSCON->PDRUNCFG = 0;
-	locked = 0;
-	memcpy((void *)&LPC_SYSCON->SYSPLLSTAT, &locked, sizeof(locked));
-	Check(0, 0);
-	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_WDT;
-	LPC_SYSCON->WDTOSCCTRL = 1U << 5;
-	LPC_SYSCON->PDRUNCFG = PDRUNCFG_WDTOSC_PD;
-	Check(0, 0);
-	puts("LPC11Uxx clock decoding: PASS");
+	LPC_SYSCON->SYSPLLCTRL = 0x1f;
+	Check(48000000, 1);
+	Check(0, 1);
+	puts("LPC11Uxx clock from the stored main clock: PASS");
 }

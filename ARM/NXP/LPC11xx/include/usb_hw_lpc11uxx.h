@@ -43,7 +43,7 @@ typedef LpcUsbFsMemory_t Lpc11UsbMemory_t;
 extern "C" {
 #endif
 
-// Requires SystemInit/SystemCoreClockSelect and a stopped controller. Leaves
+// Requires the USB clock set up by SystemInit and a stopped controller. Leaves
 // DEV_EN/DCON and all interrupts off. Returns NULL on failure. Caller must
 // serialize access and must not change clocks while this storage is owned.
 // This first storage layout supports 64-byte packets, not ISO payloads.

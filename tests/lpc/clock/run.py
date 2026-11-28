@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run LPC11Uxx clock decoding against vendor CMSIS peripheral declarations."""
+"""Run the LPC11Uxx and LPC17xx clock setup against vendor CMSIS peripheral declarations."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -35,6 +35,11 @@ if args.target != '17':
             subprocess.run(['gcc', '-std=gnu11', *flags, '-c',
                             str(root / 'ARM/NXP/LPC11xx/src/system_LPC11Uxx.c'),
                             '-o', obj], check=True)
+            # The clock sources are set up once in SystemInit
+            symbols = subprocess.check_output(['nm', '--defined-only', obj], text=True).split()
+            for name in ['SystemCoreClockSelect', 'SystemLowFreqClockSelect',
+                         'SystemCoreClockSet', 'SystemSetCoreClock']:
+                assert name not in symbols, name
             for compiler, standard in [('gcc', '-std=gnu11'), ('g++', '-std=c++17')]:
                 exe = str(Path(tmp) / 'clock_link_test')
                 subprocess.run([compiler, standard, *flags,

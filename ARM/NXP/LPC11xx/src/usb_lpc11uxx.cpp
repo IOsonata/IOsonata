@@ -70,8 +70,7 @@ SOFTWARE.
 #define LPC11_USB_SOF_INTERRUPT (1UL << 30)
 #define LPC11_USB_TOGGLE_RESET (1UL << 28)
 
-// Maintained by the existing LPC11Uxx clock implementation, including its
-// legacy SystemCoreClockSet entry point (which need not update g_McuOsc).
+// Main clock frequency set by the LPC11Uxx clock setup in SystemInit
 extern uint32_t SystemMainClkFreq;
 
 // NOLOAD: initialized explicitly only AFTER the USB SRAM clock is enabled.
@@ -118,8 +117,8 @@ static bool Lpc11UsbClockReady(void)
 	const uint32_t power = LPC_SYSCON->PDRUNCFG;
 	const uint32_t sysmul = (LPC_SYSCON->SYSPLLCTRL & 0x1FU) + 1U;
 
-	// The supported clock setup uses SYSOSC for the CPU and USB. Do not
-	// infer SYSOSC from g_McuOsc: the legacy clock setter may have changed it.
+	// The supported clock setup uses SYSOSC for the CPU and USB. The registers
+	// are checked, not g_McuOsc.
 	if (ahbdiv == 0U || usbdiv == 0U || SystemCoreClockGet() < 16000000U ||
 		SystemMainClkFreq / ahbdiv != SystemCoreClockGet() ||
 		(power & (PDRUNCFG_SYSOSC_PD | PDRUNCFG_USBPAD_PD)) != 0U ||
