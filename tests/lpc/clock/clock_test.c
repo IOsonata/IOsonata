@@ -45,12 +45,23 @@ extern uint32_t SystemMainClkFreq;
 static void Check(uint32_t Main, uint32_t Core)
 {
 	LPC_SYSCON_Type before;
+	uint32_t loops;
 
 	memcpy(&before, (const void *)LPC_SYSCON, sizeof(before));
+	loops = SystemMicroSecLoopCnt;
 	SystemCoreClockUpdate();
 	assert(SystemMainClkFreq == Main);
 	assert(SystemCoreClockGet() == Core);
-	assert(SystemMicroSecLoopCnt == ((uint64_t)Core * 1000000ULL) / 16000000U);
+	// ArmDelayClockSetDivisors keeps the delay factors of the last running
+	// clock when the core clock is stopped.
+	if (Core == 0)
+	{
+		assert(SystemMicroSecLoopCnt == loops);
+	}
+	else
+	{
+		assert(SystemMicroSecLoopCnt == ((uint64_t)Core * 1000000ULL) / 16000000U);
+	}
 	assert(SystemPeriphClockGet(0) == Core);
 	assert(SystemPeriphClockGet(-1) == 0);
 	assert(SystemPeriphClockGet(1) == 0);

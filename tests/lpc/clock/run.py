@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[3]
-includes = ['tests/lpc/uart/shim', 'include', 'ARM/NXP/LPC11xx/include']
+includes = ['tests/lpc/uart/shim', 'include', 'ARM/include', 'ARM/NXP/LPC11xx/include']
 import argparse
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--target', choices=['11', '17'])
@@ -55,6 +55,7 @@ if args.target != '11':
                             '-include', str(root / 'tests/lpc/startup/system17_shim.h'),
                             '-I' + str(root / 'tests/lpc/uart/shim'),
                             '-I' + str(root / 'include'),
+                            '-I' + str(root / 'ARM/include'),
                             '-I' + str(root / 'ARM/NXP/LPC17xx/Include'),
                             str(root / 'tests/lpc/clock/clock17_test.c'),
                             str(root / 'ARM/NXP/LPC17xx/src/system_LPC17xx.c'),
@@ -78,6 +79,7 @@ if args.target != '11':
                      '-ffunction-sections', '-fdata-sections',
                      '-I' + str(root / 'tests/lpc/uart/shim'),
                      '-I' + str(root / 'include'),
+                     '-I' + str(root / 'ARM/include'),
                      '-I' + str(root / 'ARM/NXP/LPC17xx/Include')]
             obj = str(Path(tmp) / 'system17.o')
             fixture = str(Path(tmp) / 'flash17.o')

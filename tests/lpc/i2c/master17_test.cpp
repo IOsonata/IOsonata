@@ -177,7 +177,7 @@ void IOPinConfig(int Port, int Pin, int Op, IOPINDIR, IOPINRES, IOPINTYPE)
 #define LPC_I2C2 (&s_Regs)
 #define LPC_SC (&s_Syscon)
 #define LPC_PINCON (&s_Syscon)
-#include "../../../ARM/NXP/LPC17xx/src/i2c_lpc17xx.c"
+#include "../../../ARM/NXP/LPC17xx/src/i2c_lpc17xx.cpp"
 #include "../../../ARM/NXP/src/i2c_lpc_master.cpp"
 #include "../../../src/device_intrf.cpp"
 

@@ -46,8 +46,8 @@ for opt in ['-O0', '-O2']:
         paths = []
         for index, code in enumerate([source,
                 (root / 'ARM/NXP/LPC546xx/src/usb_lpc546xx.c').read_text(),
-                (root / 'ARM/NXP/src/usb_ep0_lpc_fs.c').read_text(),
-                (root / 'ARM/NXP/src/usb_data_lpc_fs.c').read_text()]):
+                (root / 'ARM/NXP/src/usb_ep0_lpc_fs.cpp').read_text(),
+                (root / 'ARM/NXP/src/usb_data_lpc_fs.cpp').read_text()]):
             for reg, function in [('DEVCMDSTAT', 'TestDeviceWrite'),
                                   ('INTSTAT', 'TestInterruptWrite'),
                                   ('INTSETSTAT', 'TestInterruptSet'),

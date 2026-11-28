@@ -2,9 +2,12 @@
 """Check LPC11Uxx USB headers, hardware, EP0, lifecycle and SRAM placement."""
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 root = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hostcc
 for compiler, standard in [('gcc', 'c11'), ('g++', 'c++17')]:
     with tempfile.TemporaryDirectory() as tmp:
         exe = str(Path(tmp) / 'header_test')
@@ -24,7 +27,7 @@ for opt in ['-O0', '-O2']:
         with tempfile.TemporaryDirectory() as tmp:
             exe = str(Path(tmp) / 'hardware_test')
             layout = ['-Wl,--section-start=.usb_ram=0x20004000'] if valid_layout else ['-DTEST_BAD_LAYOUT']
-            subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
+            hostcc.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
                             '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
                             '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
                             '-I' + str(root / 'tests/lpc/usb/shim'),
@@ -32,10 +35,10 @@ for opt in ['-O0', '-O2']:
                             '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
                             '-I' + str(root / 'ARM/NXP/include'),
                             *layout, str(root / 'tests/lpc/usb/hardware_test.c'),
-                            str(root / 'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c'),
-                            str(root / 'ARM/NXP/src/usb_ep0_lpc_fs.c'),
-                            str(root / 'ARM/NXP/src/usb_data_lpc_fs.c'),
-                            '-o', exe], check=True)
+                            str(root / 'ARM/NXP/LPC11xx/src/usb_lpc11uxx.cpp'),
+                            str(root / 'ARM/NXP/src/usb_ep0_lpc_fs.cpp'),
+                            str(root / 'ARM/NXP/src/usb_data_lpc_fs.cpp'),
+                            '-o', exe])
             subprocess.run([exe], check=True, timeout=5)
 
 # Exercise the production memory map with host binutils, like startup/run.py.
@@ -90,9 +93,9 @@ print('LPC11U35 USB SRAM placement, NOLOAD, garbage collection and overflow: PAS
 for opt in ['-O0', '-O2']:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        sources = [(root / 'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c').read_text(),
-                   (root / 'ARM/NXP/src/usb_ep0_lpc_fs.c').read_text(),
-                   (root / 'ARM/NXP/src/usb_data_lpc_fs.c').read_text()]
+        sources = [(root / 'ARM/NXP/LPC11xx/src/usb_lpc11uxx.cpp').read_text(),
+                   (root / 'ARM/NXP/src/usb_ep0_lpc_fs.cpp').read_text(),
+                   (root / 'ARM/NXP/src/usb_data_lpc_fs.cpp').read_text()]
         for reg, function in [('DEVCMDSTAT', 'TestDeviceWrite'),
                               ('INTSTAT', 'TestInterruptWrite'),
                               ('INTSETSTAT', 'TestInterruptSet'),
@@ -103,12 +106,12 @@ for opt in ['-O0', '-O2']:
                                                lambda m: function + '(' + m[1] + ');', source)
                 total += count
             assert total > 0, reg
-        (tmp / 'usb.c').write_text(sources[0])
-        (tmp / 'ep0.c').write_text(sources[1])
-        (tmp / 'data.c').write_text(sources[2])
+        (tmp / 'usb.cpp').write_text(sources[0])
+        (tmp / 'ep0.cpp').write_text(sources[1])
+        (tmp / 'data.cpp').write_text(sources[2])
         for fixture in ['ep0_test', 'lifecycle_test', 'data_test', 'wakeup_test']:
             exe = str(tmp / fixture)
-            subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
+            hostcc.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
                             '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
                             '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
                             '-Wl,--section-start=.usb_ram=0x20004000',
@@ -117,8 +120,8 @@ for opt in ['-O0', '-O2']:
                             '-I' + str(root / 'include'),
                             '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
                             '-I' + str(root / 'ARM/NXP/include'),
-                            str(root / ('tests/lpc/usb/' + fixture + '.c')), str(tmp / 'usb.c'), str(tmp / 'ep0.c'), str(tmp / 'data.c'),
-                            '-o', exe], check=True)
+                            str(root / ('tests/lpc/usb/' + fixture + '.c')), str(tmp / 'usb.cpp'), str(tmp / 'ep0.cpp'), str(tmp / 'data.cpp'),
+                            '-o', exe])
             subprocess.run([exe], check=True, timeout=5)
 
         # Link the real generic USB core, interface, FIFO and DeviceIntrf with
@@ -126,9 +129,9 @@ for opt in ['-O0', '-O2']:
         # mocked. Host remote-wakeup permission is exercised through Chapter 9.
         sources = [
             (root / 'tests/lpc/usb/integration_model.c', 'gcc'),
-            (tmp / 'usb.c', 'gcc'),
-            (tmp / 'ep0.c', 'gcc'),
-            (tmp / 'data.c', 'gcc'),
+            (tmp / 'usb.cpp', 'g++'),
+            (tmp / 'ep0.cpp', 'g++'),
+            (tmp / 'data.cpp', 'g++'),
             (root / 'src/cfifo.c', 'gcc'),
             (root / 'src/device_intrf.cpp', 'g++'),
             (root / 'src/usb/usb.cpp', 'g++'),
@@ -147,8 +150,11 @@ for opt in ['-O0', '-O2']:
                     '-I' + str(root / 'include'),
                     '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
                     '-I' + str(root / 'ARM/NXP/include')]
-            if path in [tmp / 'usb.c', tmp / 'ep0.c', tmp / 'data.c']:
-                args += ['-include', str(root / 'tests/lpc/usb/ep0_model.h')]
+            if path in [tmp / 'usb.cpp', tmp / 'ep0.cpp', tmp / 'data.cpp']:
+                model = tmp / 'ep0_model_c.h'
+                model.write_text('extern "C" {\n#include "' +
+                                 str(root / 'tests/lpc/usb/ep0_model.h') + '"\n}\n')
+                args += ['-D_Static_assert=static_assert', '-include', str(model)]
             subprocess.run([*args, '-c', str(path), '-o', obj], check=True)
         exe = str(tmp / 'integration_test')
         subprocess.run(['g++', '-no-pie', '-fsanitize=undefined',

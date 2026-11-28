@@ -80,9 +80,9 @@ static void Write(LpcSSPReg_t *Reg, const char *Field, uint32_t Value)
 #undef LPCSSP_WRITE
 #define LPCSSP_READ(Reg, Field) Read(Reg, #Field)
 #define LPCSSP_WRITE(Reg, Field, Value) Write(Reg, #Field, Value)
-#include "../../../ARM/NXP/src/spi_lpcxx.c"
-#include "../../../ARM/NXP/LPC17xx/src/spi_lpc17xx.c"
-#include "../../../ARM/NXP/LPC17xx/src/iopincfg.c"
+#include "../../../ARM/NXP/src/spi_lpcxx.cpp"
+#include "../../../ARM/NXP/LPC17xx/src/spi_lpc17xx.cpp"
+#include "../../../ARM/NXP/LPC17xx/src/iopincfg_lpc17xx.c"
 #include "../../../src/device_intrf.cpp"
 
 static SPICfg_t Config(int Dev)

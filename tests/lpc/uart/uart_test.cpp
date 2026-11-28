@@ -107,9 +107,9 @@ void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
 }
 
 #ifdef TEST_LPC17
-#include "../../../ARM/NXP/LPC17xx/src/uart_lpc17xx.c"
+#include "../../../ARM/NXP/LPC17xx/src/uart_lpc17xx.cpp"
 #else
-#include "../../../ARM/NXP/LPC11xx/src/uart_lpc11uxx.c"
+#include "../../../ARM/NXP/LPC11xx/src/uart_lpc11uxx.cpp"
 #endif
 
 static uint32_t ModelRead(int No, const char *Reg)
@@ -247,7 +247,7 @@ static void ModelWrite(int No, const char *Reg, uint32_t Value)
 #undef LPCUART_WRITE
 #define LPCUART_READ(No, Reg) ModelRead(No, #Reg)
 #define LPCUART_WRITE(No, Reg, Value) ModelWrite(No, #Reg, Value)
-#include "../../../ARM/NXP/src/uart_lpcxx.c"
+#include "../../../ARM/NXP/src/uart_lpcxx.cpp"
 #include "../../../src/cfifo.c"
 #include "../../../src/device_intrf.cpp"
 
@@ -352,8 +352,11 @@ static void DriverTest()
 			model.Rx.push_back((uint8_t)i);
 		}
 		model.Error = LPCUART_LSR_OE | LPCUART_LSR_PE | LPCUART_LSR_FE;
+		// One interrupt entry serves the receive source again while data
+		// remains, up to LPCUART_IRQ_PASSES passes. The 16 bytes over the
+		// CFIFO size are dropped.
 		LpcUARTIrqHandler(no);
-		assert(model.Rx.size() == 16);
+		assert(model.Rx.empty() && uart.RxDropCnt == 16);
 		LpcUARTIrqHandler(no);
 		assert(model.Rx.empty() && uart.RxDropCnt == 16);
 		assert(uart.RxOvrErrCnt == 1 && uart.ParErrCnt == 1 && uart.FramErrCnt == 1);
